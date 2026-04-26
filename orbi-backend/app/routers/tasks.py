@@ -7,33 +7,14 @@ a service or db function, and formats the response.
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.db import tasks as tasks_db
 from app.models.task import TaskBubble, TaskBubbleCreate, TaskBubbleUpdate, TaskStatus
+from app.services.auth import get_current_user
 from app.services.scoring import calculate_pressure_score
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
-
-
-# ---------------------------------------------------------------------------
-# Auth placeholder — replace with real Supabase JWT verification next step
-# ---------------------------------------------------------------------------
-
-async def get_current_user(authorization: str = Header(...)) -> UUID:
-    """Extract user_id from the Authorization header.
-
-    Placeholder implementation — returns a fixed UUID so all endpoints are
-    exercisable before real JWT verification is wired in.
-    Replace this with actual Supabase JWT decoding in app/services/auth.py.
-    """
-    if not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={"message": "Invalid authorization header.", "error_code": "AUTH_HEADER_INVALID"},
-        )
-    # TODO: decode and verify Supabase JWT, extract sub claim as user_id
-    return UUID("00000000-0000-0000-0000-000000000001")
 
 
 def _error(message: str, error_code: str) -> dict:

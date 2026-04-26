@@ -73,6 +73,7 @@ class TaskBubbleUpdate(BaseModel):
 
 class Cluster(BaseModel):
     id: UUID
+    owner_id: UUID
     name: str
     summary: Optional[str] = None
     color: str

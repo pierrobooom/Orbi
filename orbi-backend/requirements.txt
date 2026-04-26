@@ -3,7 +3,7 @@ uvicorn[standard]==0.30.0
 supabase==2.5.0
 psycopg2-binary==2.9.11
 pgvector==0.3.2
-pydantic==2.12.5
+pydantic[email]==2.12.5
 pydantic-settings==2.13.1
 python-dotenv==1.0.1
 httpx==0.27.0

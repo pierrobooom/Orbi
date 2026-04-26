@@ -8,32 +8,15 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
+from app.agents.finance_agent import categorize_unknown_merchant
 from app.db import finance as finance_db
 from app.models.finance import FinanceBudget, FinanceEntry, FinanceEntryCreate
+from app.services.auth import get_current_user, get_current_user_with_tier
 from app.services.finance_categorizer import categorize_merchant
 
 router = APIRouter(prefix="/finance", tags=["finance"])
-
-
-# ---------------------------------------------------------------------------
-# Auth placeholder — shared shape with tasks router, replaced together
-# ---------------------------------------------------------------------------
-
-async def get_current_user(authorization: str = Header(...)) -> UUID:
-    """Extract user_id from the Authorization header.
-
-    Placeholder — returns a fixed UUID until Supabase JWT verification is
-    wired in via app/services/auth.py.
-    """
-    if not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={"message": "Invalid authorization header.", "error_code": "AUTH_HEADER_INVALID"},
-        )
-    # TODO: decode and verify Supabase JWT, extract sub claim as user_id
-    return UUID("00000000-0000-0000-0000-000000000001")
 
 
 def _error(message: str, error_code: str) -> dict:
@@ -48,16 +31,25 @@ def _error(message: str, error_code: str) -> dict:
 @router.post("/entries", response_model=FinanceEntry, status_code=status.HTTP_201_CREATED)
 async def create_entry(
     body: FinanceEntryCreate,
-    user_id: UUID = Depends(get_current_user),
+    auth: dict = Depends(get_current_user_with_tier),
 ):
-    """Create a finance entry with automatic rule-based categorization.
+    """Create a finance entry with automatic categorization.
 
-    The merchant name is matched against known merchant rules before saving.
-    If no rule matches, category is set to "uncategorized" — AI inference can
-    be triggered separately for unknown merchants.
+    The merchant name is first matched against known merchant rules. If no
+    rule matches, the finance agent attempts AI-based categorization as a
+    fallback (only for pro and premium tiers — free tier stays uncategorized).
     """
+    user_id = auth["user_id"]
+    user_tier = auth["tier"]
+
     # Rule-based categorization runs before any AI call, as per CLAUDE.md
     category = categorize_merchant(body.merchant)
+
+    # AI fallback for unknown merchants (pro and premium only)
+    if category == "uncategorized" and user_tier in ("pro", "premium"):
+        ai_result = await categorize_unknown_merchant(body.merchant, user_tier)
+        if ai_result.get("confidence", 0) >= 0.5:
+            category = ai_result["category"]
 
     entry = FinanceEntry(
         id=uuid4(),
