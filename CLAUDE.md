@@ -672,25 +672,31 @@ Home:           IKEA, B\&Q, Screwfix, Dyson, Currys
 
 
 
-Phase 1 — Foundation and Data Core
+Phase 3 — Voice & Conversation Layer
 
-Target completion: April 17, 2026
+Target completion: May 15, 2026
 
 
 
-Building right now:
+Building next:
 
-\- PostgreSQL schema with all core tables
+\- Whisper on-device speech-to-text integration
 
-\- FastAPI project skeleton with folder structure
+\- Deepgram cloud fallback for STT
 
-\- Basic CRUD endpoints for TaskBubble and FinanceEntry
+\- ElevenLabs text-to-speech for Pro+ users
 
-\- Supabase connection and auth middleware
+\- Voice debrief flow (record → transcribe → debrief agent → extract)
 
-\- Environment variable setup
+\- Audio streaming endpoints
 
-\- owner\_id and visibility fields on TaskBubble from day one
+
+
+Completed phases:
+
+\- Phase 1 (Foundation & Data Core) — Done Apr 17
+
+\- Phase 2 (Intelligence Core) — Done Apr 26
 
 
 
