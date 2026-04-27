@@ -3,7 +3,13 @@
     "allow": [
       "Bash(pip install:*)",
       "Bash(pip index:*)",
-      "Bash(pip download:*)"
+      "Bash(pip download:*)",
+      "Bash(python -c \"from app.routers import tasks, finance, users, clusters, memory, chat; print\\('All routers import OK'\\)\")",
+      "Bash(python -c ':*)",
+      "Bash(python:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)"
     ]
   }
 }
