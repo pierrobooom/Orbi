@@ -9,7 +9,7 @@ load_dotenv()
 from fastapi import FastAPI  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 
-from app.routers import tasks, finance, users, clusters, memory, chat  # noqa: E402
+from app.routers import tasks, finance, users, clusters, memory, chat, voice  # noqa: E402
 
 
 @asynccontextmanager
@@ -39,6 +39,7 @@ app.include_router(users.router, prefix="/api/v1")
 app.include_router(clusters.router, prefix="/api/v1")
 app.include_router(memory.router, prefix="/api/v1")
 app.include_router(chat.router, prefix="/api/v1")
+app.include_router(voice.router, prefix="/api/v1")
 
 
 @app.get("/health")
