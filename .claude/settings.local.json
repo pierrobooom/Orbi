@@ -9,7 +9,17 @@
       "Bash(python:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(git fetch *)",
+      "Bash(git stash *)",
+      "PowerShell(Get-Command *)",
+      "Bash(\"/c/Users/lucas/AppData/Local/Python/pythoncore-3.12-64/python.exe\" --version)",
+      "Bash(\"/c/Users/lucas/anaconda3/python.exe\" --version)",
+      "Bash(npm --version)",
+      "Bash(npx --version)",
+      "PowerShell(npm *)",
+      "Bash(git check-ignore *)",
+      "Bash(grep -iE \"orbi_code_guide|\\\\.html$|\\\\.pdf$\")"
     ]
   }
 }

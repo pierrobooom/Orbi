@@ -44,59 +44,115 @@ Orbi
 
 
 
-\### Free Tier
+Three tiers: Spark (free), Pro (£10.99/month), Genius (£20.99/month).
 
-\- On-device processing for basic tasks
+Yearly pricing — TBD, to be added before launch.
 
-\- Groq/Llama 3.1 8B for AI (our cost \~$0.001/user/day)
+Internal tier values in the database remain `free`, `pro`, `premium` so existing
 
-\- Up to 50 bubbles, 3 clusters
-
-\- Basic finance tracking and categorization
-
-\- Rule-based insights only
+code keeps working; `premium` maps to the Genius marketing name.
 
 
 
-\### Pro Tier (£4.99/month)
+\### Spark — Free
+
+\- 50 bubbles, 3 clusters
+
+\- Voice in: on-device Whisper (free) — full create/update/delete via speech
+
+\- Voice out: device-native TTS (robotic, free)
+
+\- AI model: Llama 3.1 8B via Groq (\~$0.001/user/day)
+
+\- Finance: manual entry, rule-based categorization, view-only
+
+\- Memory retention: 30 days
+
+\- Agent personality: reactive — answers what you ask
+
+\- Daily cap: 30 AI turns, 5 min cloud STT fallback, 30s ElevenLabs preview
+
+
+
+\### Pro — £10.99/month
+
+\- 500 bubbles, 15 clusters
+
+\- Voice in: on-device Whisper + Deepgram cloud fallback
+
+\- Voice out: ElevenLabs natural voice (on-demand only — not auto on every reply)
+
+\- AI model: Llama 3.1 70B via Groq
+
+\- Finance: weekly + monthly reports, AI insights, anomaly detection
+
+\- Memory retention: 1 year, semantic search
+
+\- Agent personality: helpful — offers suggestions when asked
+
+\- Daily cap: 200 AI turns, 30 min cloud STT, 30 min ElevenLabs TTS
+
+
+
+\### Genius — £20.99/month
 
 \- Unlimited bubbles and clusters
 
-\- Full voice debrief conversations
-
-\- Finance intelligence and spending insights
-
-\- Semantic memory search
-
-\- Groq/Llama 3.1 8B AI (our cost \~$0.50-1/user/month)
-
-
-
-\### Premium Tier (£9.99/month)
-
 \- Everything in Pro
 
-\- Claude Sonnet 4.6 for deep reasoning and complex tasks
+\- AI model: Llama 70B for daily chat + **Claude Sonnet 4.6 on-demand** for
 
-\- Long-term memory synthesis across months
+&#x20; debriefs, weekly reviews, and monthly finance synthesis
 
-\- Multi-step agent orchestration
+\- Finance: daily reports, proactive insights, cross-month patterns
 
-\- Priority processing
+\- Memory retention: unlimited, cross-month synthesis
 
-\- Claude API cost \~$3-5/user/month
+\- Agent personality: **talkative \& opinionated** — proactively starts conversations,
+
+&#x20; offers unsolicited but useful opinions, runs full voice debriefs
+
+\- Daily cap: 500 AI turns, 60 min cloud STT, 60 min ElevenLabs TTS
+
+\- Monthly cap: 100 Claude calls
 
 
 
-\### Subscription Rule
+\### Subscription Rules
 
-Always check user.subscription\_tier before calling any AI.
+\- Always verify user.subscription\_tier server-side before any AI call
 
-Never call Claude API for free or pro tier users.
+\- Never trust tier from client
 
-Never call any external AI for logic that can be computed locally.
+\- Voice IN (STT) is available on every tier — Spark uses on-device only,
 
-Subscription tier is always verified server-side. Never trust tier from client.
+&#x20; Pro and Genius get cloud fallback
+
+\- TTS is on-demand for Pro and Genius — UI must require an explicit "listen"
+
+&#x20; tap to call ElevenLabs. Never auto-TTS every chat reply (cost killer)
+
+\- Daily and monthly caps are enforced in app/services/ai\_router.py with
+
+&#x20; graceful "limit reached, resets midnight UTC" responses, never billing surprises
+
+\- Claude is only called for Genius users, and only for the listed high-value
+
+&#x20; moments (debriefs, weekly reviews, monthly synthesis) — never daily chat
+
+\- Never call any external AI for logic that can be computed locally
+
+
+
+\### Cost Margin Targets
+
+At average use, all paid tiers should hit 50%+ gross margin after Stripe fees,
+
+AI provider costs, voice provider costs, and Supabase infrastructure.
+
+The hard caps above exist specifically to bound worst-case heavy users so a
+
+single power user cannot turn negative on a tier.
 
 
 
@@ -108,31 +164,35 @@ Subscription tier is always verified server-side. Never trust tier from client.
 
 
 
-\### Primary AI — Groq (Free + Pro users)
+\### Primary AI — Groq (Spark, Pro, and Genius daily chat)
 
 \- Provider: Groq API (groq.com)
 
-\- Model: llama-3.1-8b-instant
+\- Model for Spark: llama-3.1-8b-instant (\~$0.05/$0.08 per million tokens)
+
+\- Model for Pro and Genius: llama-3.1-70b-versatile (\~$0.59/$0.79 per million tokens)
 
 \- Use for: task parsing, debrief conversations, finance insights,
 
-&#x20; clustering suggestions, natural language responses
-
-\- Cost: \~$0.05 per million tokens
+&#x20; clustering suggestions, natural language responses, daily chat
 
 \- Env var: GROQ\_API\_KEY
 
 
 
-\### Premium AI — Claude (Premium users only)
+\### Premium AI — Claude (Genius only, on-demand only)
 
 \- Provider: Anthropic API
 
 \- Model: claude-sonnet-4-6 (default), claude-opus-4-6 (complex orchestration only)
 
-\- Use for: deep reasoning, long memory synthesis, complex agent tasks
+\- Use for: voice debrief sessions, weekly reviews, monthly finance synthesis,
+
+&#x20; long-term memory consolidation — never daily chat
 
 \- Cost: $3/$15 per million tokens input/output
+
+\- Cap: 100 calls/user/month enforced in ai\_router.py
 
 \- Env var: ANTHROPIC\_API\_KEY
 
@@ -240,9 +300,19 @@ Every AI call must go through app/services/ai\_router.py which:
 
 \### Voice Pipeline
 
-\- Speech to text: Whisper on-device (free) with Deepgram cloud fallback
+\- Speech to text: Whisper on-device for all tiers (free).
 
-\- Text to speech: ElevenLabs (Pro+) or device native TTS (Free)
+&#x20; Deepgram cloud fallback only when on-device fails or device is too low-end.
+
+\- Text to speech: device-native TTS for Spark (free, robotic).
+
+&#x20; ElevenLabs for Pro and Genius — gated to explicit "listen" taps in the UI,
+
+&#x20; never auto-played on every assistant reply (cost killer).
+
+\- Voice IN (creating/updating/deleting tasks via speech) works on every tier.
+
+&#x20; Voice OUT quality is the differentiator.
 
 
 
@@ -672,23 +742,31 @@ Home:           IKEA, B\&Q, Screwfix, Dyson, Currys
 
 
 
-Phase 3 — Voice & Conversation Layer
+Phase 4 — Mobile Frontend
 
-Target completion: May 15, 2026
+Target window: May 16 – Jun 12, 2026
 
 
 
 Building next:
 
-\- Whisper on-device speech-to-text integration
+\- React Native + Expo project scaffold (sibling folder: orbi-mobile/)
 
-\- Deepgram cloud fallback for STT
+\- Bubble universe canvas via React Native Skia
 
-\- ElevenLabs text-to-speech for Pro+ users
+\- Voice recording UI + whisper.cpp on-device integration
 
-\- Voice debrief flow (record → transcribe → debrief agent → extract)
+\- Calls into /chat, /voice/\*, /tasks, /finance/entries, /memory
 
-\- Audio streaming endpoints
+\- Zustand stores for tasks, clusters, finance
+
+\- Expo Router navigation
+
+\- Push notification registration
+
+\- Subscription tier gating in the UI (Spark / Pro / Genius)
+
+\- Hard usage caps and TTS-on-demand UX baked into ai\_router.py before mobile work
 
 
 
@@ -697,6 +775,8 @@ Completed phases:
 \- Phase 1 (Foundation & Data Core) — Done Apr 17
 
 \- Phase 2 (Intelligence Core) — Done Apr 26
+
+\- Phase 3 (Voice & Conversation Layer) — Done Apr 27
 
 
 
