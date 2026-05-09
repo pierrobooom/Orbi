@@ -1,0 +1,1005 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Orbi — Code Study Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: #0f0f1a; color: #e0e0f0; line-height: 1.7; font-size: 15px; }
+  .cover { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; background: linear-gradient(135deg, #0f0f1a 0%, #1a1a3e 100%); text-align: center; padding: 40px; }
+  .cover h1 { font-size: 64px; font-weight: 800; color: #fff; letter-spacing: -2px; }
+  .cover h1 span { color: #7c6fe0; }
+  .cover p { font-size: 20px; color: #8888aa; margin-top: 16px; max-width: 600px; }
+  .cover .badge { display: inline-block; margin-top: 32px; background: #1e1e4a; border: 1px solid #7c6fe0; border-radius: 8px; padding: 12px 28px; color: #b0a8f0; font-size: 14px; }
+  .toc { background: #12122a; padding: 60px 80px; }
+  .toc h2 { font-size: 28px; color: #7c6fe0; margin-bottom: 32px; }
+  .toc ol { padding-left: 24px; }
+  .toc li { padding: 6px 0; color: #c0c0e0; }
+  .toc li a { color: #9898cc; text-decoration: none; }
+  .toc li a:hover { color: #fff; }
+  .toc .section-label { color: #555580; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; margin-top: 20px; margin-bottom: 4px; padding-left: 0; list-style: none; }
+  section { padding: 60px 80px; border-top: 1px solid #1e1e3a; }
+  section:nth-child(even) { background: #0d0d20; }
+  section:nth-child(odd) { background: #111126; }
+  .script-header { display: flex; align-items: flex-start; gap: 20px; margin-bottom: 32px; }
+  .script-icon { background: #1e1e4a; border: 2px solid #7c6fe0; border-radius: 12px; padding: 12px 20px; font-size: 13px; font-family: 'Courier New', monospace; color: #9898f0; white-space: nowrap; }
+  .script-title h2 { font-size: 26px; color: #fff; margin-bottom: 6px; }
+  .script-title .subtitle { color: #7777aa; font-size: 15px; }
+  .role-badge { display: inline-block; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; padding: 3px 10px; border-radius: 4px; margin-left: 10px; vertical-align: middle; }
+  .role-entry { background: #1a3a1a; color: #66cc66; border: 1px solid #2a5a2a; }
+  .role-model { background: #3a1a3a; color: #cc66cc; border: 1px solid #5a2a5a; }
+  .role-db { background: #1a2a3a; color: #6699cc; border: 1px solid #2a4a6a; }
+  .role-router { background: #3a2a1a; color: #cc9966; border: 1px solid #5a4a2a; }
+  .role-service { background: #1a3a3a; color: #66cccc; border: 1px solid #2a5a5a; }
+  .role-agent { background: #3a1a1a; color: #cc6666; border: 1px solid #5a2a2a; }
+  .role-test { background: #2a2a1a; color: #cccc66; border: 1px solid #4a4a2a; }
+  .concept { background: #131330; border-left: 4px solid #7c6fe0; padding: 20px 24px; border-radius: 0 8px 8px 0; margin-bottom: 28px; }
+  .concept h3 { color: #a898f0; margin-bottom: 10px; font-size: 16px; }
+  .concept p { color: #c0c0e0; }
+  .code-block { background: #0a0a18; border: 1px solid #2a2a4a; border-radius: 8px; padding: 20px 24px; margin: 16px 0; font-family: 'Courier New', monospace; font-size: 13px; color: #c8c8f0; overflow-x: auto; white-space: pre; line-height: 1.6; }
+  .code-keyword { color: #cc7ef0; }
+  .code-string { color: #98c379; }
+  .code-comment { color: #555580; font-style: italic; }
+  .code-func { color: #61afef; }
+  .code-class { color: #e5c07b; }
+  .code-number { color: #d19a66; }
+  .item-block { background: #0f0f28; border: 1px solid #2a2a4a; border-radius: 8px; padding: 20px 24px; margin-bottom: 16px; }
+  .item-block .item-name { font-family: 'Courier New', monospace; color: #7c6fe0; font-size: 14px; font-weight: bold; margin-bottom: 8px; }
+  .item-block .item-type { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #555580; margin-bottom: 10px; }
+  .item-block p { color: #c0c0e0; }
+  .item-block ul { padding-left: 20px; margin-top: 8px; }
+  .item-block ul li { color: #b0b0d0; padding: 3px 0; }
+  .analogy { background: #1a1a10; border: 1px solid #4a4a20; border-radius: 8px; padding: 20px 24px; margin: 20px 0; }
+  .analogy .analogy-label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #888840; margin-bottom: 8px; }
+  .analogy p { color: #d0d080; }
+  h3 { color: #a0a0d0; font-size: 17px; margin: 28px 0 12px; }
+  h4 { color: #8080b0; font-size: 15px; margin: 20px 0 8px; }
+  p { color: #b8b8d8; margin-bottom: 14px; }
+  ul, ol { padding-left: 24px; margin-bottom: 14px; }
+  ul li, ol li { color: #b0b0d0; padding: 4px 0; }
+  .divider { height: 1px; background: linear-gradient(to right, transparent, #3a3a6a, transparent); margin: 36px 0; }
+  .callout { background: #1a2a1a; border: 1px solid #2a4a2a; border-radius: 8px; padding: 16px 20px; margin: 20px 0; }
+  .callout .callout-label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #66aa66; margin-bottom: 6px; }
+  .callout p { color: #c0e0c0; margin: 0; }
+  .warn { background: #2a1a1a; border: 1px solid #4a2a2a; border-radius: 8px; padding: 16px 20px; margin: 20px 0; }
+  .warn .warn-label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #cc6666; margin-bottom: 6px; }
+  .warn p { color: #e0c0c0; margin: 0; }
+  .flow { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 20px 0; }
+  .flow-step { background: #1e1e4a; border: 1px solid #7c6fe0; border-radius: 8px; padding: 10px 18px; color: #c0b8f0; font-size: 13px; }
+  .flow-arrow { color: #555580; font-size: 20px; }
+  @media print {
+    body { background: white; color: #111; }
+    .cover { background: #1a1a3a; min-height: auto; padding: 80px; page-break-after: always; }
+    section { border-top: 1px solid #ddd; page-break-inside: avoid; }
+    .code-block { background: #f5f5f5; color: #111; border: 1px solid #ccc; }
+    .item-block { background: #f9f9f9; border: 1px solid #ddd; }
+    .concept { background: #f0f0ff; border-left: 4px solid #5555aa; }
+  }
+</style>
+</head>
+<body>
+
+<!-- COVER -->
+<div class="cover">
+  <h1><span>Orbi</span></h1>
+  <p>Code Study Guide — Phase 1 Backend<br>Every script explained line by line, in plain English</p>
+  <div class="badge">17 files &nbsp;·&nbsp; Python 3.12 &nbsp;·&nbsp; FastAPI &nbsp;·&nbsp; Supabase &nbsp;·&nbsp; April 2026</div>
+</div>
+
+<!-- TABLE OF CONTENTS -->
+<div class="toc">
+  <h2>Table of Contents</h2>
+  <ol>
+    <li class="section-label">Foundation</li>
+    <li><a href="#main">main.py — The server entry point</a></li>
+    <li><a href="#requirements">requirements.txt — Every library explained</a></li>
+    <li class="section-label">Models (Data Blueprints)</li>
+    <li><a href="#model-task">app/models/task.py — TaskBubble &amp; Cluster</a></li>
+    <li><a href="#model-finance">app/models/finance.py — FinanceEntry, Budget, Insight</a></li>
+    <li><a href="#model-user">app/models/user.py — UserProfile &amp; Preferences</a></li>
+    <li class="section-label">Database Layer</li>
+    <li><a href="#db-client">app/db/client.py — Supabase connection</a></li>
+    <li><a href="#db-tasks">app/db/tasks.py — Task database queries</a></li>
+    <li><a href="#db-finance">app/db/finance.py — Finance database queries</a></li>
+    <li class="section-label">Routers (HTTP Endpoints)</li>
+    <li><a href="#router-tasks">app/routers/tasks.py — Task API endpoints</a></li>
+    <li><a href="#router-finance">app/routers/finance.py — Finance API endpoints</a></li>
+    <li class="section-label">Services (Business Logic)</li>
+    <li><a href="#service-scoring">app/services/scoring.py — Pressure score calculator</a></li>
+    <li><a href="#service-ai">app/services/ai_router.py — AI provider gateway</a></li>
+    <li><a href="#service-categorizer">app/services/finance_categorizer.py — Merchant rules</a></li>
+    <li class="section-label">Tests</li>
+    <li><a href="#tests">tests/test_scoring.py — Automated scoring tests</a></li>
+  </ol>
+</div>
+
+<!-- ============================================================ -->
+<!-- SECTION 1: main.py -->
+<!-- ============================================================ -->
+<section id="main">
+  <div class="script-header">
+    <div class="script-icon">main.py</div>
+    <div class="script-title">
+      <h2>main.py <span class="role-badge role-entry">Entry Point</span></h2>
+      <div class="subtitle">The front door of the entire backend. Python runs this file first when you start the server.</div>
+    </div>
+  </div>
+
+  <div class="analogy">
+    <div class="analogy-label">Real-world analogy</div>
+    <p>Think of main.py as the reception desk of a large office building. It doesn't do any actual work itself — it just opens the doors, directs visitors to the right department (router), and prints a message when the building opens and closes for the day.</p>
+  </div>
+
+  <h3>The imports — what gets brought in</h3>
+
+  <div class="item-block">
+    <div class="item-name">from contextlib import asynccontextmanager</div>
+    <div class="item-type">Standard library import</div>
+    <p><strong>contextlib</strong> is a built-in Python module (it comes with Python itself, no installation needed). <strong>asynccontextmanager</strong> is a decorator that lets you write a function that runs code at startup and at shutdown. The <code>async</code> part means it works with Python's asynchronous system. You use it here to print a message when the server starts and another when it stops.</p>
+  </div>
+
+  <div class="item-block">
+    <div class="item-name">from dotenv import load_dotenv</div>
+    <div class="item-type">Third-party library (python-dotenv)</div>
+    <p><strong>dotenv</strong> is a library that reads your <code>.env</code> file and loads every line in it (like <code>SUPABASE_URL=https://...</code>) into Python's environment variables. After calling <code>load_dotenv()</code>, your code can access those values anywhere using <code>os.environ.get("SUPABASE_URL")</code>. Without this, your secret keys would never be loaded and every database call would fail.</p>
+  </div>
+
+  <div class="callout">
+    <div class="callout-label">Why load_dotenv() is called before anything else</div>
+    <p>Notice that <code>load_dotenv()</code> is called on line 7, before any other app imports. This is intentional. When Python imports <code>app.db.client</code>, that file immediately reads <code>SUPABASE_URL</code> from the environment. If the .env file hasn't been loaded yet, that value would be empty and the database connection would fail. Order matters here.</p>
+  </div>
+
+  <div class="item-block">
+    <div class="item-name">from fastapi import FastAPI</div>
+    <div class="item-type">Third-party library (fastapi)</div>
+    <p><strong>FastAPI</strong> is the web framework — the entire backbone of the backend. A web framework is a tool that handles all the boring parts of running a web server: receiving HTTP requests, routing them to the right function, validating the data, and sending back responses. You create one <code>FastAPI</code> instance and it becomes "the app".</p>
+  </div>
+
+  <div class="item-block">
+    <div class="item-name">from fastapi.middleware.cors import CORSMiddleware</div>
+    <div class="item-type">Part of FastAPI</div>
+    <p><strong>CORS</strong> stands for Cross-Origin Resource Sharing. Browsers and mobile apps have a security rule: they won't make requests to a server on a different domain unless that server explicitly allows it. <strong>CORSMiddleware</strong> adds a permission header to every response saying "yes, requests from other origins are allowed". Without this, the React Native phone app would be blocked from talking to this backend.</p>
+  </div>
+
+  <div class="item-block">
+    <div class="item-name">from app.routers import tasks, finance, users</div>
+    <div class="item-type">Local import (our own code)</div>
+    <p>This imports the three router files from the <code>app/routers/</code> folder. Each router is a collection of related endpoints. Importing them here and then calling <code>app.include_router()</code> is how FastAPI learns about all the URLs your server will respond to.</p>
+  </div>
+
+  <div class="divider"></div>
+  <h3>The lifespan function</h3>
+
+  <div class="code-block"><span class="code-keyword">@asynccontextmanager</span>
+<span class="code-keyword">async def</span> <span class="code-func">lifespan</span>(app: FastAPI):
+    <span class="code-func">print</span>(<span class="code-string">"Orbi API is running"</span>)
+    <span class="code-keyword">yield</span>
+    <span class="code-func">print</span>(<span class="code-string">"Orbi API is shutting down"</span>)</div>
+
+  <p>The <code>@asynccontextmanager</code> decorator turns this function into a lifecycle manager. Everything <strong>before</strong> the <code>yield</code> runs when the server starts. Everything <strong>after</strong> the <code>yield</code> runs when the server shuts down. The <code>yield</code> keyword is the pause in the middle — "keep the server running until someone stops it". In Phase 2 this is where you'd connect to the database on startup and disconnect cleanly on shutdown.</p>
+
+  <div class="divider"></div>
+  <h3>Creating the app</h3>
+
+  <div class="code-block">app = <span class="code-class">FastAPI</span>(
+    title=<span class="code-string">"Orbi API"</span>,
+    version=<span class="code-string">"0.1.0"</span>,
+    lifespan=lifespan,
+)</div>
+
+  <p>This creates the single FastAPI application instance. The <code>title</code> and <code>version</code> appear in the automatically generated documentation at <code>/docs</code>. The <code>lifespan=lifespan</code> tells FastAPI to use your lifecycle function for startup/shutdown.</p>
+
+  <div class="divider"></div>
+  <h3>Adding CORS middleware</h3>
+
+  <div class="code-block">app.<span class="code-func">add_middleware</span>(
+    CORSMiddleware,
+    allow_origins=[<span class="code-string">"*"</span>],   <span class="code-comment"># TODO: restrict before production</span>
+    allow_credentials=<span class="code-keyword">True</span>,
+    allow_methods=[<span class="code-string">"*"</span>],
+    allow_headers=[<span class="code-string">"*"</span>],
+)</div>
+
+  <p>Middleware wraps around every single request your server receives. <code>allow_origins=["*"]</code> means "accept requests from any website or app". The <code>*</code> is a wildcard meaning "everything". Before going to production this should be tightened to only allow requests from the Orbi app, but during development the wildcard is convenient.</p>
+
+  <div class="divider"></div>
+  <h3>Registering the routers</h3>
+
+  <div class="code-block">app.<span class="code-func">include_router</span>(tasks.router, prefix=<span class="code-string">"/api/v1"</span>)
+app.<span class="code-func">include_router</span>(finance.router, prefix=<span class="code-string">"/api/v1"</span>)
+app.<span class="code-func">include_router</span>(users.router, prefix=<span class="code-string">"/api/v1"</span>)</div>
+
+  <p>Each router defines its own sub-prefix (e.g. <code>/tasks</code> or <code>/finance</code>). Adding <code>/api/v1</code> here means every URL will be <code>/api/v1/tasks</code>, <code>/api/v1/finance</code>, etc. The <code>v1</code> is a version number — if you ever break the API, you can create <code>v2</code> endpoints without removing <code>v1</code>, so old clients don't break.</p>
+
+  <div class="divider"></div>
+  <h3>The health endpoint</h3>
+
+  <div class="code-block"><span class="code-keyword">@app.get</span>(<span class="code-string">"/health"</span>)
+<span class="code-keyword">async def</span> <span class="code-func">health</span>():
+    <span class="code-keyword">return</span> {<span class="code-string">"status"</span>: <span class="code-string">"ok"</span>, <span class="code-string">"app"</span>: <span class="code-string">"Orbi"</span>}</div>
+
+  <p>A health endpoint is a simple URL (<code>GET /health</code>) that returns a quick confirmation the server is alive. Monitoring systems, load balancers, and deployment tools ping this URL to know the server is healthy. It doesn't touch the database — it just returns immediately. You tested this when you first started the server.</p>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION 2: requirements.txt -->
+<!-- ============================================================ -->
+<section id="requirements">
+  <div class="script-header">
+    <div class="script-icon">requirements.txt</div>
+    <div class="script-title">
+      <h2>requirements.txt <span class="role-badge role-entry">Dependencies</span></h2>
+      <div class="subtitle">The shopping list of every external library the project needs. Run <code>pip install -r requirements.txt</code> to install them all.</div>
+    </div>
+  </div>
+
+  <div class="analogy">
+    <div class="analogy-label">Real-world analogy</div>
+    <p>Python doesn't come with everything built in. Think of requirements.txt like a recipe's ingredient list. You need these specific ingredients (libraries) before you can cook the dish (run the app). The version numbers (e.g. <code>fastapi==0.115.0</code>) ensure everyone uses the exact same version — like specifying "Tesco own-brand flour" rather than just "flour".</p>
+  </div>
+
+  <h3>Web Framework</h3>
+  <div class="item-block">
+    <div class="item-name">fastapi==0.115.0</div>
+    <p>The web framework. Creates all HTTP endpoints, handles routing, validates request data automatically, and generates the <code>/docs</code> interactive test page. FastAPI is asynchronous by default — it can handle many simultaneous users without slowing down, because while waiting for a database response it can serve other requests.</p>
+  </div>
+  <div class="item-block">
+    <div class="item-name">uvicorn[standard]==0.30.0</div>
+    <p>FastAPI creates the app logic, but something must actually listen on a network port for incoming connections. Uvicorn is that server. Think of FastAPI as the engine and Uvicorn as the car body around it. The <code>[standard]</code> part installs optional extras for better performance and WebSocket support (used later for real-time bubble sync).</p>
+  </div>
+
+  <h3>Database</h3>
+  <div class="item-block">
+    <div class="item-name">supabase==2.5.0</div>
+    <p>The official Python client for Supabase. Without this, talking to your Supabase database would require writing raw HTTP requests manually — error-prone and verbose. This library wraps all that complexity into clean Python calls like <code>supabase.table("task_bubbles").select("*").execute()</code>.</p>
+  </div>
+  <div class="item-block">
+    <div class="item-name">psycopg2-binary==2.9.11</div>
+    <p>The low-level connection driver that actually opens a socket to PostgreSQL. Supabase uses PostgreSQL under the hood. The <code>-binary</code> suffix means it comes pre-compiled — no additional C compiler needed on your machine. Other libraries (like Supabase) use this internally without you having to touch it directly.</p>
+  </div>
+  <div class="item-block">
+    <div class="item-name">pgvector==0.3.2</div>
+    <p>Adds support for storing and searching AI embeddings (vectors) in PostgreSQL. An embedding is a list of numbers that represents the "meaning" of a piece of text. When you search "that car insurance thing", pgvector finds the most semantically similar items in the database. Used in Phase 2 onwards.</p>
+  </div>
+
+  <h3>Data Validation</h3>
+  <div class="item-block">
+    <div class="item-name">pydantic==2.12.5</div>
+    <p>When the phone app sends data to your backend, Pydantic automatically checks that every field is the right type and within allowed ranges. If the phone sends a string where a number is expected, Pydantic rejects it before your code even sees it — with a clear error message. All the classes in <code>app/models/</code> are Pydantic models.</p>
+  </div>
+  <div class="item-block">
+    <div class="item-name">pydantic-settings==2.13.1</div>
+    <p>An extension of Pydantic for configuration. Instead of calling <code>os.environ.get("SUPABASE_URL")</code> everywhere, you define a <code>Settings</code> class and Pydantic-settings automatically reads all environment variables into it with type checking and autocomplete.</p>
+  </div>
+  <div class="item-block">
+    <div class="item-name">python-dotenv==1.0.1</div>
+    <p>Reads the <code>.env</code> file and loads each line into Python's environment variables. Must be called before any other import tries to read a secret key. Already used in main.py on line 7.</p>
+  </div>
+
+  <h3>AI Providers</h3>
+  <div class="item-block">
+    <div class="item-name">groq==0.9.0</div>
+    <p>Official Python client for the Groq API. Groq runs Llama 3.1 8B on specialised hardware that makes inference extremely fast and cheap (~$0.05 per million tokens). Used for Free and Pro tier users. The client abstracts all the HTTP requests into one function call.</p>
+  </div>
+  <div class="item-block">
+    <div class="item-name">anthropic==0.34.0</div>
+    <p>Official Python client for the Anthropic API (Claude). Used only for Premium tier users who pay £9.99/month. Claude Sonnet 4.6 is more powerful than Llama 8B for complex reasoning and long memory synthesis, but costs significantly more. The <code>ai_router.py</code> decides which client to call.</p>
+  </div>
+
+  <h3>Security &amp; Auth</h3>
+  <div class="item-block">
+    <div class="item-name">python-jose[cryptography]==3.3.0</div>
+    <p>Reads and verifies JWT tokens. When a user logs in via Supabase, they receive a JWT (JSON Web Token) — a cryptographically signed string that proves their identity. Every protected endpoint receives this token in the Authorization header. This library decodes it and extracts the user's ID. Without this, anyone could claim to be any user.</p>
+  </div>
+  <div class="item-block">
+    <div class="item-name">passlib[bcrypt]==1.7.4</div>
+    <p>Password hashing. If you ever store a password, you never store the raw text — you store a bcrypt hash (a scrambled, one-way representation). Even if the database is compromised, the attacker cannot reverse the hash back to the password. This is a safety net for any custom auth flows beyond Supabase.</p>
+  </div>
+  <div class="item-block">
+    <div class="item-name">httpx==0.27.0</div>
+    <p>An async-native HTTP client for making requests to external services. Python's built-in <code>urllib</code> is not async — it blocks the server while waiting. httpx is used internally by the Supabase and Groq clients and for any outbound HTTP calls the backend makes.</p>
+  </div>
+
+  <h3>Testing</h3>
+  <div class="item-block">
+    <div class="item-name">pytest==8.2.0</div>
+    <p>The testing framework. You write functions that check whether your code produces the right output, then run <code>pytest tests/</code> and it finds and runs all of them, reporting which passed and which failed. Professional codebases run these before every deployment to catch regressions.</p>
+  </div>
+  <div class="item-block">
+    <div class="item-name">pytest-asyncio==0.23.7</div>
+    <p>Since all Orbi code uses async/await, the tests must be async too. This plugin extends pytest to understand async test functions. Without it, async tests would appear to pass but would silently skip all their assertions — a dangerous false positive.</p>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION 3: models/task.py -->
+<!-- ============================================================ -->
+<section id="model-task">
+  <div class="script-header">
+    <div class="script-icon">app/models/task.py</div>
+    <div class="script-title">
+      <h2>app/models/task.py <span class="role-badge role-model">Model</span></h2>
+      <div class="subtitle">Defines the exact shape and rules for TaskBubble data. The blueprint every other part of the code follows.</div>
+    </div>
+  </div>
+
+  <div class="analogy">
+    <div class="analogy-label">Real-world analogy</div>
+    <p>A model is like a government form. It specifies every field that must exist ("full name — required"), what type of value each field takes ("date of birth — must be a date, not text"), and which fields are optional. If you hand in a form with the wrong type of data in a field, it's rejected before it's processed.</p>
+  </div>
+
+  <h3>Imports</h3>
+
+  <div class="item-block">
+    <div class="item-name">from datetime import datetime</div>
+    <p>Python's built-in date/time type. Used for fields like <code>created_at</code> and <code>due_at</code> that store a specific point in time.</p>
+  </div>
+  <div class="item-block">
+    <div class="item-name">from enum import Enum</div>
+    <p><strong>Enum</strong> (Enumeration) is a way to define a fixed set of allowed values for a field. Instead of storing a status as a free-text string where a typo like "complted" could sneak in, you define an Enum: only "active", "completed", "snoozed", or "archived" are valid. Any other value is automatically rejected.</p>
+  </div>
+  <div class="item-block">
+    <div class="item-name">from typing import Optional</div>
+    <p><code>Optional[str]</code> means a field can be either a string or <code>None</code> (missing/not provided). For example, <code>description</code> is optional — a bubble can exist without a description.</p>
+  </div>
+  <div class="item-block">
+    <div class="item-name">from uuid import UUID</div>
+    <p>A UUID (Universally Unique Identifier) is a 128-bit number formatted as <code>550e8400-e29b-41d4-a716-446655440000</code>. Every database record uses a UUID as its ID instead of a simple integer (1, 2, 3...) because UUIDs are guaranteed unique across all servers and clients — no coordination needed.</p>
+  </div>
+  <div class="item-block">
+    <div class="item-name">from pydantic import BaseModel, Field</div>
+    <p><strong>BaseModel</strong> is the Pydantic base class — every model inherits from it to get automatic validation. <strong>Field</strong> lets you add extra constraints to a field, like <code>ge=1</code> (greater-than-or-equal to 1) and <code>le=10</code> (less-than-or-equal to 10) for the importance field.</p>
+  </div>
+
+  <div class="divider"></div>
+  <h3>class TaskStatus(str, Enum)</h3>
+
+  <div class="code-block"><span class="code-keyword">class</span> <span class="code-class">TaskStatus</span>(<span class="code-class">str</span>, <span class="code-class">Enum</span>):
+    active = <span class="code-string">"active"</span>
+    completed = <span class="code-string">"completed"</span>
+    snoozed = <span class="code-string">"snoozed"</span>
+    archived = <span class="code-string">"archived"</span></div>
+
+  <p>By inheriting from both <code>str</code> and <code>Enum</code>, each value is simultaneously a string and an enum member. This means when it's stored in the database or sent in JSON, it appears as a plain string ("active") — not some weird Python object. But in code, you reference it as <code>TaskStatus.active</code>, which prevents typos.</p>
+
+  <div class="item-block">
+    <div class="item-name">active</div>
+    <p>The default state. The bubble is visible in the universe and being tracked.</p>
+  </div>
+  <div class="item-block">
+    <div class="item-name">completed</div>
+    <p>The user has finished this task. The bubble collapses/disappears from the universe view.</p>
+  </div>
+  <div class="item-block">
+    <div class="item-name">snoozed</div>
+    <p>The user has dismissed the bubble temporarily. It will reappear later.</p>
+  </div>
+  <div class="item-block">
+    <div class="item-name">archived</div>
+    <p>Soft-deleted. The task is hidden from the user but kept in the database for memory synthesis and audit purposes. The app never hard-deletes a task.</p>
+  </div>
+
+  <div class="divider"></div>
+  <h3>class Visibility(str, Enum)</h3>
+
+  <p>Defines who can see a bubble. Added from day one even though sharing isn't built yet — doing it now prevents a painful database migration later.</p>
+  <div class="item-block">
+    <div class="item-name">private</div>
+    <p>Default. Only the owner can see this bubble.</p>
+  </div>
+  <div class="item-block">
+    <div class="item-name">shared</div>
+    <p>Another user can view this bubble (read-only). Reserved for Phase 5+.</p>
+  </div>
+  <div class="item-block">
+    <div class="item-name">collaborative</div>
+    <p>Another user can edit and contribute to this bubble. Reserved for Phase 5+.</p>
+  </div>
+
+  <div class="divider"></div>
+  <h3>class TaskBubble(BaseModel) — The complete bubble</h3>
+
+  <p>This is the full database representation of a bubble. Every field here corresponds to a column in the <code>task_bubbles</code> table in Supabase.</p>
+
+  <div class="item-block"><div class="item-name">id: UUID</div><p>The bubble's unique identifier. Generated automatically (uuid4()) when the bubble is created.</p></div>
+  <div class="item-block"><div class="item-name">owner_id: UUID</div><p>The user_id of whoever created this bubble. Every query filters by owner_id so users only ever see their own bubbles. Never accepted from the request body — always taken from the auth token to prevent one user from claiming another's data.</p></div>
+  <div class="item-block"><div class="item-name">title: str</div><p>The main text of the bubble — "Pay rent", "Call dentist", etc.</p></div>
+  <div class="item-block"><div class="item-name">description: Optional[str] = None</div><p>Extra context. The <code>= None</code> means if the phone app doesn't send this field, it defaults to None rather than causing an error.</p></div>
+  <div class="item-block"><div class="item-name">status: TaskStatus</div><p>Must be one of the four values in TaskStatus. Pydantic rejects anything else.</p></div>
+  <div class="item-block"><div class="item-name">due_at: Optional[datetime] = None</div><p>When the task is due. Optional because not all tasks have a deadline. Used by the scoring service to calculate deadline_weight.</p></div>
+  <div class="item-block"><div class="item-name">importance: int = Field(ge=1, le=10)</div><p>How important this task is on a 1–10 scale. The <code>Field(ge=1, le=10)</code> constraint means Pydantic will reject a value of 0 or 11. Drives the importance_weight in the pressure score.</p></div>
+  <div class="item-block"><div class="item-name">urgency_score: float</div><p>A numeric score 0–10 representing urgency separate from deadline proximity. Initially 0.0 — will be enriched by the AI agent in Phase 2.</p></div>
+  <div class="item-block"><div class="item-name">pressure_score: float</div><p>The computed bubble pressure, 0–10. Higher = bigger, brighter bubble in the universe. Calculated by scoring.py whenever the task is created or updated.</p></div>
+  <div class="item-block"><div class="item-name">domain_hint: Optional[str] = None</div><p>A label like "Finance", "Health", "Work" that suggests which cluster this bubble belongs to. Set by the AI task parser from the user's speech.</p></div>
+  <div class="item-block"><div class="item-name">parent_cluster_id: Optional[UUID] = None</div><p>The UUID of the Cluster this bubble belongs to, if any. None until the cluster manager assigns it.</p></div>
+  <div class="item-block"><div class="item-name">source_type: str</div><p>How this bubble was created. "voice" = user spoke it. "manual" = user typed it. "import" = brought in from another system. Used for analytics.</p></div>
+  <div class="item-block"><div class="item-name">confidence: float = Field(ge=0.0, le=1.0)</div><p>How confident the AI was in parsing this bubble (0.0 to 1.0). If confidence is low (e.g. 0.4), the app flags the bubble for user confirmation before saving. Manual entries have confidence 1.0.</p></div>
+  <div class="item-block"><div class="item-name">visibility: Visibility = Visibility.private</div><p>Who can see this bubble. Defaults to private. The <code>= Visibility.private</code> sets the default so you don't have to specify it every time.</p></div>
+  <div class="item-block"><div class="item-name">created_at / updated_at: datetime</div><p>Timestamps for when the bubble was first created and last modified. <code>updated_at</code> is used by the attention_decay function in scoring — if it's been weeks since this was touched, the pressure score rises.</p></div>
+
+  <div class="divider"></div>
+  <h3>class TaskBubbleCreate(BaseModel) — What the phone sends</h3>
+
+  <p>When the phone app wants to create a new bubble, it sends this shape — not a full TaskBubble. Notice it has no <code>id</code>, no <code>created_at</code>, no <code>updated_at</code> — those are generated server-side. This prevents the client from injecting their own IDs or timestamps.</p>
+
+  <div class="divider"></div>
+  <h3>class TaskBubbleUpdate(BaseModel) — Partial edits</h3>
+
+  <p>Every field here is <code>Optional</code> with a default of <code>None</code>. This means the phone can send just the fields it wants to change — you don't have to resend the entire bubble just to update the title. Fields that are <code>None</code> are excluded from the database update.</p>
+
+  <div class="divider"></div>
+  <h3>class Cluster(BaseModel) — A group of related bubbles</h3>
+
+  <div class="item-block"><div class="item-name">name: str</div><p>The cluster name, e.g. "Finance", "Health", "Work". Displayed as a label in the universe.</p></div>
+  <div class="item-block"><div class="item-name">weight_score: float</div><p>The aggregate pressure of all bubbles in this cluster. A cluster with many urgent bubbles gets a high weight_score and expands visually.</p></div>
+  <div class="item-block"><div class="item-name">active_count: int</div><p>How many non-archived bubbles are currently in this cluster.</p></div>
+  <div class="item-block"><div class="item-name">color: str</div><p>The hex colour used to render this cluster in the universe (e.g. "#7c6fe0").</p></div>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION 4: models/finance.py -->
+<!-- ============================================================ -->
+<section id="model-finance">
+  <div class="script-header">
+    <div class="script-icon">app/models/finance.py</div>
+    <div class="script-title">
+      <h2>app/models/finance.py <span class="role-badge role-model">Model</span></h2>
+      <div class="subtitle">Blueprints for all finance-related data: expenses, budgets, and AI insights.</div>
+    </div>
+  </div>
+
+  <div class="item-block">
+    <div class="item-name">from datetime import date, datetime</div>
+    <p>Note that two different types are imported: <code>date</code> (just the calendar date, e.g. 2026-04-18) and <code>datetime</code> (a specific moment in time, e.g. 2026-04-18 14:32:00). Finance entries use <code>date</code> for <code>entry_date</code> because a purchase happened on a day — the exact time doesn't matter. But <code>created_at</code> uses <code>datetime</code> because we want to know the exact moment the record was saved.</p>
+  </div>
+
+  <h3>class EntryType(str, Enum)</h3>
+  <p>Only two valid values: <code>"income"</code> (money coming in) or <code>"expense"</code> (money going out). Pydantic rejects anything else. This enum prevents a category of bugs where mistyped values slip into the database.</p>
+
+  <h3>class InsightSeverity(str, Enum)</h3>
+  <p>Three levels for AI-generated financial observations:</p>
+  <div class="item-block"><div class="item-name">info</div><p>General observation. "You spent £200 on dining this month." Not urgent.</p></div>
+  <div class="item-block"><div class="item-name">warning</div><p>Something worth paying attention to. "Food budget is 80% used with 12 days left."</p></div>
+  <div class="item-block"><div class="item-name">alert</div><p>Needs immediate attention. "This £800 Amazon charge is 3x your usual spend." Likely triggers a push notification.</p></div>
+
+  <h3>class FinanceEntry(BaseModel) — One transaction</h3>
+  <div class="item-block"><div class="item-name">amount: float</div><p>The transaction amount. Always positive — the direction (in or out) is tracked by <code>entry_type</code>, not by making this negative.</p></div>
+  <div class="item-block"><div class="item-name">currency: str = "GBP"</div><p>Defaults to GBP since Orbi is UK-first. The default means the phone doesn't have to send this field unless the user is transacting in a different currency.</p></div>
+  <div class="item-block"><div class="item-name">merchant: str</div><p>The raw merchant name as the user typed it or as it appeared on the bank statement. e.g. "TESCO STORES 3289". The categorizer normalises this.</p></div>
+  <div class="item-block"><div class="item-name">category: str</div><p>Set by the finance categorizer — "groceries", "transport", "dining", etc. Not free-text from the user.</p></div>
+  <div class="item-block"><div class="item-name">linked_bubble_id: Optional[UUID] = None</div><p>If this expense is related to a specific TaskBubble (e.g. a dentist appointment linked to a "Book dentist" task), this stores that connection. Optional — most expenses aren't task-linked.</p></div>
+
+  <h3>class FinanceBudget(BaseModel) — A monthly spending limit</h3>
+  <div class="item-block"><div class="item-name">monthly_limit: float</div><p>The maximum amount the user wants to spend in this category per month. e.g. £200 for groceries.</p></div>
+  <div class="item-block"><div class="item-name">alert_threshold: float = Field(default=0.8, ge=0.0, le=1.0)</div><p>A fraction of monthly_limit at which to trigger an alert. Default 0.8 = alert when 80% of budget is spent. The <code>ge=0.0, le=1.0</code> constraint ensures this is always between 0 and 1 (a valid fraction).</p></div>
+  <div class="item-block"><div class="item-name">current_spend: float</div><p>Running total of what's been spent in this category this month. Updated each time a matching expense is logged.</p></div>
+
+  <h3>class FinanceInsight(BaseModel) — An AI observation</h3>
+  <div class="item-block"><div class="item-name">insight_text: str</div><p>The human-readable observation generated by the finance_agent. e.g. "You spent 40% more on dining this month compared to last month."</p></div>
+  <div class="item-block"><div class="item-name">severity: InsightSeverity</div><p>How important this insight is — info, warning, or alert. Controls how prominently the app surfaces it.</p></div>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION 5: models/user.py -->
+<!-- ============================================================ -->
+<section id="model-user">
+  <div class="script-header">
+    <div class="script-icon">app/models/user.py</div>
+    <div class="script-title">
+      <h2>app/models/user.py <span class="role-badge role-model">Model</span></h2>
+      <div class="subtitle">The user's identity, subscription tier, and personal preferences.</div>
+    </div>
+  </div>
+
+  <div class="item-block">
+    <div class="item-name">from pydantic import EmailStr</div>
+    <p><code>EmailStr</code> is a special Pydantic type that validates email addresses. If a field is typed as <code>EmailStr</code>, Pydantic checks that the value actually looks like an email address (has an @ sign, a domain, etc.). It doesn't just accept any string.</p>
+  </div>
+
+  <h3>class SubscriptionTier(str, Enum)</h3>
+  <p>The most important field in the entire system — it controls which AI the user gets.</p>
+  <div class="item-block"><div class="item-name">free</div><p>Groq Llama 8B. Limited bubbles and clusters. Rule-based insights only. ~$0.001/user/day in AI costs.</p></div>
+  <div class="item-block"><div class="item-name">pro</div><p>Groq Llama 8B. Unlimited bubbles. Full voice debrief. Finance intelligence. ~$0.50–1/user/month.</p></div>
+  <div class="item-block"><div class="item-name">premium</div><p>Claude Sonnet 4.6. Deep reasoning, long memory, multi-step agent tasks. ~$3–5/user/month.</p></div>
+
+  <div class="warn">
+    <div class="warn-label">Critical security rule</div>
+    <p>The subscription tier is ALWAYS verified server-side by reading from the database. It is never trusted from the client request. A user cannot upgrade themselves by sending a modified request — the server always checks the real value in the database.</p>
+  </div>
+
+  <h3>class UserPreference(BaseModel)</h3>
+  <div class="item-block"><div class="item-name">quiet_hours_start / quiet_hours_end: time</div><p>Python's <code>time</code> type (just hours and minutes, no date). Defines when the app should not send notifications. e.g. 22:00 to 08:00 = no notifications at night.</p></div>
+  <div class="item-block"><div class="item-name">proactivity_level: int</div><p>1 to 5 scale. Level 1 = only notify when the user asks. Level 5 = the assistant proactively surfaces insights, suggests tasks, and nudges you throughout the day.</p></div>
+  <div class="item-block"><div class="item-name">preferred_reminder_channel: str</div><p>"push" (phone notification), "voice" (spoken reminder), or "in-app". Controls how the assistant delivers reminders.</p></div>
+
+  <div class="item-block">
+    <div class="item-name">model_config = {"json_schema_extra": {"examples": [...]}}</div>
+    <p>This adds an example to the auto-generated API documentation at <code>/docs</code>. When a developer opens the interactive docs, they see a pre-filled example request. It has no effect on how the code runs — it's purely for documentation.</p>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION 6: db/client.py -->
+<!-- ============================================================ -->
+<section id="db-client">
+  <div class="script-header">
+    <div class="script-icon">app/db/client.py</div>
+    <div class="script-title">
+      <h2>app/db/client.py <span class="role-badge role-db">Database</span></h2>
+      <div class="subtitle">Opens and manages the single connection to Supabase. Every other db file imports from here.</div>
+    </div>
+  </div>
+
+  <div class="analogy">
+    <div class="analogy-label">Real-world analogy</div>
+    <p>Think of this as the office's one phone line to headquarters. You don't open a new phone line every time someone needs to make a call — you share the one existing line. This file creates that one shared connection and hands it out to anyone who asks.</p>
+  </div>
+
+  <div class="item-block">
+    <div class="item-name">import logging</div>
+    <p>Python's built-in logging system. Instead of using <code>print()</code> for debugging messages (which you'd have to remove before production), <code>logging</code> lets you write structured log messages that can be filtered by severity, routed to files, or sent to monitoring services.</p>
+  </div>
+  <div class="item-block">
+    <div class="item-name">logger = logging.getLogger(__name__)</div>
+    <p>Creates a logger named after this file (<code>app.db.client</code>). Each module has its own named logger so you can filter logs by where they came from. <code>__name__</code> is a Python built-in that automatically equals the current module's name.</p>
+  </div>
+  <div class="item-block">
+    <div class="item-name">_client: Client | None = None</div>
+    <p>A module-level variable that starts as <code>None</code>. The underscore prefix <code>_</code> is a Python convention meaning "this is private — don't import it directly from outside this module". <code>Client | None</code> means it can be either a Supabase Client object or None.</p>
+  </div>
+
+  <h3>def get_client() → Client</h3>
+  <p>This is a <strong>lazy singleton</strong>. "Singleton" means only one instance ever exists. "Lazy" means it's only created when first needed, not at import time.</p>
+
+  <div class="code-block"><span class="code-keyword">def</span> <span class="code-func">get_client</span>() -> Client:
+    <span class="code-keyword">global</span> _client
+    <span class="code-keyword">if</span> _client <span class="code-keyword">is</span> <span class="code-keyword">None</span>:
+        url = os.environ.<span class="code-func">get</span>(<span class="code-string">"SUPABASE_URL"</span>, <span class="code-string">""</span>)
+        key = os.environ.<span class="code-func">get</span>(<span class="code-string">"SUPABASE_SERVICE_KEY"</span>, <span class="code-string">""</span>)
+        _client = <span class="code-func">create_client</span>(url, key)
+    <span class="code-keyword">return</span> _client</div>
+
+  <p>First call: <code>_client</code> is None, so it reads the credentials from the environment and creates the connection. Every subsequent call: <code>_client</code> is already set, so it returns the existing connection immediately. This avoids opening hundreds of database connections — one is enough.</p>
+
+  <div class="item-block">
+    <div class="item-name">SUPABASE_SERVICE_KEY (not SUPABASE_ANON_KEY)</div>
+    <p>Supabase has two keys: the anon key (used on the client/phone app) and the service key (used on the server). The service key bypasses Row Level Security — it can read and write any row for any user. This is necessary for the backend to serve all users. This key must NEVER be sent to the phone app.</p>
+  </div>
+
+  <h3>async def test_connection() → bool</h3>
+  <p>Runs a lightweight query (<code>SELECT id FROM user_profiles LIMIT 1</code>) to check the database is reachable. Returns True if successful, False if anything fails. Used at startup for diagnostics. The <code>try/except</code> block means any error is caught, logged, and returns False instead of crashing the whole server.</p>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION 7: db/tasks.py -->
+<!-- ============================================================ -->
+<section id="db-tasks">
+  <div class="script-header">
+    <div class="script-icon">app/db/tasks.py</div>
+    <div class="script-title">
+      <h2>app/db/tasks.py <span class="role-badge role-db">Database</span></h2>
+      <div class="subtitle">All database queries for TaskBubble. No business logic — only reading and writing to Supabase.</div>
+    </div>
+  </div>
+
+  <div class="analogy">
+    <div class="analogy-label">Real-world analogy</div>
+    <p>This is the filing clerk. It has one job: fetch records from the cabinet, or file new ones. It doesn't make decisions about what to do with records — that's the service layer's job. Give it a user_id and it returns their tasks. Give it task data and it saves it.</p>
+  </div>
+
+  <h3>async def fetch_tasks_for_user(user_id)</h3>
+  <div class="code-block">response = (
+    <span class="code-func">get_client</span>().<span class="code-func">table</span>(<span class="code-string">"task_bubbles"</span>)
+    .<span class="code-func">select</span>(<span class="code-string">"*"</span>)
+    .<span class="code-func">eq</span>(<span class="code-string">"owner_id"</span>, <span class="code-func">str</span>(user_id))
+    .<span class="code-func">neq</span>(<span class="code-string">"status"</span>, <span class="code-string">"archived"</span>)
+    .<span class="code-func">order</span>(<span class="code-string">"pressure_score"</span>, desc=<span class="code-keyword">True</span>)
+    .<span class="code-func">execute</span>()
+)</div>
+  <p>This is a fluent query builder — you chain method calls to build up a SQL query. In plain SQL this would be: <code>SELECT * FROM task_bubbles WHERE owner_id = '...' AND status != 'archived' ORDER BY pressure_score DESC</code>. Each method adds one clause:</p>
+  <ul>
+    <li><code>.table("task_bubbles")</code> — target this database table</li>
+    <li><code>.select("*")</code> — fetch all columns</li>
+    <li><code>.eq("owner_id", ...)</code> — WHERE owner_id equals this value</li>
+    <li><code>.neq("status", "archived")</code> — AND status is not equal to "archived"</li>
+    <li><code>.order("pressure_score", desc=True)</code> — ORDER BY pressure_score descending (highest first)</li>
+    <li><code>.execute()</code> — actually run the query</li>
+  </ul>
+
+  <h3>async def fetch_task_by_id(task_id, owner_id)</h3>
+  <p>Uses <code>.single()</code> at the end — this tells Supabase to expect exactly one result and return it as a dict rather than a list. The <code>owner_id</code> filter is critical: it ensures a user can only fetch their own task. Without it, knowing another task's UUID would let any user read it.</p>
+
+  <h3>async def insert_task(payload: dict)</h3>
+  <p>Takes a Python dictionary and inserts it as a new row. <code>response.data[0]</code> returns the first (and only) inserted row, including any database-generated values like auto-timestamps. The <code>[0]</code> indexing extracts from the list since Supabase always returns a list even for single inserts.</p>
+
+  <h3>async def update_task(task_id, owner_id, payload: dict)</h3>
+  <p>Sends only the changed fields to the database using <code>.update(payload)</code>. Again filtered by both <code>task_id</code> and <code>owner_id</code> — ownership is verified at the database level, not just in application code. Belt-and-suspenders security.</p>
+
+  <h3>async def archive_task(task_id, owner_id)</h3>
+  <p>Sets <code>status = "archived"</code> rather than deleting the row. This is called a <strong>soft delete</strong>. The data is preserved for memory synthesis, undo functionality, and audit trails. The task simply disappears from the user's view because every fetch filters out archived tasks.</p>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION 8: db/finance.py -->
+<!-- ============================================================ -->
+<section id="db-finance">
+  <div class="script-header">
+    <div class="script-icon">app/db/finance.py</div>
+    <div class="script-title">
+      <h2>app/db/finance.py <span class="role-badge role-db">Database</span></h2>
+      <div class="subtitle">Database queries for finance entries and budgets, including date-range filtering.</div>
+    </div>
+  </div>
+
+  <h3>async def fetch_entries_for_user(user_id, category, month)</h3>
+  <p>This function supports optional filters. If <code>category</code> is provided, it adds a <code>WHERE category = ...</code> clause. If <code>month</code> is provided (in "YYYY-MM" format), it adds a date range filter. Both can be combined.</p>
+
+  <div class="item-block">
+    <div class="item-name">Month range filtering</div>
+    <div class="code-block">query = query.<span class="code-func">gte</span>(<span class="code-string">"entry_date"</span>, <span class="code-string">f"{month}-01"</span>).<span class="code-func">lt</span>(
+    <span class="code-string">"entry_date"</span>, <span class="code-func">_next_month</span>(month)
+)</div>
+    <p><code>.gte</code> = "greater than or equal to" (≥). <code>.lt</code> = "less than" (&lt;). So for month "2026-04", this becomes: entry_date ≥ 2026-04-01 AND entry_date &lt; 2026-05-01. This captures the entire month without worrying about the last day (April has 30 days, not 31 or 28).</p>
+  </div>
+
+  <h3>async def upsert_budget(payload)</h3>
+  <p><strong>Upsert</strong> = "update or insert". If a budget for this user+category already exists, update it. If it doesn't exist, insert it. The <code>on_conflict="user_id,category"</code> tells Supabase which combination of fields constitutes a "duplicate". This means the phone app can call POST /finance/budgets without first checking whether a budget exists — the server handles it idempotently.</p>
+
+  <h3>def _next_month(month: str)</h3>
+  <p>A private helper function (underscore prefix). Given "2026-04", returns "2026-05-01". Handles December correctly (December + 1 = January of next year). Used to build the exclusive upper bound for month range queries.</p>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION 9: routers/tasks.py -->
+<!-- ============================================================ -->
+<section id="router-tasks">
+  <div class="script-header">
+    <div class="script-icon">app/routers/tasks.py</div>
+    <div class="script-title">
+      <h2>app/routers/tasks.py <span class="role-badge role-router">Router</span></h2>
+      <div class="subtitle">Defines the HTTP endpoints for TaskBubble. Receives requests, validates auth, delegates to services and db, returns responses.</div>
+    </div>
+  </div>
+
+  <div class="analogy">
+    <div class="analogy-label">Real-world analogy</div>
+    <p>The router is a receptionist. When someone calls the office (HTTP request arrives), the receptionist checks their ID (auth header), decides which department to forward them to (service/db layer), and relays the answer back. The receptionist doesn't solve problems themselves.</p>
+  </div>
+
+  <div class="item-block">
+    <div class="item-name">from fastapi import APIRouter, Depends, Header, HTTPException, status</div>
+    <ul>
+      <li><strong>APIRouter</strong> — creates a sub-router with its own prefix (/tasks). You group related endpoints into one router.</li>
+      <li><strong>Depends</strong> — FastAPI's dependency injection system. <code>Depends(get_current_user)</code> means "call get_current_user first and pass its return value into this endpoint". Used for auth.</li>
+      <li><strong>Header</strong> — tells FastAPI to extract a value from the HTTP request headers (not the body).</li>
+      <li><strong>HTTPException</strong> — raises an HTTP error response (like 404 Not Found) and stops execution.</li>
+      <li><strong>status</strong> — a module of HTTP status code constants. <code>status.HTTP_201_CREATED</code> is cleaner and self-documenting compared to the bare number 201.</li>
+    </ul>
+  </div>
+
+  <div class="item-block">
+    <div class="item-name">router = APIRouter(prefix="/tasks", tags=["tasks"])</div>
+    <p>Creates the router. <code>prefix="/tasks"</code> means all endpoints in this file start with /tasks. Combined with main.py's <code>prefix="/api/v1"</code>, every URL becomes <code>/api/v1/tasks/...</code>. <code>tags=["tasks"]</code> groups these endpoints together in the /docs page.</p>
+  </div>
+
+  <h3>async def get_current_user(authorization: str = Header(...))</h3>
+  <p>This is the <strong>auth dependency</strong>. <code>Header(...)</code> extracts the "Authorization" HTTP header from every request. The <code>...</code> (Ellipsis) means this header is required — if it's missing, FastAPI automatically returns a 422 error.</p>
+
+  <div class="warn">
+    <div class="warn-label">Placeholder — not real auth yet</div>
+    <p>Currently this function returns a hardcoded UUID (<code>00000000-0000-0000-0000-000000000001</code>) for any Bearer token. This is a placeholder so all endpoints can be tested before real JWT verification is wired in Phase 2. In production, this must decode the Supabase JWT and extract the real user_id.</p>
+  </div>
+
+  <h3>def _error(message, error_code)</h3>
+  <p>A tiny private helper that builds a consistent error response dict. Every error from this backend has the same shape: <code>{"message": "...", "error_code": "..."}</code>. This makes it easy for the phone app to handle errors programmatically (check the error_code) while showing the message to the user.</p>
+
+  <h3>GET /api/v1/tasks — list_tasks</h3>
+  <div class="code-block"><span class="code-keyword">@router.get</span>(<span class="code-string">""</span>, response_model=<span class="code-func">list</span>[TaskBubble])
+<span class="code-keyword">async def</span> <span class="code-func">list_tasks</span>(user_id: UUID = <span class="code-func">Depends</span>(get_current_user)):
+    rows = <span class="code-keyword">await</span> tasks_db.<span class="code-func">fetch_tasks_for_user</span>(user_id)
+    <span class="code-keyword">return</span> rows</div>
+  <p>Returns all non-archived tasks for the authenticated user, ordered by pressure_score descending. <code>response_model=list[TaskBubble]</code> tells FastAPI to validate and serialize the response using the TaskBubble model — it strips any extra fields that shouldn't go to the client.</p>
+
+  <h3>POST /api/v1/tasks — create_task</h3>
+  <p>The most complex endpoint. Here's what happens step by step:</p>
+  <ol>
+    <li>Auth is verified. <code>user_id</code> comes from the token, not the body.</li>
+    <li>A full <code>TaskBubble</code> object is constructed with a new UUID and timestamps.</li>
+    <li><code>calculate_pressure_score(task)</code> computes the initial pressure score.</li>
+    <li><code>task.model_dump(mode="json")</code> converts the Pydantic object to a plain Python dict, converting UUID objects to strings and datetimes to ISO format strings (ready for JSON/database).</li>
+    <li>The dict is inserted into the database.</li>
+    <li>The saved row (returned from the DB) is sent back as the response.</li>
+  </ol>
+
+  <h3>PATCH /api/v1/tasks/{task_id} — update_task</h3>
+  <p>The <code>{task_id}</code> in the URL is a path parameter — FastAPI automatically extracts it and passes it to the function. The endpoint first fetches the existing task, then merges the incoming changes on top using dict unpacking: <code>{**existing, **body.model_dump(exclude_none=True)}</code>. The <code>exclude_none=True</code> means only fields actually sent in the request are included — None fields are skipped.</p>
+
+  <h3>DELETE /api/v1/tasks/{task_id} — delete_task</h3>
+  <p>Returns HTTP 204 No Content on success (no response body — there's nothing to return). Calls <code>archive_task</code>, not an actual delete. If the task isn't found (or belongs to another user), returns 404.</p>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION 10: routers/finance.py -->
+<!-- ============================================================ -->
+<section id="router-finance">
+  <div class="script-header">
+    <div class="script-icon">app/routers/finance.py</div>
+    <div class="script-title">
+      <h2>app/routers/finance.py <span class="role-badge role-router">Router</span></h2>
+      <div class="subtitle">Endpoints for logging expenses, listing entries, viewing spending summaries, and managing budgets.</div>
+    </div>
+  </div>
+
+  <div class="item-block">
+    <div class="item-name">from collections import defaultdict</div>
+    <p><code>defaultdict</code> is a special dictionary that automatically creates a default value for missing keys. Here it's used with <code>float</code>, meaning any category that hasn't been seen before automatically gets a value of 0.0. Without this, accessing a key that doesn't exist in a normal dict would raise a KeyError.</p>
+  </div>
+
+  <div class="item-block">
+    <div class="item-name">from fastapi import Query</div>
+    <p><code>Query</code> is used to define optional URL query parameters — values passed after a <code>?</code> in the URL. For example: <code>GET /finance/entries?category=groceries&month=2026-04</code>. The <code>Query(default=None)</code> makes them optional.</p>
+  </div>
+
+  <h3>POST /api/v1/finance/entries — create_entry</h3>
+  <p>The key step here is automatic categorization before saving:</p>
+  <div class="code-block">category = <span class="code-func">categorize_merchant</span>(body.merchant)</div>
+  <p>Before any database write, the merchant name is run through the rule-based categorizer. If "Tesco" is in the merchant name, <code>category</code> becomes "groceries" automatically. The user doesn't have to categorize anything themselves for known merchants.</p>
+
+  <h3>GET /api/v1/finance/summary — get_summary</h3>
+  <p>This endpoint does the aggregation in Python rather than in SQL. It fetches all entries for the month, then loops through them:</p>
+  <ul>
+    <li>Income entries are added to <code>total_income</code></li>
+    <li>Expense entries are added to <code>total_spend</code> and to <code>totals[category]</code></li>
+  </ul>
+  <p>The result is a breakdown like: <code>{"groceries": 145.50, "dining": 88.00, ...}</code> plus overall totals. The <code>round(..., 2)</code> calls ensure no floating-point errors produce values like 145.500000001.</p>
+
+  <h3>POST /api/v1/finance/budgets — upsert_budget</h3>
+  <p>Returns HTTP 200 (not 201) because an upsert might update an existing record rather than create a new one. HTTP 201 specifically means "created new" — 200 is the correct code for "created or updated".</p>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION 11: services/scoring.py -->
+<!-- ============================================================ -->
+<section id="service-scoring">
+  <div class="script-header">
+    <div class="script-icon">app/services/scoring.py</div>
+    <div class="script-title">
+      <h2>app/services/scoring.py <span class="role-badge role-service">Service</span></h2>
+      <div class="subtitle">Computes the pressure score (0–10) for every bubble. Pure maths — no AI, no database calls, no side effects.</div>
+    </div>
+  </div>
+
+  <div class="analogy">
+    <div class="analogy-label">Real-world analogy</div>
+    <p>Think of this as a calculator that measures "how loud a bubble is shouting for your attention". It takes several factors — how close the deadline is, how important the task is, whether other things depend on it, and how long you've been ignoring it — and combines them into one number from 0 to 10.</p>
+  </div>
+
+  <h3>def _deadline_weight(due_at)</h3>
+  <p>A stepped scale that accelerates as the deadline approaches. The steps are designed so the bubble visually grows as urgency increases:</p>
+  <div class="item-block">
+    <div class="item-name">days_remaining = (due_at - now).total_seconds() / 86400</div>
+    <p>Subtracting two datetime objects gives a <code>timedelta</code> (a duration). <code>.total_seconds()</code> converts it to seconds. Dividing by 86400 (seconds in a day) gives days. Negative values mean the task is overdue.</p>
+  </div>
+  <ul>
+    <li>Overdue → 10.0 (maximum urgency)</li>
+    <li>≤ 1 day → 8.0</li>
+    <li>≤ 3 days → 5.0</li>
+    <li>≤ 7 days → 2.0</li>
+    <li>More than 7 days → 0.0 (not yet urgent)</li>
+  </ul>
+
+  <h3>def _importance_weight(importance)</h3>
+  <p>Maps the 1–10 importance value to a 0.5–5.0 contribution. Dividing by 2 (not using raw importance) prevents importance alone from dominating the total score. A task marked "10 importance" contributes 5 points — half the maximum possible score, which leaves room for other factors.</p>
+
+  <h3>def _dependency_weight(dependency_count)</h3>
+  <p>If other people or tasks are blocked waiting for this one, it should feel more urgent. Even one dependency is a significant cost-of-delay increase, so the jump from 0→1 dependency is intentionally large (0→1.0). Three or more dependencies cap at 2.0.</p>
+
+  <h3>def _attention_decay(updated_at)</h3>
+  <p>Without this, tasks with no deadline and no dependencies would sit at a low score forever — quietly forgotten. This function checks the last time the task was touched:</p>
+  <ul>
+    <li>Untouched for more than 14 days → +3.0 (significant revival boost)</li>
+    <li>Untouched for more than 7 days → +1.5 (gentle nudge)</li>
+    <li>Recently updated → 0.0 (no boost)</li>
+  </ul>
+
+  <h3>def calculate_pressure_score(task, dependency_count=0)</h3>
+  <p>The main function. Adds all four component weights together, then clamps the result to the [0, 10] range using <code>min(max(raw_score, 0.0), 10.0)</code>. The inner <code>max(raw_score, 0.0)</code> ensures it's never negative. The outer <code>min(..., 10.0)</code> ensures it never exceeds 10. Then <code>round(..., 4)</code> gives 4 decimal places — enough precision for the bubble size renderer.</p>
+
+  <div class="concept">
+    <h3>Why no AI in scoring?</h3>
+    <p>Pressure scoring is deterministic — the same task always gets the same score. This means it's fast (no network call), free (no API cost), testable (you can write exact assertions), and predictable for the user. AI is only used for things that require understanding language or generating natural text — not for mathematical calculations.</p>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION 12: services/ai_router.py -->
+<!-- ============================================================ -->
+<section id="service-ai">
+  <div class="script-header">
+    <div class="script-icon">app/services/ai_router.py</div>
+    <div class="script-title">
+      <h2>app/services/ai_router.py <span class="role-badge role-service">Service</span></h2>
+      <div class="subtitle">The single gateway for every AI call in the backend. Routes to Groq or Claude based on the user's subscription tier.</div>
+    </div>
+  </div>
+
+  <div class="analogy">
+    <div class="analogy-label">Real-world analogy</div>
+    <p>Think of this as a telephone switchboard operator. When a call comes in asking for "an AI response", this file checks who's calling (their subscription tier) and puts them through to the right expert: the budget-friendly Llama for free/pro users, or the premium Claude specialist for premium users. All other code just dials the switchboard — they never call Groq or Claude directly.</p>
+  </div>
+
+  <div class="item-block">
+    <div class="item-name">import time</div>
+    <p>Python's built-in time module. Used here for <code>time.monotonic()</code> — a high-resolution clock that measures elapsed time. It's used to measure how many milliseconds an AI call takes, which is logged for performance monitoring.</p>
+  </div>
+  <div class="item-block">
+    <div class="item-name">from pathlib import Path</div>
+    <p><code>Path</code> is Python's modern way to work with file system paths. <code>Path(__file__)</code> gets the path of the current file. <code>.parent</code> goes up one directory. Building <code>_PROMPTS_DIR</code> this way works on any operating system without hardcoding slashes.</p>
+  </div>
+  <div class="item-block">
+    <div class="item-name">_groq_client = Groq(api_key=os.environ["GROQ_API_KEY"])</div>
+    <p>Creates the Groq client at module load time (when the file is first imported). Note <code>os.environ["GROQ_API_KEY"]</code> with square brackets — this raises a KeyError if the key is missing (unlike <code>.get()</code> which would silently return None). Failing loud at startup is better than failing mysteriously later.</p>
+  </div>
+  <div class="item-block">
+    <div class="item-name">_FALLBACK_RESPONSE</div>
+    <p>A constant string returned when an AI call fails. Instead of crashing the entire request, the user gets a gentle "try again" message. The real error is logged server-side for debugging. This is called a <strong>graceful degradation</strong> pattern.</p>
+  </div>
+
+  <h3>def load_prompt(agent_name, version=1)</h3>
+  <p>Reads a prompt file from <code>app/prompts/</code> and returns it as a plain string. The naming convention is <code>{agent_name}_v{version}.md</code>. By storing prompts in separate files rather than hardcoded Python strings, you can improve the AI's behaviour by editing a text file without touching any Python code. The <code>version</code> parameter means you can deploy a new prompt version (v2) without deleting the old one (v1).</p>
+
+  <h3>async def get_ai_response(prompt, user_tier, system_prompt, max_tokens=500)</h3>
+  <p>The public interface. Every agent calls this function — none call Groq or Claude directly. This is the <strong>single point of control</strong> for all AI spending in the entire backend.</p>
+  <div class="flow">
+    <div class="flow-step">User tier = "premium"</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">_call_claude()</div>
+    <div class="flow-step">User tier = "free" or "pro"</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">_call_groq()</div>
+  </div>
+
+  <h3>async def _call_groq(prompt, system_prompt, max_tokens)</h3>
+  <div class="code-block">response = _groq_client.chat.completions.<span class="code-func">create</span>(
+    model=_GROQ_MODEL,
+    messages=[
+        {<span class="code-string">"role"</span>: <span class="code-string">"system"</span>, <span class="code-string">"content"</span>: system_prompt},
+        {<span class="code-string">"role"</span>: <span class="code-string">"user"</span>, <span class="code-string">"content"</span>: prompt},
+    ],
+    max_tokens=max_tokens,
+)</div>
+  <p>The <code>messages</code> list follows the chat format used by all modern AI APIs. <code>system</code> = the AI's instructions (loaded from the prompt file). <code>user</code> = what the user actually said. The AI responds in the "assistant" role (not shown here — that's in the response).</p>
+  <p>After the call, the function logs: which provider, which model, how many tokens were used, and how many milliseconds it took. This data is essential for billing awareness and performance monitoring.</p>
+
+  <h3>async def _call_claude(prompt, system_prompt, max_tokens)</h3>
+  <p>Same pattern as Groq but using the Anthropic client. One key difference: Anthropic's API separates <code>system</code> from the messages list, while Groq puts system inside messages. Both achieve the same result — the differences are just API design choices by each company.</p>
+
+  <div class="callout">
+    <div class="callout-label">Why wrap everything in try/except?</div>
+    <p>External API calls can fail for many reasons: network timeout, provider outage, rate limit hit, invalid API key. Without try/except, any of these would crash your entire request with an unhelpful 500 error. With it, the user gets a friendly "try again" message and your server logs the real error for investigation.</p>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION 13: services/finance_categorizer.py -->
+<!-- ============================================================ -->
+<section id="service-categorizer">
+  <div class="script-header">
+    <div class="script-icon">app/services/finance_categorizer.py</div>
+    <div class="script-title">
+      <h2>app/services/finance_categorizer.py <span class="role-badge role-service">Service</span></h2>
+      <div class="subtitle">Sorts expenses into categories using a lookup table of known merchants — zero AI, zero cost.</div>
+    </div>
+  </div>
+
+  <div class="analogy">
+    <div class="analogy-label">Real-world analogy</div>
+    <p>Imagine a human bookkeeper who has memorised that anything from Tesco goes in the "Groceries" column and anything from Netflix goes in "Subscriptions". They don't need to think about it — they just check their mental list. Only when they encounter a merchant they've never seen ("Priya's Boutique") do they need to ask someone for help (the AI).</p>
+  </div>
+
+  <h3>_RULES — the lookup table</h3>
+  <div class="code-block">_RULES: <span class="code-func">list</span>[<span class="code-func">tuple</span>[str, str]] = [
+    (<span class="code-string">"tesco"</span>, <span class="code-string">"groceries"</span>),
+    (<span class="code-string">"amazon prime"</span>, <span class="code-string">"subscriptions"</span>),
+    (<span class="code-string">"amazon"</span>, <span class="code-string">"shopping"</span>),  <span class="code-comment"># after "amazon prime"</span>
+    ...
+]</div>
+  <p>A list of tuples. Each tuple is a pair: (keyword to match, category to assign). The list is ordered — this matters. "amazon prime" appears before "amazon" so that "Amazon Prime Video" is correctly categorised as a subscription, not shopping. If the order were reversed, "amazon prime" would match the bare "amazon" rule first and be wrongly categorised as shopping.</p>
+
+  <h3>def categorize_merchant(merchant: str) → str</h3>
+  <div class="code-block">normalised = merchant.<span class="code-func">lower</span>().<span class="code-func">strip</span>()
+<span class="code-keyword">for</span> keyword, category <span class="code-keyword">in</span> _RULES:
+    <span class="code-keyword">if</span> keyword <span class="code-keyword">in</span> normalised:
+        <span class="code-keyword">return</span> category
+<span class="code-keyword">return</span> <span class="code-string">"uncategorized"</span></div>
+
+  <ul>
+    <li><code>.lower()</code> — converts to lowercase so "TESCO STORES" matches "tesco"</li>
+    <li><code>.strip()</code> — removes leading/trailing whitespace that might come from bank imports</li>
+    <li><code>keyword in normalised</code> — checks if the keyword appears anywhere in the merchant name (substring match, not exact match)</li>
+    <li>First match wins — the function returns immediately on the first matching rule</li>
+    <li>If no rule matches → returns "uncategorized" — the caller can optionally escalate to the AI</li>
+  </ul>
+
+  <div class="callout">
+    <div class="callout-label">Why rule-based first?</div>
+    <p>The vast majority of everyday spending is at known merchants. Running AI on "Tesco £45" would waste money and add 200–500ms latency for a question that can be answered in microseconds. AI is only called for the small percentage of genuinely unknown merchants.</p>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION 14: tests/test_scoring.py -->
+<!-- ============================================================ -->
+<section id="tests">
+  <div class="script-header">
+    <div class="script-icon">tests/test_scoring.py</div>
+    <div class="script-title">
+      <h2>tests/test_scoring.py <span class="role-badge role-test">Tests</span></h2>
+      <div class="subtitle">Automated tests that verify the pressure scoring logic is always correct. Run with: pytest tests/</div>
+    </div>
+  </div>
+
+  <div class="analogy">
+    <div class="analogy-label">Real-world analogy</div>
+    <p>Tests are like quality control checks on a production line. Every time you make a change to the scoring code, you run the tests. If they all pass (green), you know you haven't broken anything. If one fails (red), you know exactly which scenario is now producing wrong results before it reaches real users.</p>
+  </div>
+
+  <div class="item-block">
+    <div class="item-name">import pytest</div>
+    <p>The testing framework. It finds all functions whose names start with <code>test_</code> and all classes whose names start with <code>Test</code>, runs them, and reports results. You never call these functions yourself.</p>
+  </div>
+
+  <h3>def make_task(**overrides)</h3>
+  <p>A helper function that creates a valid TaskBubble with sensible defaults. The <code>**overrides</code> syntax means you can pass any keyword argument to override specific fields. This avoids repeating all 12 required fields in every test. For example: <code>make_task(importance=10)</code> creates a bubble with all defaults but importance set to 10.</p>
+
+  <h3>class TestDeadlineWeight</h3>
+  <p>Each method in this class tests one specific scenario for <code>_deadline_weight()</code>. The class groups related tests together so the output is organized. Here's what each test does:</p>
+
+  <div class="item-block">
+    <div class="item-name">test_no_due_date_returns_zero</div>
+    <p><code>assert _deadline_weight(None) == 0.0</code> — if there's no deadline, there's no deadline-based urgency. The <code>assert</code> statement checks that the expression is True. If it's False, pytest marks this test as FAILED.</p>
+  </div>
+  <div class="item-block">
+    <div class="item-name">test_overdue_returns_ten</div>
+    <p>Creates a datetime in the past (yesterday) and asserts the function returns 10.0 — maximum urgency.</p>
+  </div>
+  <div class="item-block">
+    <div class="item-name">test_naive_datetime_is_handled</div>
+    <p>A "naive" datetime is one without timezone information. The scoring function adds UTC timezone info if missing. This test verifies that doesn't crash.</p>
+  </div>
+
+  <h3>class TestCalculatePressureScore — Integration tests</h3>
+
+  <div class="item-block">
+    <div class="item-name">test_score_is_clamped_to_ten</div>
+    <p>Creates the worst-case task: overdue, maximum importance, many dependencies, and neglected for 20 days. Without clamping, the raw score would be 10 + 5 + 2 + 3 = 20. The test verifies the result is exactly 10.0, not 20.</p>
+  </div>
+  <div class="item-block">
+    <div class="item-name">test_no_pressure_on_fresh_low_importance_task</div>
+    <p>A brand new task (no deadline, no dependencies, just created, importance=1). The only contributing factor is importance_weight: 1 ÷ 2 = 0.5. The test verifies the score is exactly 0.5. This is a precise mathematical assertion.</p>
+  </div>
+  <div class="item-block">
+    <div class="item-name">test_dependency_count_default_is_zero</div>
+    <p>Verifies that calling <code>calculate_pressure_score(task)</code> (without specifying dependency_count) gives the same result as calling it with <code>dependency_count=0</code> explicitly. Tests that the default parameter works correctly.</p>
+  </div>
+
+  <div class="concept">
+    <h3>Why test private functions like _deadline_weight?</h3>
+    <p>Unit tests for private helper functions give you precise control. If <code>calculate_pressure_score</code> returns a wrong number, a test against <code>_deadline_weight</code> immediately tells you whether the problem is in the deadline component or elsewhere. Without testing each part separately, you'd have to guess which component is broken.</p>
+  </div>
+
+  <div class="callout">
+    <div class="callout-label">How to run the tests</div>
+    <p>From the orbi-backend directory, run: <code>pytest tests/</code> — pytest finds all test files automatically and runs every test function. You'll see a line per test (green dot = passed, red F = failed) and a summary at the end.</p>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<div style="background: #0a0a18; padding: 60px 80px; text-align: center; border-top: 1px solid #1e1e3a;">
+  <div style="font-size: 32px; font-weight: 800; color: #7c6fe0; margin-bottom: 12px;">Orbi</div>
+  <p style="color: #555580; font-size: 14px;">Phase 1 Code Study Guide · Generated April 2026<br>Open in Chrome or Edge → Print → Save as PDF</p>
+</div>
+
+</body>
+</html>
