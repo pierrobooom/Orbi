@@ -19,7 +19,20 @@
       "Bash(npx --version)",
       "PowerShell(npm *)",
       "Bash(git check-ignore *)",
-      "Bash(grep -iE \"orbi_code_guide|\\\\.html$|\\\\.pdf$\")"
+      "Bash(grep -iE \"orbi_code_guide|\\\\.html$|\\\\.pdf$\")",
+      "Bash(where python.exe)",
+      "Read(//c/Users/lucas/anaconda3/**)",
+      "Bash(\"/c/Users/lucas/AppData/Local/Python/bin/python.exe\" --version)",
+      "Read(//c/Users/lucas/AppData/Local/Python//**)",
+      "Bash(\"/c/Users/lucas/AppData/Local/Python/pythoncore-3.12-64/python.exe\" -c \"import pytest, pytest_asyncio; print\\(pytest.__version__, pytest_asyncio.__version__\\)\")",
+      "Bash(/c/Users/lucas/AppData/Local/Python/pythoncore-3.12-64/python.exe -m pytest tests/test_usage_tracker.py -x --tb=short)",
+      "Bash(/c/Users/lucas/AppData/Local/Python/pythoncore-3.12-64/python.exe -m pip install --quiet supabase==2.5.0)",
+      "Bash(/c/Users/lucas/AppData/Local/Python/pythoncore-3.12-64/python.exe -m pip install --quiet anthropic==0.34.0 groq==0.9.0)",
+      "Bash(GROQ_API_KEY=test ANTHROPIC_API_KEY=test /c/Users/lucas/AppData/Local/Python/pythoncore-3.12-64/python.exe -m pytest tests/test_usage_tracker.py -x --tb=short)",
+      "Bash(GROQ_API_KEY=test ANTHROPIC_API_KEY=test /c/Users/lucas/AppData/Local/Python/pythoncore-3.12-64/python.exe -m pytest tests/ --tb=short)",
+      "Bash(awk *)",
+      "Bash($PY *)",
+      "Bash(/c/Users/lucas/AppData/Local/Python/pythoncore-3.12-64/python.exe -m pip install --quiet python-dotenv==1.0.1 deepgram-sdk==3.7.7 elevenlabs==1.8.0)"
     ]
   }
 }
