@@ -8,6 +8,7 @@ response for simple queries.
 import json
 import logging
 from datetime import datetime, timezone
+from uuid import UUID
 
 from app.services.ai_router import get_ai_response, load_prompt
 
@@ -18,6 +19,7 @@ _SYSTEM_PROMPT = load_prompt("coordinator")
 
 async def classify_intent(
     user_message: str,
+    user_id: UUID,
     user_tier: str,
     conversation_history: list[dict] | None = None,
 ) -> dict:
@@ -46,8 +48,10 @@ async def classify_intent(
 
     raw = await get_ai_response(
         prompt=user_message,
+        user_id=user_id,
         user_tier=user_tier,
         system_prompt=system,
+        intent="daily_chat",
         max_tokens=300,
     )
 

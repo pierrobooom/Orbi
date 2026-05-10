@@ -47,7 +47,7 @@ async def create_entry(
 
     # AI fallback for unknown merchants (pro and premium only)
     if category == "uncategorized" and user_tier in ("pro", "premium"):
-        ai_result = await categorize_unknown_merchant(body.merchant, user_tier)
+        ai_result = await categorize_unknown_merchant(body.merchant, user_id, user_tier)
         if ai_result.get("confidence", 0) >= 0.5:
             category = ai_result["category"]
 

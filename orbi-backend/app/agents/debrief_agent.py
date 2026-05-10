@@ -6,6 +6,7 @@ action items, decisions, key facts, and follow-ups into structured output.
 
 import json
 import logging
+from uuid import UUID
 
 from app.services.ai_router import get_ai_response, load_prompt
 
@@ -17,6 +18,7 @@ _SYSTEM_PROMPT = load_prompt("debrief_agent")
 async def continue_debrief(
     user_message: str,
     conversation_history: list[dict],
+    user_id: UUID,
     user_tier: str,
 ) -> dict:
     """Process the next message in a debrief conversation.
@@ -51,10 +53,14 @@ async def continue_debrief(
         "message as plain text (not JSON)."
     )
 
+    # Debrief is one of the Claude-eligible intents on the Genius tier — see
+    # ai_router._CLAUDE_INTENTS. Free/Pro users still hit Llama via the router.
     raw = await get_ai_response(
         prompt=prompt,
+        user_id=user_id,
         user_tier=user_tier,
         system_prompt=_SYSTEM_PROMPT,
+        intent="debrief",
         max_tokens=800,
     )
 

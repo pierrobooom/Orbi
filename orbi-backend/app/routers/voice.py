@@ -54,13 +54,16 @@ def _error(message: str, error_code: str) -> dict:
 @router.post("/transcribe", response_model=TranscriptionResult)
 async def transcribe(
     audio: UploadFile = File(..., description="Recorded audio file (webm, m4a, wav, mp3)"),
-    user_id: UUID = Depends(get_current_user),
+    auth: dict = Depends(get_current_user_with_tier),
 ):
     """Transcribe an uploaded audio file via Deepgram.
 
     The mobile client uses on-device Whisper as the primary path. This
     endpoint is the cloud fallback when Whisper is unavailable or low-confidence.
     """
+    user_id = auth["user_id"]
+    user_tier = auth["tier"]
+
     audio_bytes = await audio.read()
     if not audio_bytes:
         raise HTTPException(
@@ -71,7 +74,14 @@ async def transcribe(
     try:
         result = await transcription.transcribe_audio(
             audio_bytes=audio_bytes,
+            user_id=user_id,
+            user_tier=user_tier,
             mimetype=audio.content_type or "audio/webm",
+        )
+    except transcription.TranscriptionQuotaExceeded as exc:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=_error(str(exc), "STT_QUOTA_EXCEEDED"),
         )
     except RuntimeError as exc:
         # API key missing — configuration error, not a transient failure
@@ -110,6 +120,7 @@ async def text_to_speech(
     a JSON wrapper. Free tier users receive 402 — they should fall back to
     the device's native TTS engine on the client side.
     """
+    user_id = auth["user_id"]
     user_tier = auth["tier"]
 
     if not tts.is_tier_eligible(user_tier):
@@ -125,6 +136,7 @@ async def text_to_speech(
     try:
         result = await tts.synthesize_speech(
             text=body.text,
+            user_id=user_id,
             user_tier=user_tier,
             voice_id=body.voice_id,
         )
@@ -132,6 +144,11 @@ async def text_to_speech(
         raise HTTPException(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
             detail=_error(str(exc), "TTS_TIER_REQUIRED"),
+        )
+    except tts.TtsQuotaExceeded as exc:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=_error(str(exc), "TTS_QUOTA_EXCEEDED"),
         )
     except RuntimeError:
         raise HTTPException(
@@ -248,6 +265,7 @@ async def debrief_turn(
     result = await debrief_agent.continue_debrief(
         user_message=body.user_message,
         conversation_history=history_messages,
+        user_id=user_id,
         user_tier=user_tier,
     )
 

@@ -75,6 +75,7 @@ async def chat(
     # Coordinator classifies intent
     classification = await coordinator.classify_intent(
         user_message=body.message,
+        user_id=user_id,
         user_tier=user_tier,
         conversation_history=history_messages,
     )
@@ -91,6 +92,7 @@ async def chat(
     elif agent_name == "task_parser":
         parsed = await task_parser.parse_task(
             user_input=body.message,
+            user_id=user_id,
             user_tier=user_tier,
         )
         data = parsed
@@ -113,6 +115,7 @@ async def chat(
         answer = await finance_agent.answer_finance_question(
             question=body.message,
             spending_data=spending_data,
+            user_id=user_id,
             user_tier=user_tier,
         )
         reply = answer
@@ -121,6 +124,7 @@ async def chat(
         result = await debrief_agent.continue_debrief(
             user_message=body.message,
             conversation_history=history_messages,
+            user_id=user_id,
             user_tier=user_tier,
         )
         reply = result["response"]
@@ -145,6 +149,7 @@ async def chat(
         answer = await memory_summarizer.answer_memory_query(
             question=body.message,
             relevant_memories=relevant,
+            user_id=user_id,
             user_tier=user_tier,
         )
         reply = answer

@@ -6,6 +6,7 @@ the best cluster for a task and to suggest merges, splits, and renames.
 
 import json
 import logging
+from uuid import UUID
 
 from app.services.ai_router import get_ai_response, load_prompt
 
@@ -19,6 +20,7 @@ async def assign_task_to_cluster(
     task_description: str | None,
     domain_hint: str | None,
     existing_clusters: list[dict],
+    user_id: UUID,
     user_tier: str,
 ) -> dict:
     """Suggest the best cluster for a task.
@@ -48,8 +50,10 @@ async def assign_task_to_cluster(
 
     raw = await get_ai_response(
         prompt=prompt,
+        user_id=user_id,
         user_tier=user_tier,
         system_prompt=_SYSTEM_PROMPT,
+        intent="daily_chat",
         max_tokens=200,
     )
 
@@ -73,6 +77,7 @@ async def assign_task_to_cluster(
 
 async def suggest_reorganisation(
     clusters: list[dict],
+    user_id: UUID,
     user_tier: str,
 ) -> dict:
     """Suggest cluster merges, splits, renames, or archives.
@@ -88,8 +93,10 @@ async def suggest_reorganisation(
 
     raw = await get_ai_response(
         prompt=prompt,
+        user_id=user_id,
         user_tier=user_tier,
         system_prompt=_SYSTEM_PROMPT,
+        intent="daily_chat",
         max_tokens=500,
     )
 

@@ -14,13 +14,34 @@ gate before calling synthesize_speech().
 """
 
 import logging
+import math
 import os
 import time
 from typing import Optional
+from uuid import UUID
 
 from elevenlabs.client import ElevenLabs
 
+from app.services.usage_tracker import QuotaExceeded, cap_for, check_and_record
+
 logger = logging.getLogger(__name__)
+
+
+class TtsQuotaExceeded(Exception):
+    """Raised when the user has no TTS seconds left for the day.
+
+    The router converts this to an HTTP 429 with the user-safe message.
+    """
+
+    def __init__(self, message: str):
+        super().__init__(message)
+
+
+# Rough English speech rate. We meter TTS in audio seconds (per CLAUDE.md) but
+# ElevenLabs bills by character. 14 chars/sec is a standard estimate (~150 wpm)
+# that lets us convert before calling the API so we never synthesise audio the
+# user can't pay for.
+_TTS_CHARS_PER_SECOND = 14
 
 _ELEVENLABS_API_KEY = os.environ.get("ELEVENLABS_API_KEY", "")
 
@@ -54,17 +75,19 @@ def is_tier_eligible(user_tier: str) -> bool:
 
 async def synthesize_speech(
     text: str,
+    user_id: UUID,
     user_tier: str,
     voice_id: Optional[str] = None,
 ) -> dict:
-    """Convert text to spoken audio via ElevenLabs.
+    """Convert text to spoken audio via ElevenLabs, gated by the daily TTS cap.
 
     The tier gate is enforced here even though the router checks too — defence
     in depth keeps a future caller from accidentally bypassing the check.
 
     Args:
         text:      The text to synthesize.
-        user_tier: Subscription tier — must be "pro" or "premium".
+        user_id:   Authenticated user — for quota tracking.
+        user_tier: DB tier value — 'free', 'pro', or 'premium'.
         voice_id:  Optional ElevenLabs voice ID. Falls back to the default.
 
     Returns:
@@ -74,18 +97,32 @@ async def synthesize_speech(
             "provider": "elevenlabs",
             "voice_id": str,
             "model": str,
-            "character_count": int,  # Used for cost tracking
+            "character_count": int,
+            "estimated_seconds": int,
         }
 
     Raises:
-        PermissionError: If the user's tier is not eligible.
-        RuntimeError:    If the API key is missing.
-        Exception:       Any underlying API error is re-raised.
+        PermissionError:  Tier has no TTS allowance at all (Spark, who only
+                          gets a 30-second preview, also reaches here — the
+                          quota check rejects them once the preview is spent).
+        TtsQuotaExceeded: User has no TTS seconds left today.
+        RuntimeError:     If the API key is missing.
+        Exception:        Any underlying API error is re-raised.
     """
-    if not is_tier_eligible(user_tier):
+    # Estimate audio length from text length BEFORE calling ElevenLabs so we
+    # never synthesise audio the user can't pay for. Round up — partial
+    # seconds count against the cap.
+    estimated_seconds = max(1, math.ceil(len(text) / _TTS_CHARS_PER_SECOND))
+
+    if cap_for(user_tier, "tts_seconds") <= 0:
         raise PermissionError(
-            "Cloud text-to-speech is available on Pro and Premium tiers only."
+            "Cloud text-to-speech is not available on your plan."
         )
+
+    try:
+        await check_and_record(user_id, user_tier, "tts_seconds", estimated_seconds)
+    except QuotaExceeded as exc:
+        raise TtsQuotaExceeded(str(exc)) from None
 
     start_ms = time.monotonic()
     client = _get_client()
@@ -119,6 +156,7 @@ async def synthesize_speech(
             "voice_id": selected_voice,
             "model": _DEFAULT_MODEL_ID,
             "character_count": len(text),
+            "estimated_seconds": estimated_seconds,
         }
 
     except Exception as exc:

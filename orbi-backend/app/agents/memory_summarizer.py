@@ -6,6 +6,7 @@ and answers queries about past decisions and facts.
 
 import json
 import logging
+from uuid import UUID
 
 from app.services.ai_router import get_ai_response, load_prompt
 
@@ -17,6 +18,7 @@ _SYSTEM_PROMPT = load_prompt("memory_summarizer")
 async def extract_memories(
     conversation_transcript: str,
     source_summary: str,
+    user_id: UUID,
     user_tier: str,
 ) -> list[dict]:
     """Extract discrete memory nodes from a conversation transcript.
@@ -39,8 +41,10 @@ async def extract_memories(
 
     raw = await get_ai_response(
         prompt=prompt,
+        user_id=user_id,
         user_tier=user_tier,
         system_prompt=_SYSTEM_PROMPT,
+        intent="daily_chat",
         max_tokens=800,
     )
 
@@ -57,14 +61,19 @@ async def extract_memories(
 async def synthesise_summary(
     memory_nodes: list[dict],
     period: str,
+    user_id: UUID,
     user_tier: str,
+    intent: str = "weekly_review",
 ) -> dict:
     """Produce a higher-level summary from a set of memory nodes.
 
     Args:
         memory_nodes: Memory nodes from the period to summarise.
         period:       Human-readable period label (e.g. "Week of Apr 21-27, 2026").
+        user_id:      Authenticated user — for quota tracking.
         user_tier:    Subscription tier for AI routing.
+        intent:       'weekly_review' or 'monthly_synthesis' — the caller picks
+                      based on cadence. Both are Genius Claude-eligible.
 
     Returns:
         {"summary": str, "key_themes": list[str], "unresolved": list[str]}
@@ -76,8 +85,10 @@ async def synthesise_summary(
 
     raw = await get_ai_response(
         prompt=prompt,
+        user_id=user_id,
         user_tier=user_tier,
         system_prompt=_SYSTEM_PROMPT,
+        intent=intent,
         max_tokens=600,
     )
 
@@ -92,6 +103,7 @@ async def synthesise_summary(
 async def answer_memory_query(
     question: str,
     relevant_memories: list[dict],
+    user_id: UUID,
     user_tier: str,
 ) -> str:
     """Answer a user's question using retrieved memory nodes.
@@ -111,7 +123,9 @@ async def answer_memory_query(
 
     return await get_ai_response(
         prompt=prompt,
+        user_id=user_id,
         user_tier=user_tier,
         system_prompt=_SYSTEM_PROMPT,
+        intent="daily_chat",
         max_tokens=400,
     )

@@ -8,6 +8,7 @@ Handles three finance operations:
 
 import json
 import logging
+from uuid import UUID
 
 from app.services.ai_router import get_ai_response, load_prompt
 
@@ -18,6 +19,7 @@ _SYSTEM_PROMPT = load_prompt("finance_agent")
 
 async def categorize_unknown_merchant(
     merchant: str,
+    user_id: UUID,
     user_tier: str,
 ) -> dict:
     """Use AI to categorise a merchant when rule-based matching fails.
@@ -34,8 +36,10 @@ async def categorize_unknown_merchant(
 
     raw = await get_ai_response(
         prompt=prompt,
+        user_id=user_id,
         user_tier=user_tier,
         system_prompt=_SYSTEM_PROMPT,
+        intent="daily_chat",
         max_tokens=100,
     )
 
@@ -53,6 +57,7 @@ async def generate_insights(
     spending_summary: dict,
     previous_month_summary: dict | None,
     budgets: list[dict],
+    user_id: UUID,
     user_tier: str,
 ) -> list[dict]:
     """Generate spending insights by comparing current and previous period data.
@@ -77,10 +82,14 @@ async def generate_insights(
 
     prompt = "Generate spending insights based on the data provided.\n\n" + "\n".join(context_parts)
 
+    # Cross-month finance synthesis is one of the Genius Claude-eligible
+    # intents per CLAUDE.md. Free/Pro still hit Llama via the router.
     raw = await get_ai_response(
         prompt=prompt,
+        user_id=user_id,
         user_tier=user_tier,
         system_prompt=_SYSTEM_PROMPT,
+        intent="monthly_synthesis",
         max_tokens=600,
     )
 
@@ -97,6 +106,7 @@ async def generate_insights(
 async def answer_finance_question(
     question: str,
     spending_data: dict,
+    user_id: UUID,
     user_tier: str,
 ) -> str:
     """Answer a natural language question about the user's finances.
@@ -116,7 +126,9 @@ async def answer_finance_question(
 
     return await get_ai_response(
         prompt=prompt,
+        user_id=user_id,
         user_tier=user_tier,
         system_prompt=_SYSTEM_PROMPT,
+        intent="daily_chat",
         max_tokens=300,
     )

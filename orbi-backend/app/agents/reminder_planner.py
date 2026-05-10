@@ -7,6 +7,7 @@ notifications to schedule and with what urgency.
 import json
 import logging
 from datetime import datetime, timezone
+from uuid import UUID
 
 from app.services.ai_router import get_ai_response, load_prompt
 
@@ -18,6 +19,7 @@ _SYSTEM_PROMPT = load_prompt("reminder_planner")
 async def plan_reminders(
     active_tasks: list[dict],
     user_preferences: dict,
+    user_id: UUID,
     user_tier: str,
 ) -> list[dict]:
     """Determine which notifications to send for the user's active tasks.
@@ -42,8 +44,10 @@ async def plan_reminders(
 
     raw = await get_ai_response(
         prompt=prompt,
+        user_id=user_id,
         user_tier=user_tier,
         system_prompt=_SYSTEM_PROMPT,
+        intent="daily_chat",
         max_tokens=600,
     )
 
