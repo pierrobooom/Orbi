@@ -34,7 +34,19 @@
       "Bash($PY *)",
       "Bash(/c/Users/lucas/AppData/Local/Python/pythoncore-3.12-64/python.exe -m pip install --quiet python-dotenv==1.0.1 deepgram-sdk==3.7.7 elevenlabs==1.8.0)",
       "Bash(/c/Users/lucas/AppData/Local/Python/pythoncore-3.12-64/python.exe -m pip install --quiet psycopg2-binary==2.9.11)",
-      "Bash(/c/Users/lucas/AppData/Local/Python/pythoncore-3.12-64/python.exe -m pip install --quiet python-jose==3.3.0)"
+      "Bash(/c/Users/lucas/AppData/Local/Python/pythoncore-3.12-64/python.exe -m pip install --quiet python-jose==3.3.0)",
+      "PowerShell(Get-ChildItem *)",
+      "PowerShell($env:Path = [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"Machine\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"User\"\\); node --version; npm.cmd --version; npx.cmd --version)",
+      "PowerShell($pwd.Path)",
+      "PowerShell(Set-Location \"C:\\\\Users\\\\lucas\\\\Documents\\\\Orbi\"; $env:Path = [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"Machine\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"User\"\\); $pwd.Path; Test-Path \"orbi-mobile\")",
+      "PowerShell($env:Path = [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"Machine\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"User\"\\); npx.cmd --yes create-expo-app@latest orbi-mobile -t default 2>&1 | Select-Object -Last 40)",
+      "PowerShell(Set-Location \"C:\\\\Users\\\\lucas\\\\Documents\\\\Orbi\\\\orbi-mobile\"; $env:Path = [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"Machine\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"User\"\\); npx.cmd expo install @shopify/react-native-skia react-native-reanimated react-native-gesture-handler expo-secure-store @react-native-async-storage/async-storage 2>&1 | Select-Object -Last 25)",
+      "PowerShell($env:Path = [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"Machine\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"User\"\\); npm.cmd install zustand @supabase/supabase-js 2>&1 | Select-Object -Last 10)",
+      "PowerShell(Set-Location \"C:\\\\Users\\\\lucas\\\\Documents\\\\Orbi\\\\orbi-mobile\"; $env:Path = [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"Machine\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"User\"\\); npx.cmd tsc --noEmit 2>&1 | Select-Object -Last 40)",
+      "PowerShell(Set-Location \"C:\\\\Users\\\\lucas\\\\Documents\\\\Orbi\\\\orbi-mobile\"; $env:Path = [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"Machine\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"User\"\\); $output = & npx.cmd tsc --noEmit 2>&1; if \\($LASTEXITCODE -eq 0\\) { \"TSC PASSED\" } else { $output | Select-Object -Last 50 })",
+      "PowerShell(Set-Location \"C:\\\\Users\\\\lucas\\\\Documents\\\\Orbi\\\\orbi-mobile\"; $env:Path = [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"Machine\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"User\"\\); $output = & npx.cmd expo-doctor 2>&1; \"EXIT: $LASTEXITCODE\"; $output | Select-Object -Last 30)",
+      "Bash(/c/Users/lucas/AppData/Local/Python/pythoncore-3.12-64/python.exe *)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:8000/health)"
     ]
   }
 }
