@@ -1,44 +1,113 @@
 """Supabase JWT authentication middleware.
 
-Verifies the JWT from the Authorization header against Supabase's JWKS,
+Verifies the JWT from the Authorization header against the project's JWKS,
 extracts the user_id (sub claim), and provides it as a FastAPI dependency.
+
+Supabase ships new projects with ES256-signed JWTs and an asymmetric JWKS
+endpoint at /auth/v1/.well-known/jwks.json. Public keys are identified by
+`kid`; private keys never leave Supabase. We cache keys in-process and
+refetch the JWKS whenever a token references a kid we don't recognize,
+which transparently handles key rotation.
 """
 
 import logging
 import os
 from uuid import UUID
 
+import httpx
 from fastapi import Header, HTTPException, status
-from jose import JWTError, jwt
+from jose import jwk, jwt
+from jose.exceptions import JWTError
 
 logger = logging.getLogger(__name__)
 
-# Supabase JWTs are signed with the project's JWT secret (HS256)
-_JWT_SECRET: str = os.environ.get("SUPABASE_JWT_SECRET", "")
-_JWT_ALGORITHM = "HS256"
+_SUPABASE_URL: str = os.environ.get("SUPABASE_URL", "").rstrip("/")
 _JWT_AUDIENCE = "authenticated"
+# Only ES256 is accepted. Trusting the alg claim from the token header is the
+# classic JWT confusion attack — we pin the algorithm server-side instead.
+_JWT_ALGORITHMS = ["ES256"]
+
+# Cache of {kid: jose.jwk.Key}. Populated lazily on first verification and
+# refreshed whenever a token references a kid we haven't seen.
+_jwks_cache: dict[str, "jwk.Key"] = {}
 
 
-def _decode_token(token: str) -> dict:
-    """Decode and verify a Supabase JWT.
-
-    Validates expiration, audience, and signature. Returns the full
-    claims dict on success, raises HTTPException on any failure.
-    """
-    if not _JWT_SECRET:
+async def _refresh_jwks() -> None:
+    """Fetch the latest JWKS from Supabase and rebuild the cache."""
+    if not _SUPABASE_URL:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
-                "message": "Auth service is not configured.",
+                "message": "Auth service is not configured (SUPABASE_URL missing).",
                 "error_code": "AUTH_NOT_CONFIGURED",
             },
         )
+    url = f"{_SUPABASE_URL}/auth/v1/.well-known/jwks.json"
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        resp = await client.get(url)
+        resp.raise_for_status()
+        jwks = resp.json()
+    new_cache: dict[str, "jwk.Key"] = {}
+    for k in jwks.get("keys", []):
+        kid = k.get("kid")
+        if not kid:
+            continue
+        new_cache[kid] = jwk.construct(k)
+    _jwks_cache.clear()
+    _jwks_cache.update(new_cache)
+
+
+async def _key_for_kid(kid: str) -> "jwk.Key":
+    """Return the JWK matching `kid`. Refresh the cache once on a miss."""
+    if kid in _jwks_cache:
+        return _jwks_cache[kid]
+    await _refresh_jwks()
+    if kid not in _jwks_cache:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "message": "Unknown signing key.",
+                "error_code": "AUTH_UNKNOWN_KID",
+            },
+        )
+    return _jwks_cache[kid]
+
+
+async def _decode_token(token: str) -> dict:
+    """Decode and verify a Supabase JWT.
+
+    Validates expiration, audience, and signature. Returns the full claims
+    dict on success, raises HTTPException on any failure.
+    """
+    try:
+        header = jwt.get_unverified_header(token)
+    except JWTError as exc:
+        logger.warning("Could not parse JWT header: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "message": "Invalid token.",
+                "error_code": "AUTH_TOKEN_INVALID",
+            },
+        )
+
+    kid = header.get("kid")
+    if not kid:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "message": "Token missing kid header.",
+                "error_code": "AUTH_NO_KID",
+            },
+        )
+
+    key = await _key_for_kid(kid)
 
     try:
         payload = jwt.decode(
             token,
-            _JWT_SECRET,
-            algorithms=[_JWT_ALGORITHM],
+            key,
+            algorithms=_JWT_ALGORITHMS,
             audience=_JWT_AUDIENCE,
         )
         return payload
@@ -72,7 +141,7 @@ async def get_current_user(authorization: str = Header(...)) -> UUID:
         )
 
     token = authorization[len("Bearer "):]
-    claims = _decode_token(token)
+    claims = await _decode_token(token)
 
     sub = claims.get("sub")
     if not sub:
@@ -115,7 +184,7 @@ async def get_current_user_with_tier(authorization: str = Header(...)) -> dict:
         )
 
     token = authorization[len("Bearer "):]
-    claims = _decode_token(token)
+    claims = await _decode_token(token)
 
     sub = claims.get("sub")
     if not sub:

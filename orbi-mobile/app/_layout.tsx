@@ -1,14 +1,20 @@
 // Root layout — locks the app to the dark Orbi palette, wires up gesture
 // handler at the root (required for any Reanimated worklet that responds
-// to gestures later), and registers the safe-area provider.
+// to gestures later), registers the safe-area provider, and gates routes
+// on auth state.
 
 import { ThemeProvider } from "@react-navigation/native";
-import { Stack } from "expo-router";
+import { Stack, useRouter, useSegments, type Href } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import React, { useEffect } from "react";
+import { ActivityIndicator, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import "react-native-reanimated";
 
+// Importing the authStore here ensures supabase.auth.onAuthStateChange is
+// subscribed before any screen reads from it.
+import { useAuthStore } from "@/stores/authStore";
 import { colors } from "@/theme/colors";
 
 // Custom React Navigation theme so headers / modals match the sketch.
@@ -39,16 +45,52 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.canvas }}>
       <SafeAreaProvider>
         <ThemeProvider value={OrbiTheme}>
-          <Stack screenOptions={{ contentStyle: { backgroundColor: colors.canvas } }}>
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-            <Stack.Screen
-              name="modal"
-              options={{ presentation: "modal", title: "Modal" }}
-            />
-          </Stack>
+          <AuthGate>
+            <Stack screenOptions={{ contentStyle: { backgroundColor: colors.canvas } }}>
+              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+              <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+              <Stack.Screen
+                name="modal"
+                options={{ presentation: "modal", title: "Modal" }}
+              />
+            </Stack>
+          </AuthGate>
           <StatusBar style="light" />
         </ThemeProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );
+}
+
+// AuthGate redirects between the (auth) group and (tabs) based on session
+// state. While the initial session is being loaded from SecureStore we
+// render a plain splash so we never flash sign-in before redirecting back.
+function AuthGate({ children }: { children: React.ReactNode }) {
+  const session = useAuthStore((s) => s.session);
+  const bootstrapping = useAuthStore((s) => s.bootstrapping);
+  const segments = useSegments();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (bootstrapping) return;
+    // segments[0] is typed against statically-discovered routes; cast to
+    // string because the (auth) group's types are only emitted by Expo's
+    // dev server after the first `expo start` run picks up the new files.
+    const inAuthGroup = (segments[0] as string) === "(auth)";
+    if (!session && !inAuthGroup) {
+      router.replace("/(auth)/sign-in" as Href);
+    } else if (session && inAuthGroup) {
+      router.replace("/(tabs)" as Href);
+    }
+  }, [session, bootstrapping, segments, router]);
+
+  if (bootstrapping) {
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.canvas, justifyContent: "center", alignItems: "center" }}>
+        <ActivityIndicator color={colors.accent} />
+      </View>
+    );
+  }
+
+  return <>{children}</>;
 }

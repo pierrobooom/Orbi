@@ -59,10 +59,9 @@ async def update_my_profile(
             ),
         )
 
-    payload["id"] = str(user_id)
     payload["updated_at"] = datetime.now(timezone.utc).isoformat()
 
-    row = await users_db.upsert_profile(payload)
+    row = await users_db.update_profile(user_id, payload)
     return row
 
 

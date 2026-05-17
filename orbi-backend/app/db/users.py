@@ -20,11 +20,19 @@ async def fetch_profile(user_id: UUID) -> dict | None:
     return response.data
 
 
-async def upsert_profile(payload: dict) -> dict:
-    """Create or update a user profile. Returns the saved record."""
+async def update_profile(user_id: UUID, payload: dict) -> dict:
+    """Update a user profile and return the saved record.
+
+    The profile row is created at signup by the on_auth_user_created trigger
+    (migrations/0003_user_profile_autocreate.sql), so this path is always an
+    UPDATE — never an INSERT. Using PostgREST's .upsert() here would attempt
+    an INSERT...ON CONFLICT DO UPDATE, which fails the email NOT NULL check
+    on the proposed-INSERT row before ON CONFLICT can divert to UPDATE.
+    """
     response = (
         get_client().table("user_profiles")
-        .upsert(payload, on_conflict="id")
+        .update(payload)
+        .eq("id", str(user_id))
         .execute()
     )
     return response.data[0]

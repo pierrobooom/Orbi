@@ -46,7 +46,20 @@
       "PowerShell(Set-Location \"C:\\\\Users\\\\lucas\\\\Documents\\\\Orbi\\\\orbi-mobile\"; $env:Path = [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"Machine\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"User\"\\); $output = & npx.cmd tsc --noEmit 2>&1; if \\($LASTEXITCODE -eq 0\\) { \"TSC PASSED\" } else { $output | Select-Object -Last 50 })",
       "PowerShell(Set-Location \"C:\\\\Users\\\\lucas\\\\Documents\\\\Orbi\\\\orbi-mobile\"; $env:Path = [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"Machine\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"User\"\\); $output = & npx.cmd expo-doctor 2>&1; \"EXIT: $LASTEXITCODE\"; $output | Select-Object -Last 30)",
       "Bash(/c/Users/lucas/AppData/Local/Python/pythoncore-3.12-64/python.exe *)",
-      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:8000/health)"
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:8000/health)",
+      "Bash(npx tsc *)",
+      "Bash(echo \"exit: $?\")",
+      "Bash(\"C:/Users/lucas/AppData/Local/Python/bin/python3.12.exe\" -m uvicorn main:app --host 127.0.0.1 --port 8000)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://127.0.0.1:8000/health)",
+      "PowerShell(winget install *)",
+      "PowerShell(& \"C:\\\\Program Files \\(x86\\)\\\\cloudflared\\\\cloudflared.exe\" --version)",
+      "Bash(C:\\\\Program Files \\(x86\\)\\\\cloudflared\\\\cloudflared.exe tunnel *)",
+      "Bash(curl *)",
+      "Bash(npm install *)",
+      "Bash(npx expo *)",
+      "PowerShell(Get-NetTCPConnection *)",
+      "PowerShell(Get-Process *)",
+      "PowerShell(Stop-Process *)"
     ]
   }
 }
