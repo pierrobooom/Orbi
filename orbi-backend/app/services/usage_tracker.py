@@ -56,7 +56,7 @@ user-facing limit-reached message uses the marketing names.
 """
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from app.db import usage as usage_db
@@ -216,3 +216,59 @@ async def check_and_record(
         user_id, kind, tier, amount, new_total, cap, period,
     )
     return new_total
+
+
+# ---------------------------------------------------------------------------
+# Read-only usage snapshot for the mobile UI
+# ---------------------------------------------------------------------------
+
+def _next_period_resets(now: datetime | None = None) -> tuple[datetime, datetime]:
+    """Return (next daily reset, next monthly reset) as UTC datetimes."""
+    if now is None:
+        now = datetime.now(timezone.utc)
+    daily_reset = (now + timedelta(days=1)).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+    # First day of next month, 00:00 UTC.
+    if now.month == 12:
+        monthly_reset = now.replace(
+            year=now.year + 1, month=1, day=1,
+            hour=0, minute=0, second=0, microsecond=0,
+        )
+    else:
+        monthly_reset = now.replace(
+            month=now.month + 1, day=1,
+            hour=0, minute=0, second=0, microsecond=0,
+        )
+    return daily_reset, monthly_reset
+
+
+async def get_user_usage(user_id: UUID, tier: str) -> dict:
+    """Snapshot the user's current consumption against every metered kind.
+
+    Used by the mobile UI to show "X / Y turns today" without doing a write.
+    Returns a flat shape designed to be serialised straight to JSON.
+    """
+    daily_reset, monthly_reset = _next_period_resets()
+    daily_period = _period_key("ai_turn")  # any daily kind shares the bucket
+    monthly_period = _period_key("claude_call")
+
+    daily: dict[str, dict[str, int]] = {}
+    for kind in sorted(_DAILY_KINDS):
+        used = await usage_db.fetch_counter(user_id, kind, daily_period)
+        daily[kind] = {"used": used, "cap": cap_for(tier, kind)}
+
+    monthly: dict[str, dict[str, int]] = {}
+    for kind in sorted(_MONTHLY_KINDS):
+        used = await usage_db.fetch_counter(user_id, kind, monthly_period)
+        monthly[kind] = {"used": used, "cap": cap_for(tier, kind)}
+
+    return {
+        "tier": tier,
+        "daily": daily,
+        "monthly": monthly,
+        "resets": {
+            "daily": daily_reset.isoformat().replace("+00:00", "Z"),
+            "monthly": monthly_reset.isoformat().replace("+00:00", "Z"),
+        },
+    }

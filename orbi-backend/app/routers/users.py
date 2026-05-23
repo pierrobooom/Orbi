@@ -10,8 +10,9 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.db import users as users_db
-from app.models.user import UserPreference, UserProfile
-from app.services.auth import get_current_user
+from app.models.user import UsageSnapshot, UserPreference, UserProfile
+from app.services.auth import get_current_user, get_current_user_with_tier
+from app.services.usage_tracker import get_user_usage
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -63,6 +64,21 @@ async def update_my_profile(
 
     row = await users_db.update_profile(user_id, payload)
     return row
+
+
+# ---------------------------------------------------------------------------
+# Usage / quota snapshot
+# ---------------------------------------------------------------------------
+
+@router.get("/me/usage", response_model=UsageSnapshot)
+async def get_my_usage(auth: dict = Depends(get_current_user_with_tier)):
+    """Return current quota consumption for every metered kind plus caps.
+
+    Read-only — no writes against the usage table. Used by the mobile UI
+    to show e.g. "12 / 30 turns today" without spending an AI call just
+    to inspect the meter.
+    """
+    return await get_user_usage(auth["user_id"], auth["tier"])
 
 
 # ---------------------------------------------------------------------------

@@ -15,9 +15,17 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import BubbleCanvas from "@/components/universe/BubbleCanvas";
 import EmptyState from "@/components/universe/EmptyState";
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
-import { ApiError, chatMessage, getHealth, transcribeAudio } from "@/services/api";
+import {
+  ApiError,
+  chatMessage,
+  getHealth,
+  isQuotaError,
+  transcribeAudio,
+} from "@/services/api";
+import { canCreateBubble, formatTurnsChip, isAtAiCap } from "@/services/tierGate";
 import { useAuthStore, type SubscriptionTier } from "@/stores/authStore";
 import { useUniverseStore } from "@/stores/universeStore";
+import { useUsageStore } from "@/stores/usageStore";
 import { colors } from "@/theme/colors";
 
 type HealthBadge =
@@ -44,7 +52,18 @@ export default function UniverseScreen() {
   const bubblesCount = useUniverseStore((s) => s.bubbles.length);
   const errorMessage = useUniverseStore((s) => s.errorMessage);
   const hydrate = useUniverseStore((s) => s.hydrate);
+  const usage = useUsageStore((s) => s.usage);
+  const hydrateUsage = useUsageStore((s) => s.hydrate);
   const [health, setHealth] = useState<HealthBadge>({ status: "loading" });
+
+  const bubbleGate = canCreateBubble({ tier, bubbleCount: bubblesCount });
+  const aiCapHit = isAtAiCap(usage);
+  // Voice always involves an AI turn (chat parse) plus STT seconds, so
+  // when the daily AI cap is exhausted we disable the mic too. The +
+  // button is text-only and isn't blocked by an AI cap.
+  const micDisabled = !bubbleGate.allowed || aiCapHit;
+  const plusDisabled = !bubbleGate.allowed;
+  const turnsChip = formatTurnsChip(usage);
 
   const voice = useVoiceRecorder();
   const recordingStartedAt = useRef<number | null>(null);
@@ -67,10 +86,19 @@ export default function UniverseScreen() {
   // from the create-task modal.
   useEffect(() => {
     hydrate();
-  }, [hydrate]);
+    hydrateUsage();
+  }, [hydrate, hydrateUsage]);
 
   const onMicPressIn = async () => {
     setVoiceError(null);
+    if (!bubbleGate.allowed) {
+      setVoiceError(bubbleGate.hint);
+      return;
+    }
+    if (aiCapHit) {
+      setVoiceError("Daily AI cap reached. Resets at midnight UTC.");
+      return;
+    }
     recordingStartedAt.current = Date.now();
     const ok = await voice.start();
     if (!ok) {
@@ -128,11 +156,31 @@ export default function UniverseScreen() {
         params: { payload: JSON.stringify(payload) },
       });
     } catch (e) {
-      const msg = e instanceof ApiError ? e.message : String(e);
-      setVoiceError(msg);
+      // Quota errors get the upgrade prompt; everything else falls
+      // through to the raw API error message.
+      if (isQuotaError(e)) {
+        setVoiceError(`${e.message} Tap the tier badge to upgrade.`);
+      } else {
+        const msg = e instanceof ApiError ? e.message : String(e);
+        setVoiceError(msg);
+      }
     } finally {
       setVoiceStage("idle");
+      // Refresh the usage chip so the user sees the burn from this turn.
+      hydrateUsage();
     }
+  };
+
+  const onPlusPress = () => {
+    if (!bubbleGate.allowed) {
+      setVoiceError(bubbleGate.hint);
+      return;
+    }
+    router.push("/new-task" as Href);
+  };
+
+  const onTierPress = () => {
+    router.push("/upgrade" as Href);
   };
 
   return (
@@ -141,14 +189,21 @@ export default function UniverseScreen() {
         <View style={styles.headerLeft}>
           <Text style={styles.date}>Today</Text>
           <Pressable
+            onPress={onTierPress}
             onLongPress={signOut}
             hitSlop={12}
             style={styles.tierPill}
-            // Long-press to sign out. Temporary dev affordance; a proper
-            // settings screen replaces this in a later sprint.
+            // Tap opens the upgrade modal. Long-press signs out (dev
+            // affordance — replaced by a settings screen in a later
+            // sprint).
           >
             <Text style={styles.tierPillText}>{TIER_LABEL[tier]}</Text>
           </Pressable>
+          {turnsChip ? (
+            <Text style={[styles.turnsChip, aiCapHit && styles.turnsChipFull]}>
+              {turnsChip}
+            </Text>
+          ) : null}
         </View>
         <HealthChip health={health} />
       </View>
@@ -202,8 +257,12 @@ export default function UniverseScreen() {
           <Pressable
             onPressIn={onMicPressIn}
             onPressOut={onMicPressOut}
-            disabled={voiceStage === "processing"}
-            style={[styles.fabMic, voice.isRecording && styles.fabMicActive]}
+            disabled={voiceStage === "processing" || micDisabled}
+            style={[
+              styles.fabMic,
+              voice.isRecording && styles.fabMicActive,
+              micDisabled && styles.fabDisabled,
+            ]}
             hitSlop={6}
             accessibilityLabel="Hold to record voice task"
           >
@@ -211,8 +270,8 @@ export default function UniverseScreen() {
           </Pressable>
 
           <Pressable
-            onPress={() => router.push("/new-task" as Href)}
-            style={styles.fabAdd}
+            onPress={onPlusPress}
+            style={[styles.fabAdd, plusDisabled && styles.fabDisabled]}
             hitSlop={8}
             accessibilityLabel="Add task"
           >
@@ -256,6 +315,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accent,
   },
   tierPillText: { color: "white", fontSize: 9, fontWeight: "700", letterSpacing: 1 },
+  turnsChip: { color: colors.inkDim, fontSize: 11, fontWeight: "500", marginLeft: 4 },
+  turnsChipFull: { color: colors.overdue, fontWeight: "700" },
   healthOk: { color: colors.health, fontSize: 10 },
   healthDim: { color: colors.inkDim, fontSize: 10 },
   healthErr: { color: colors.overdue, fontSize: 10 },
@@ -296,6 +357,7 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   fabMicActive: { backgroundColor: colors.overdue, borderColor: colors.overdue },
+  fabDisabled: { opacity: 0.4 },
   fabIcon: { fontSize: 22 },
   fabAdd: {
     width: 56,

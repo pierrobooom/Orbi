@@ -47,13 +47,15 @@ async def classify_intent(
 
     system = _SYSTEM_PROMPT + "\n\n" + "\n".join(context_lines)
 
+    # Bumped from 300 — the embedded task-extraction `data` field added
+    # in coordinator_v1.md needs room to land its fields.
     raw = await get_ai_response(
         prompt=user_message,
         user_id=user_id,
         user_tier=user_tier,
         system_prompt=system,
         intent="daily_chat",
-        max_tokens=300,
+        max_tokens=600,
     )
 
     try:

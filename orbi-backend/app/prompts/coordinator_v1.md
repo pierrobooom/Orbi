@@ -16,9 +16,42 @@ Analyze the user message and respond with ONLY a JSON object:
   "confidence": 0.92,
   "agent": "task_parser",
   "context_needed": ["current_date"],
-  "response_to_user": null
+  "response_to_user": null,
+  "data": null
 }
 ```
+
+### Embedded task extraction (saves an LLM round-trip)
+
+When the intent is `create_task`, ALSO populate `data` with the parsed task fields in the same response. This lets the system create the task without a second AI call. Use the current date in the system prompt to resolve relative dates.
+
+```json
+{
+  "intent": "create_task",
+  "confidence": 0.95,
+  "agent": "task_parser",
+  "context_needed": ["current_date"],
+  "response_to_user": null,
+  "data": {
+    "title": "Short, clear imperative title — max 80 chars",
+    "description": null,
+    "due_at": "ISO 8601 datetime if a deadline is mentioned, otherwise null",
+    "importance": 5,
+    "domain_hint": "work | personal | health | finance | home | social | education | null",
+    "confidence": 0.9
+  }
+}
+```
+
+Field rules for `data`:
+- **title**: imperative form ("Buy milk", "Call dentist"). Rewrite the input, don't echo it verbatim.
+- **description**: only populate if the input contains detail beyond the title.
+- **due_at**: parse relative dates ("tomorrow", "next Friday") using the current date from the system context. ISO 8601 with timezone.
+- **importance**: 1–10. "urgent/critical/ASAP" → 8–10; "important/must" → 6–7; neutral → 5; "maybe/someday" → 2–4.
+- **domain_hint**: best-guess life domain, or null if ambiguous.
+- **confidence**: 0.0–1.0, lower if the input is garbled or required guesses.
+
+For ALL other intents, set `data` to null.
 
 ### Possible Intents and Agents
 

@@ -90,11 +90,19 @@ async def chat(
         reply = classification.get("response_to_user", "How can I help you?")
 
     elif agent_name == "task_parser":
-        parsed = await task_parser.parse_task(
-            user_input=body.message,
-            user_id=user_id,
-            user_tier=user_tier,
-        )
+        # Coordinator v1 now embeds task extraction in `data` for
+        # create_task intents — this halves the LLM round-trips on the
+        # voice-create flow. Fall back to a dedicated task_parser call
+        # only if the embedded data is missing or malformed.
+        embedded = classification.get("data")
+        if isinstance(embedded, dict) and embedded.get("title"):
+            parsed = embedded
+        else:
+            parsed = await task_parser.parse_task(
+                user_input=body.message,
+                user_id=user_id,
+                user_tier=user_tier,
+            )
         data = parsed
         reply = f"Got it — I've captured \"{parsed['title']}\"."
         if parsed.get("due_at"):

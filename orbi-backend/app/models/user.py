@@ -20,6 +20,24 @@ class UserProfile(BaseModel):
     updated_at: datetime
 
 
+class UsageMeter(BaseModel):
+    used: int
+    cap: int
+
+
+class UsageResets(BaseModel):
+    daily: datetime
+    monthly: datetime
+
+
+class UsageSnapshot(BaseModel):
+    """A point-in-time snapshot of the user's quota consumption."""
+    tier: SubscriptionTier
+    daily: dict[str, UsageMeter]
+    monthly: dict[str, UsageMeter]
+    resets: UsageResets
+
+
 class UserPreference(BaseModel):
     user_id: UUID
     quiet_hours_start: time

@@ -144,6 +144,41 @@ export async function patchMyProfile(fields: { full_name: string }): Promise<Use
 }
 
 // ---------------------------------------------------------------------------
+// Usage / quota snapshot
+// ---------------------------------------------------------------------------
+
+export interface UsageMeter {
+  used: number;
+  cap: number;
+}
+
+export interface UsageSnapshot {
+  tier: "free" | "pro" | "premium";
+  daily: Record<string, UsageMeter>;
+  monthly: Record<string, UsageMeter>;
+  resets: { daily: string; monthly: string };
+}
+
+export async function getMyUsage(): Promise<UsageSnapshot> {
+  const res = await authFetch(`${V1}/users/me/usage`);
+  if (!res.ok) throw await parseError(res);
+  return (await res.json()) as UsageSnapshot;
+}
+
+// Backend error codes that signal a quota breach. Used by the UI to swap
+// the generic red toast for an upgrade-prompting one.
+const QUOTA_ERROR_CODES = new Set([
+  "STT_QUOTA_EXCEEDED",
+  "TTS_QUOTA_EXCEEDED",
+  "AI_TURN_QUOTA_EXCEEDED",
+  "CLAUDE_CALL_QUOTA_EXCEEDED",
+]);
+
+export function isQuotaError(err: unknown): err is ApiError {
+  return err instanceof ApiError && err.errorCode !== null && QUOTA_ERROR_CODES.has(err.errorCode);
+}
+
+// ---------------------------------------------------------------------------
 // Tasks + Clusters
 // ---------------------------------------------------------------------------
 //
