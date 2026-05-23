@@ -1,8 +1,8 @@
 // Universe tab — the bubble canvas + a top status strip showing the
 // daily quota (mocked for now) and a /health connectivity badge.
 
-import { useRouter, type Href } from "expo-router";
-import React, { useEffect, useRef, useState } from "react";
+import { useFocusEffect, useRouter, type Href } from "expo-router";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -47,7 +47,6 @@ const MIN_RECORDING_MS = 500;
 export default function UniverseScreen() {
   const router = useRouter();
   const tier = useAuthStore((s) => s.tier);
-  const signOut = useAuthStore((s) => s.signOut);
   const universeStatus = useUniverseStore((s) => s.status);
   const bubblesCount = useUniverseStore((s) => s.bubbles.length);
   const errorMessage = useUniverseStore((s) => s.errorMessage);
@@ -67,6 +66,32 @@ export default function UniverseScreen() {
 
   const voice = useVoiceRecorder();
   const recordingStartedAt = useRef<number | null>(null);
+  // Cooldown timestamp for bubble taps — prevents rapid taps from
+  // stacking multiple task-detail modals on top of each other.
+  const lastBubbleTapAt = useRef<number>(0);
+  // Hard lock that flips on whenever a detail modal is presented and
+  // off ~300ms after this screen regains focus (the close animation
+  // takes about that long). Without this lock, tapping another bubble
+  // before the closing modal finished its animation produced a
+  // glitch loop where modals opened/closed themselves.
+  const [navLocked, setNavLocked] = useState(false);
+  const lockTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useFocusEffect(
+    useCallback(() => {
+      // Screen focused — close animation is done; release the lock
+      // after a tiny settle delay so any late-fired tap during
+      // animation still gets swallowed.
+      if (lockTimer.current) clearTimeout(lockTimer.current);
+      lockTimer.current = setTimeout(() => setNavLocked(false), 300);
+      return () => {
+        // Screen lost focus (a modal opened over it). Lock immediately
+        // and cancel any pending unlock.
+        if (lockTimer.current) clearTimeout(lockTimer.current);
+        setNavLocked(true);
+      };
+    }, []),
+  );
   const [voiceStage, setVoiceStage] = useState<"idle" | "processing">("idle");
   const [voiceError, setVoiceError] = useState<string | null>(null);
 
@@ -133,6 +158,8 @@ export default function UniverseScreen() {
       const parsed = chat.data as
         | {
             title?: string;
+            label?: string | null;
+            description?: string | null;
             due_at?: string | null;
             parent_cluster_id?: string | null;
             importance?: number;
@@ -145,6 +172,8 @@ export default function UniverseScreen() {
       }
       const payload = {
         title: parsed.title,
+        label: parsed.label ?? null,
+        description: parsed.description ?? null,
         due_at: parsed.due_at ?? null,
         parent_cluster_id: parsed.parent_cluster_id ?? null,
         importance: parsed.importance,
@@ -180,7 +209,7 @@ export default function UniverseScreen() {
   };
 
   const onTierPress = () => {
-    router.push("/upgrade" as Href);
+    router.push("/settings" as Href);
   };
 
   return (
@@ -190,12 +219,9 @@ export default function UniverseScreen() {
           <Text style={styles.date}>Today</Text>
           <Pressable
             onPress={onTierPress}
-            onLongPress={signOut}
             hitSlop={12}
             style={styles.tierPill}
-            // Tap opens the upgrade modal. Long-press signs out (dev
-            // affordance — replaced by a settings screen in a later
-            // sprint).
+            accessibilityLabel="Settings"
           >
             <Text style={styles.tierPillText}>{TIER_LABEL[tier]}</Text>
           </Pressable>
@@ -225,12 +251,24 @@ export default function UniverseScreen() {
           <EmptyState />
         ) : (
           <BubbleCanvas
-            onBubbleTap={(taskId) =>
+            onBubbleTap={(taskId) => {
+              // Two guards:
+              //   1. navLocked — set whenever a detail modal is up or
+              //      mid-close-animation. Stops "push while previous
+              //      modal hasn't finished closing" from corrupting
+              //      the navigation stack.
+              //   2. 500ms tap-debounce — secondary safety net for
+              //      truly rapid taps on overlapping bubbles.
+              if (navLocked) return;
+              const now = Date.now();
+              if (now - lastBubbleTapAt.current < 500) return;
+              lastBubbleTapAt.current = now;
+              setNavLocked(true);
               router.push({
                 pathname: "/task-detail",
                 params: { id: taskId },
-              })
-            }
+              });
+            }}
           />
         )}
 

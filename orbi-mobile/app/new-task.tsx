@@ -4,7 +4,7 @@
 
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -24,18 +24,63 @@ import { colors } from "@/theme/colors";
 
 const SYNTHETIC_DRIFT_ID = "synthetic-drift";
 
+// Same shortLabel logic as the canvas — used to seed the label field
+// with a reasonable default the user can keep or overwrite.
+const STOP_WORDS = new Set([
+  "a", "an", "the", "to", "from", "about", "of", "for", "with",
+  "and", "or", "in", "on", "at", "by", "as", "is", "was", "are",
+  "be", "been", "this", "that", "these", "those", "my", "your",
+  "i", "im", "i'm", "ive", "i've",
+]);
+const LOW_SIGNAL_VERBS = new Set([
+  "call", "buy", "go", "send", "email", "remind", "make", "do",
+  "get", "have", "take", "pick", "drop", "visit", "see", "check",
+  "need", "want", "should", "must", "gotta", "going", "gonna",
+]);
+
+function deriveLabel(title: string, maxChars = 14): string {
+  const trimmed = (title ?? "").trim();
+  if (!trimmed) return "";
+  if (trimmed.length <= maxChars) return trimmed;
+  const words = trimmed.split(/\s+/);
+  const content = words.filter((w) => {
+    const lower = w.toLowerCase().replace(/[^a-z0-9']/g, "");
+    if (!lower) return false;
+    if (STOP_WORDS.has(lower)) return false;
+    if (LOW_SIGNAL_VERBS.has(lower)) return false;
+    return true;
+  });
+  const pickFrom = content.length > 0 ? content : words;
+  let out = "";
+  for (const w of pickFrom) {
+    const candidate = out ? `${out} ${w}` : w;
+    if (candidate.length > maxChars) break;
+    out = candidate;
+  }
+  if (!out) out = trimmed.slice(0, maxChars);
+  return out;
+}
+
 export default function NewTaskScreen() {
   const router = useRouter();
   const clusters = useUniverseStore((s) => s.clusters);
   const addTask = useUniverseStore((s) => s.addTask);
 
   const [title, setTitle] = useState("");
+  const [labelDraft, setLabelDraft] = useState("");
+  const [labelTouched, setLabelTouched] = useState(false);
   // null means "No cluster" (sent as parent_cluster_id: null)
   const [clusterId, setClusterId] = useState<string | null>(null);
   const [dueAt, setDueAt] = useState<Date | null>(null);
   const [showPicker, setShowPicker] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Auto-suggested label that tracks the title until the user types
+  // their own. Once they've edited the label field, we stop updating
+  // the suggestion so we don't clobber their input.
+  const suggestedLabel = useMemo(() => deriveLabel(title), [title]);
+  const effectiveLabel = labelTouched ? labelDraft : suggestedLabel;
 
   // Only real backend clusters are selectable. The synthetic Drift
   // cluster is just a layout fiction — its ID isn't a valid foreign key.
@@ -47,8 +92,10 @@ export default function NewTaskScreen() {
     setError(null);
     setSubmitting(true);
     try {
+      const trimmedLabel = effectiveLabel.trim();
       const created = await createTask({
         title: title.trim(),
+        label: trimmedLabel.length > 0 ? trimmedLabel : null,
         parent_cluster_id: clusterId,
         due_at: dueAt ? dueAt.toISOString() : null,
       });
@@ -89,6 +136,23 @@ export default function NewTaskScreen() {
             style={styles.titleInput}
             multiline
           />
+
+          <Text style={styles.fieldLabel}>Bubble label</Text>
+          <TextInput
+            value={effectiveLabel}
+            onChangeText={(text) => {
+              setLabelTouched(true);
+              setLabelDraft(text);
+            }}
+            placeholder="Auto-filled from title"
+            placeholderTextColor={colors.inkDim}
+            maxLength={28}
+            style={styles.input}
+          />
+          <Text style={styles.hint}>
+            Short keyword shown inside the bubble. Auto-suggested from the
+            title — feel free to type your own.
+          </Text>
 
           <Text style={styles.fieldLabel}>Cluster</Text>
           <ScrollView
@@ -223,6 +287,17 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     marginBottom: 22,
   },
+  input: {
+    backgroundColor: colors.panel,
+    borderColor: colors.line,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    color: colors.ink,
+    fontSize: 15,
+  },
+  hint: { color: colors.inkDim, fontSize: 11, marginTop: 6, marginBottom: 6, lineHeight: 15 },
   fieldLabel: {
     color: colors.inkDim,
     fontSize: 11,

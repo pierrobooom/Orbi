@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.agents.finance_agent import categorize_unknown_merchant
 from app.db import finance as finance_db
-from app.models.finance import FinanceBudget, FinanceEntry, FinanceEntryCreate
+from app.models.finance import FinanceBudget, FinanceEntry, FinanceEntryCreate, FinanceEntryUpdate
 from app.services.auth import get_current_user, get_current_user_with_tier
 from app.services.finance_categorizer import categorize_merchant
 
@@ -68,6 +68,74 @@ async def create_entry(
 
     row = await finance_db.insert_entry(entry.model_dump(mode="json"))
     return row
+
+
+@router.patch("/entries/{entry_id}", response_model=FinanceEntry)
+async def update_entry(
+    entry_id: UUID,
+    body: FinanceEntryUpdate,
+    auth: dict = Depends(get_current_user_with_tier),
+):
+    """Partial update of a finance entry the user owns.
+
+    If the merchant changes, re-runs the rule-based categoriser (with
+    AI fallback for Pro/Genius) so the row stays correctly classified.
+    The client can still override by passing `category` explicitly.
+    """
+    user_id = auth["user_id"]
+    user_tier = auth["tier"]
+
+    existing = await finance_db.fetch_entry_by_id(entry_id, user_id)
+    if existing is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_error("Entry not found.", "ENTRY_NOT_FOUND"),
+        )
+
+    payload = body.model_dump(exclude_none=True, mode="json")
+    if not payload:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=_error("No fields to update.", "NO_UPDATABLE_FIELDS"),
+        )
+
+    # If merchant changed and the caller didn't supply a category,
+    # re-derive category server-side so the row never drifts out of
+    # sync with the rule table.
+    if "merchant" in payload and "category" not in payload:
+        new_category = categorize_merchant(payload["merchant"])
+        if new_category == "uncategorized" and user_tier in ("pro", "premium"):
+            ai_result = await categorize_unknown_merchant(payload["merchant"], user_id, user_tier)
+            if ai_result.get("confidence", 0) >= 0.5:
+                new_category = ai_result["category"]
+        payload["category"] = new_category
+
+    row = await finance_db.update_entry(entry_id, user_id, payload)
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_error("Entry not found.", "ENTRY_NOT_FOUND"),
+        )
+    return row
+
+
+@router.delete("/entries/{entry_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_entry(
+    entry_id: UUID,
+    user_id: UUID = Depends(get_current_user),
+):
+    """Hard-delete a finance entry the user owns.
+
+    Hard delete (not soft) because misclicked or duplicated entries
+    are common enough that keeping archived rows would clutter the
+    table without benefit.
+    """
+    success = await finance_db.delete_entry(entry_id, user_id)
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_error("Entry not found.", "ENTRY_NOT_FOUND"),
+        )
 
 
 @router.get("/entries", response_model=list[FinanceEntry])

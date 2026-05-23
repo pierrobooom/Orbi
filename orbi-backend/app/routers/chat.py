@@ -4,6 +4,7 @@ This is the primary entry point for all user interactions. Messages are
 routed through the coordinator agent to the appropriate specialist agent.
 """
 
+import logging
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
@@ -11,10 +12,19 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from typing import Optional
 
+logger = logging.getLogger(__name__)
+
 from app.agents import coordinator, task_parser, finance_agent, debrief_agent
-from app.db import conversations as conv_db, tasks as tasks_db, finance as finance_db
+from app.db import (
+    clusters as clusters_db,
+    conversations as conv_db,
+    finance as finance_db,
+    tasks as tasks_db,
+)
 from app.models.conversation import ConversationSource
 from app.services.auth import get_current_user_with_tier
+from app.services.task_sanitizer import match_cluster_id, sanitize_parsed_task
+from app.services.time_extractor import override_due_at_clock
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -23,6 +33,11 @@ class ChatRequest(BaseModel):
     message: str
     session_id: Optional[UUID] = None
     source: ConversationSource = ConversationSource.text
+    # IANA timezone name from the client, e.g. "Europe/London". Optional
+    # so older clients keep working; when present, the coordinator uses
+    # it to resolve user-stated times like "4 PM" in the user's local
+    # zone before emitting ISO 8601 with the right offset.
+    user_timezone: Optional[str] = None
 
 
 class ChatResponse(BaseModel):
@@ -78,6 +93,7 @@ async def chat(
         user_id=user_id,
         user_tier=user_tier,
         conversation_history=history_messages,
+        user_timezone=body.user_timezone,
     )
 
     intent = classification.get("intent", "general_chat")
@@ -96,13 +112,65 @@ async def chat(
         # only if the embedded data is missing or malformed.
         embedded = classification.get("data")
         if isinstance(embedded, dict) and embedded.get("title"):
-            parsed = embedded
+            raw_parsed = embedded
+            parser_path = "embedded"
         else:
-            parsed = await task_parser.parse_task(
+            raw_parsed = await task_parser.parse_task(
                 user_input=body.message,
                 user_id=user_id,
                 user_tier=user_tier,
             )
+            parser_path = "fallback"
+
+        # Defensive cleanup: strip verbose title prefixes, null out
+        # implausible due_at (Llama 8B occasionally hallucinates 2024),
+        # clamp importance, etc. Shared between both parser paths so
+        # behaviour is identical. user_timezone lets the sanitizer
+        # interpret naive local times correctly — the prompt instructs
+        # the LLM to emit local time without any zone marker.
+        parsed = sanitize_parsed_task(
+            raw_parsed,
+            now=now,
+            user_timezone=body.user_timezone,
+        )
+
+        # Authoritative clock-time override: if the user's transcript
+        # contained an explicit time ("at 20", "8 PM", "10:30"), use
+        # that hour/minute regardless of what the LLM produced. The
+        # LLM still owns the DATE (it's good at "tomorrow", "Friday")
+        # but the HOUR comes from a regex on the transcript so we
+        # don't trust Llama 8B's clock math.
+        parsed["due_at"] = override_due_at_clock(
+            parsed.get("due_at"),
+            body.message,
+            body.user_timezone,
+        )
+
+        # Resolve domain_hint -> parent_cluster_id by looking up the
+        # user's clusters. Without this the mobile always lands voice
+        # tasks in Drift because the embedded data only carries the
+        # free-text hint, not an id.
+        if not parsed.get("parent_cluster_id"):
+            try:
+                clusters = await clusters_db.fetch_clusters_for_user(user_id)
+                cluster_id = match_cluster_id(parsed.get("domain_hint"), clusters)
+                if cluster_id:
+                    parsed["parent_cluster_id"] = cluster_id
+            except Exception as exc:  # noqa: BLE001 — non-fatal enrichment
+                logger.warning("Cluster lookup failed during task parse: %s", exc)
+
+        # Log so future bad parses are debuggable without re-running.
+        # Using warning level because uvicorn's default logger config
+        # propagates WARNING but not INFO for app-defined loggers.
+        logger.warning(
+            "Task parse | path=%s tz=%s transcript=%r raw=%r sanitized=%r",
+            parser_path,
+            body.user_timezone or "<none>",
+            body.message,
+            raw_parsed,
+            parsed,
+        )
+
         data = parsed
         reply = f"Got it — I've captured \"{parsed['title']}\"."
         if parsed.get("due_at"):

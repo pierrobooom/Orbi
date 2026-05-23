@@ -8,26 +8,31 @@ fences before parsing is safe even when the raw response is bare JSON.
 
 import re
 
-# Matches a complete fenced block: optional language hint after the
-# opening ```, content, then closing ```. DOTALL so . matches newlines.
+# Matches the FIRST fenced block anywhere in the response. The LLM
+# sometimes prepends prose ("## Intent Classification\n\n```json...```"),
+# so we can't anchor the regex to the start of the string.
 _FENCED_BLOCK = re.compile(
-    r"^\s*```(?:json|JSON)?\s*\n?(.*?)\n?```\s*$",
+    r"```(?:json|JSON)?\s*\n?(.*?)\n?```",
     re.DOTALL,
 )
 
 
 def strip_json_fences(raw: str) -> str:
-    """Return raw with any surrounding ```json ... ``` fences removed.
+    """Return the JSON content from inside ```json ... ``` fences.
 
-    Defensive — returns the trimmed input unchanged if there's no fence.
+    Tolerant of:
+      - Prose before the fence ("## Intent Classification\n\n```json...```")
+      - Prose after the fence
+      - Bare JSON with no fence at all
+      - Partial fences (opening only, closing only)
     """
     if not raw:
         return raw
-    match = _FENCED_BLOCK.match(raw)
+    match = _FENCED_BLOCK.search(raw)
     if match:
         return match.group(1).strip()
-    # Fallback for partial fences (e.g. trailing ``` only). Walk the
-    # first and last lines and trim if they look like fence markers.
+    # No complete fenced block. Try to salvage a partial one — opening
+    # fence but no close, or close but no open.
     stripped = raw.strip()
     if stripped.startswith("```"):
         lines = stripped.splitlines()

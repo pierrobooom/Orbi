@@ -27,6 +27,9 @@ export interface Cluster {
 export interface Bubble {
   id: string;
   title: string;
+  // Short keyword shown inside the bubble. Falls back to a derived
+  // version of the title when the server task has no label set.
+  label: string;
   clusterId: string;
   // 0..10. Drives radius and Brownian wiggle amplitude.
   pressureScore: number;

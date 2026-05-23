@@ -5,14 +5,18 @@ a service or db function, and formats the response.
 """
 
 from datetime import datetime, timezone
+from typing import Optional
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 
+from app.agents.task_updater import parse_voice_update
 from app.db import tasks as tasks_db
 from app.models.task import TaskBubble, TaskBubbleCreate, TaskBubbleUpdate, TaskStatus
-from app.services.auth import get_current_user
+from app.services.auth import get_current_user, get_current_user_with_tier
 from app.services.scoring import calculate_pressure_score
+from app.services.task_sanitizer import derive_label_from_title
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
@@ -46,11 +50,20 @@ async def create_task(
     now = datetime.now(timezone.utc)
     task_id = uuid4()
 
+    # Auto-derive label from title when the client (or LLM upstream)
+    # didn't supply one. Mirrors the JS shortLabel so legacy clients
+    # and typed creates still get a sensible bubble label.
+    label = body.label.strip() if body.label and body.label.strip() else None
+    if label is None:
+        derived = derive_label_from_title(body.title)
+        label = derived or None
+
     # Build a full TaskBubble so the scoring function has all required fields
     task = TaskBubble(
         id=task_id,
         owner_id=user_id,  # enforce ownership from token, not body
         title=body.title,
+        label=label,
         description=body.description,
         status=body.status,
         due_at=body.due_at,
@@ -135,3 +148,59 @@ async def delete_task(task_id: UUID, user_id: UUID = Depends(get_current_user)):
             status_code=status.HTTP_404_NOT_FOUND,
             detail=_error("Task not found.", "TASK_NOT_FOUND"),
         )
+
+
+# ---------------------------------------------------------------------------
+# Voice-driven update — parse a spoken instruction into a field-level patch
+# ---------------------------------------------------------------------------
+
+class VoiceUpdateRequest(BaseModel):
+    transcript: str
+    user_timezone: Optional[str] = None
+
+
+class VoiceUpdateResponse(BaseModel):
+    # Sparse patch — only the fields the LLM thought should change.
+    # Mobile applies it via the existing PATCH endpoint after the user
+    # reviews it, so we DON'T mutate the row here.
+    patch: dict
+    reply: str
+
+
+@router.post("/{task_id}/voice-update", response_model=VoiceUpdateResponse)
+async def voice_update_task(
+    task_id: UUID,
+    body: VoiceUpdateRequest,
+    auth: dict = Depends(get_current_user_with_tier),
+):
+    """Parse a spoken instruction into a partial task update.
+
+    Read-only on the server — the mobile client receives the patch,
+    pre-fills its edit form with the proposed changes, and the user
+    taps Save to actually commit. This keeps the user in the loop and
+    avoids surprise mutations from a misheard transcript.
+    """
+    user_id = auth["user_id"]
+    user_tier = auth["tier"]
+
+    task = await tasks_db.fetch_task_by_id(task_id, user_id)
+    if task is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_error("Task not found.", "TASK_NOT_FOUND"),
+        )
+
+    if not body.transcript or not body.transcript.strip():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=_error("Transcript is empty.", "TRANSCRIPT_EMPTY"),
+        )
+
+    result = await parse_voice_update(
+        current_task=task,
+        user_message=body.transcript,
+        user_id=user_id,
+        user_tier=user_tier,
+        user_timezone=body.user_timezone,
+    )
+    return VoiceUpdateResponse(patch=result["patch"], reply=result["reply"])

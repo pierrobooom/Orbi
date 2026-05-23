@@ -5,10 +5,11 @@
 // land in Pro+; this view stays simple and ledger-shaped for every tier.
 
 import { useRouter, type Href } from "expo-router";
-import React, { useEffect } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
+  RefreshControl,
   SectionList,
   StyleSheet,
   Text,
@@ -72,8 +73,19 @@ export default function MoneyScreen() {
   const errorMessage = useFinanceStore((s) => s.errorMessage);
   const hydrate = useFinanceStore((s) => s.hydrate);
 
+  const [refreshing, setRefreshing] = useState(false);
+
   useEffect(() => {
     hydrate();
+  }, [hydrate]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await hydrate();
+    } finally {
+      setRefreshing(false);
+    }
   }, [hydrate]);
 
   const sections = groupByDay(entries);
@@ -117,9 +129,26 @@ export default function MoneyScreen() {
           renderSectionHeader={({ section }) => (
             <Text style={styles.sectionHeader}>{section.title}</Text>
           )}
-          renderItem={({ item }) => <EntryRow entry={item} />}
+          renderItem={({ item }) => (
+            <EntryRow
+              entry={item}
+              onPress={() =>
+                router.push({
+                  pathname: "/entry-detail",
+                  params: { id: item.id },
+                })
+              }
+            />
+          )}
           contentContainerStyle={styles.listContent}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={colors.accent}
+            />
+          }
         />
       )}
 
@@ -135,10 +164,10 @@ export default function MoneyScreen() {
   );
 }
 
-function EntryRow({ entry }: { entry: ServerFinanceEntry }) {
+function EntryRow({ entry, onPress }: { entry: ServerFinanceEntry; onPress: () => void }) {
   const isExpense = entry.entry_type === "expense";
   return (
-    <View style={styles.row}>
+    <Pressable onPress={onPress} style={styles.row} android_ripple={{ color: colors.line }}>
       <View style={styles.rowLeft}>
         <Text style={styles.merchant} numberOfLines={1}>
           {entry.merchant}
@@ -149,7 +178,7 @@ function EntryRow({ entry }: { entry: ServerFinanceEntry }) {
         {isExpense ? "-" : "+"}
         {formatAmount(entry.amount, entry.currency)}
       </Text>
-    </View>
+    </Pressable>
   );
 }
 

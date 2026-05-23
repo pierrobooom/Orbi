@@ -67,15 +67,27 @@ export default function RootLayout() {
                 options={{ presentation: "modal", headerShown: false }}
               />
               <Stack.Screen
+                name="settings"
+                options={{ presentation: "modal", headerShown: false }}
+              />
+              <Stack.Screen
+                name="entry-detail"
+                options={{
+                  presentation: "modal",
+                  headerShown: false,
+                }}
+              />
+              <Stack.Screen
                 name="task-detail"
                 options={{
-                  // formSheet on iOS slides up over the canvas and lets
-                  // the user swipe down to dismiss — perfect for a quick
-                  // inspect-and-act sheet.
-                  presentation: "formSheet",
+                  // Full-screen modal — cross-platform consistent
+                  // (iOS slides up, Android full-screen). Form sheets
+                  // were Apple-only, their grabber gesture ate touches
+                  // near the top, and the detent system fought our
+                  // flex layout. Modal gives us a normal full screen
+                  // with reliable header + footer pinning.
+                  presentation: "modal",
                   headerShown: false,
-                  sheetGrabberVisible: true,
-                  sheetAllowedDetents: [0.5, 0.9],
                 }}
               />
               <Stack.Screen

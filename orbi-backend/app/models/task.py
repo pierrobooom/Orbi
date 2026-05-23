@@ -23,6 +23,10 @@ class TaskBubble(BaseModel):
     id: UUID
     owner_id: UUID
     title: str
+    # Short keyword shown inside the bubble visualisation. Nullable so
+    # tasks created before the 0005 migration keep working; the client
+    # falls back to client-side title shortening when label is None.
+    label: Optional[str] = None
     description: Optional[str] = None
     status: TaskStatus
     due_at: Optional[datetime] = None
@@ -43,6 +47,7 @@ class TaskBubble(BaseModel):
 class TaskBubbleCreate(BaseModel):
     owner_id: UUID
     title: str
+    label: Optional[str] = None
     description: Optional[str] = None
     status: TaskStatus = TaskStatus.active
     due_at: Optional[datetime] = None
@@ -58,6 +63,7 @@ class TaskBubbleCreate(BaseModel):
 
 class TaskBubbleUpdate(BaseModel):
     title: Optional[str] = None
+    label: Optional[str] = None
     description: Optional[str] = None
     status: Optional[TaskStatus] = None
     due_at: Optional[datetime] = None

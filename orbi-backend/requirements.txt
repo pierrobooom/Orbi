@@ -14,5 +14,10 @@ elevenlabs==1.8.0
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
 python-multipart==0.0.9
+# IANA timezone database for Python's zoneinfo. Windows doesn't ship
+# one natively — without this, ZoneInfo("Europe/London") raises and
+# every wall-clock-to-UTC conversion silently fails. Required even
+# though it's a noop on Linux/macOS which already have system tzdata.
+tzdata==2026.2
 pytest==8.2.0
 pytest-asyncio==0.23.7

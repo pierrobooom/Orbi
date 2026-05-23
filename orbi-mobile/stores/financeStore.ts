@@ -29,6 +29,9 @@ interface FinanceState {
   summary: FinanceSummary | null;
   hydrate: () => Promise<void>;
   addEntry: (entry: ServerFinanceEntry) => void;
+  replaceEntry: (entry: ServerFinanceEntry) => void;
+  removeEntry: (entryId: string) => void;
+  getEntry: (entryId: string) => ServerFinanceEntry | undefined;
 }
 
 export const useFinanceStore = create<FinanceState>((set, get) => ({
@@ -100,4 +103,45 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
       : null;
     set({ entries: nextEntries, summary: nextSummary });
   },
+
+  replaceEntry: (entry) => {
+    // Swap the entry by id. The summary may shift if amount/category
+    // changed, but rather than recomputing here we just trigger a
+    // background refresh; the user sees the row update immediately
+    // and the totals catch up shortly.
+    const state = get();
+    const nextEntries = state.entries.map((e) => (e.id === entry.id ? entry : e));
+    set({ entries: nextEntries });
+    // Fire-and-forget refresh so summary totals catch up.
+    void state.hydrate();
+  },
+
+  removeEntry: (entryId) => {
+    const state = get();
+    const removed = state.entries.find((e) => e.id === entryId);
+    const nextEntries = state.entries.filter((e) => e.id !== entryId);
+    const nextSummary: FinanceSummary | null = removed && state.summary
+      ? {
+          ...state.summary,
+          totals: {
+            ...state.summary.totals,
+            [removed.category]: Math.max(
+              0,
+              (state.summary.totals[removed.category] ?? 0) - removed.amount,
+            ),
+          },
+          total_spend:
+            removed.entry_type === "expense"
+              ? Math.max(0, state.summary.total_spend - removed.amount)
+              : state.summary.total_spend,
+          total_income:
+            removed.entry_type === "income"
+              ? Math.max(0, state.summary.total_income - removed.amount)
+              : state.summary.total_income,
+        }
+      : state.summary;
+    set({ entries: nextEntries, summary: nextSummary });
+  },
+
+  getEntry: (entryId) => get().entries.find((e) => e.id === entryId),
 }));

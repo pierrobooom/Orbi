@@ -56,6 +56,7 @@ user-facing limit-reached message uses the marketing names.
 """
 
 import logging
+import os
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
@@ -156,11 +157,18 @@ def cap_for(tier: str, kind: str) -> int:
 
     Unknown tiers default to 'free' so a malformed profile never accidentally
     grants premium quotas. Unknown kinds raise — the call site has a typo.
+
+    In development, all caps are multiplied by 10 so testing flows don't
+    burn through the production limits. Production stays at the
+    CLAUDE.md-specified values.
     """
     table = _MONTHLY_CAPS if kind in _MONTHLY_KINDS else _DAILY_CAPS
     if kind not in (_DAILY_KINDS | _MONTHLY_KINDS):
         raise ValueError(f"Unknown usage kind: {kind!r}")
-    return table.get(tier, table["free"]).get(kind, 0)
+    base = table.get(tier, table["free"]).get(kind, 0)
+    if base > 0 and os.environ.get("ENVIRONMENT") == "development":
+        return base * 10
+    return base
 
 
 async def check_and_record(

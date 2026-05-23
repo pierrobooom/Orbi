@@ -46,6 +46,17 @@ class FinanceEntryCreate(BaseModel):
     notes: Optional[str] = None
 
 
+class FinanceEntryUpdate(BaseModel):
+    """Partial update for an existing entry. All fields optional."""
+    amount: Optional[float] = None
+    currency: Optional[str] = None
+    merchant: Optional[str] = None
+    category: Optional[str] = None
+    entry_type: Optional[EntryType] = None
+    entry_date: Optional[date] = None
+    notes: Optional[str] = None
+
+
 class FinanceBudget(BaseModel):
     id: UUID
     user_id: UUID

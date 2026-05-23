@@ -46,6 +46,45 @@ async def insert_entry(payload: dict) -> dict:
     return response.data[0]
 
 
+async def fetch_entry_by_id(entry_id: UUID, user_id: UUID) -> dict | None:
+    """Return the entry for entry_id if it belongs to user_id, else None."""
+    response = (
+        get_client().table("finance_entries")
+        .select("*")
+        .eq("id", str(entry_id))
+        .eq("user_id", str(user_id))
+        .limit(1)
+        .execute()
+    )
+    return response.data[0] if response.data else None
+
+
+async def update_entry(entry_id: UUID, user_id: UUID, payload: dict) -> dict | None:
+    """Update fields on an entry the user owns. Returns the new row or None."""
+    response = (
+        get_client().table("finance_entries")
+        .update(payload)
+        .eq("id", str(entry_id))
+        .eq("user_id", str(user_id))
+        .execute()
+    )
+    if not response.data:
+        return None
+    return response.data[0]
+
+
+async def delete_entry(entry_id: UUID, user_id: UUID) -> bool:
+    """Delete an entry the user owns. Returns True if a row was deleted."""
+    response = (
+        get_client().table("finance_entries")
+        .delete()
+        .eq("id", str(entry_id))
+        .eq("user_id", str(user_id))
+        .execute()
+    )
+    return bool(response.data)
+
+
 async def fetch_budgets_for_user(user_id: UUID) -> list[dict]:
     """Return all budget envelopes for the user."""
     response = (

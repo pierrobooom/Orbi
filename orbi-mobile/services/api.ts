@@ -311,6 +311,32 @@ export async function getFinanceSummary(month?: string): Promise<FinanceSummary>
   return (await res.json()) as FinanceSummary;
 }
 
+export interface UpdateFinanceEntryInput {
+  amount?: number;
+  merchant?: string;
+  category?: string;
+  entry_date?: string; // YYYY-MM-DD
+  entry_type?: EntryType;
+  notes?: string | null;
+}
+
+export async function updateFinanceEntry(
+  id: string,
+  patch: UpdateFinanceEntryInput,
+): Promise<ServerFinanceEntry> {
+  const res = await authFetch(`${V1}/finance/entries/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) throw await parseError(res);
+  return (await res.json()) as ServerFinanceEntry;
+}
+
+export async function deleteFinanceEntry(id: string): Promise<void> {
+  const res = await authFetch(`${V1}/finance/entries/${id}`, { method: "DELETE" });
+  if (!res.ok && res.status !== 404) throw await parseError(res);
+}
+
 // ---------------------------------------------------------------------------
 // Tasks + Clusters
 // ---------------------------------------------------------------------------
@@ -327,6 +353,9 @@ export interface ServerTask {
   id: string;
   owner_id: string;
   title: string;
+  // Short keyword rendered inside the bubble. Server auto-derives
+  // when client omits it; null on pre-0005-migration rows.
+  label: string | null;
   description: string | null;
   status: ServerTaskStatus;
   due_at: string | null;
@@ -368,6 +397,8 @@ export async function listClusters(): Promise<ServerCluster[]> {
 
 export interface CreateTaskInput {
   title: string;
+  label?: string | null;
+  description?: string | null;
   parent_cluster_id?: string | null;
   due_at?: string | null;
   importance?: number;
@@ -430,10 +461,21 @@ export async function chatMessage(
   source: "voice" | "text" = "text",
   sessionId?: string,
 ): Promise<ChatResponse> {
+  // Send the device's IANA timezone so the LLM can interpret
+  // user-stated times like "4 PM" in local time. Falling back to
+  // undefined when the runtime lacks Intl is fine — the backend then
+  // assumes UTC, which is the pre-fix behaviour.
+  let userTimezone: string | undefined;
+  try {
+    userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  } catch {
+    userTimezone = undefined;
+  }
   const body = {
     message,
     source,
     session_id: sessionId,
+    user_timezone: userTimezone,
   };
   const res = await authFetch(`${V1}/chat`, {
     method: "POST",
@@ -445,6 +487,8 @@ export async function chatMessage(
 
 export interface UpdateTaskInput {
   title?: string;
+  label?: string | null;
+  description?: string | null;
   status?: ServerTaskStatus;
   due_at?: string | null;
   importance?: number;
@@ -467,6 +511,37 @@ export async function deleteTask(id: string): Promise<void> {
   if (!res.ok && res.status !== 404) throw await parseError(res);
 }
 
+export interface VoiceUpdateResponse {
+  // Sparse patch — only the fields the LLM thought should change.
+  // Each is optional; due_at can also be explicit null to clear.
+  patch: {
+    title?: string;
+    label?: string | null;
+    description?: string | null;
+    due_at?: string | null;
+    importance?: number;
+  };
+  reply: string;
+}
+
+export async function voiceUpdateTask(
+  id: string,
+  transcript: string,
+): Promise<VoiceUpdateResponse> {
+  let userTimezone: string | undefined;
+  try {
+    userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  } catch {
+    userTimezone = undefined;
+  }
+  const res = await authFetch(`${V1}/tasks/${id}/voice-update`, {
+    method: "POST",
+    body: JSON.stringify({ transcript, user_timezone: userTimezone }),
+  });
+  if (!res.ok) throw await parseError(res);
+  return (await res.json()) as VoiceUpdateResponse;
+}
+
 export async function createTask(input: CreateTaskInput): Promise<ServerTask> {
   // owner_id is required by the Pydantic model but the router overrides
   // it with the JWT subject — we still have to send a value to satisfy
@@ -480,6 +555,8 @@ export async function createTask(input: CreateTaskInput): Promise<ServerTask> {
   const body = {
     owner_id: ownerId,
     title: input.title,
+    label: input.label ?? null,
+    description: input.description ?? null,
     parent_cluster_id: input.parent_cluster_id ?? null,
     due_at: input.due_at ?? null,
     importance: input.importance ?? 5,

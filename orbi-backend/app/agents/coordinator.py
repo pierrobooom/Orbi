@@ -23,6 +23,7 @@ async def classify_intent(
     user_id: UUID,
     user_tier: str,
     conversation_history: list[dict] | None = None,
+    user_timezone: str | None = None,
 ) -> dict:
     """Classify the user's intent and determine which agent should handle it.
 
@@ -35,8 +36,26 @@ async def classify_intent(
         A dict with keys: intent, confidence, agent, context_needed, response_to_user.
         Falls back to general_chat with a clarification prompt on failure.
     """
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-    context_lines = [f"Current date/time: {now}"]
+    now_utc = datetime.now(timezone.utc)
+    context_lines = [f"Current date/time: {now_utc.strftime('%Y-%m-%d %H:%M UTC')}"]
+
+    # When the client tells us its IANA timezone, surface it to the LLM
+    # so it interprets "4 PM" as 4 PM in the user's local zone rather
+    # than UTC. Also pass the user's wall-clock time so the model has
+    # both reference points and can compute relative times accurately.
+    if user_timezone:
+        try:
+            from zoneinfo import ZoneInfo
+            tz = ZoneInfo(user_timezone)
+            local_now = now_utc.astimezone(tz)
+            context_lines.append(
+                f"User's timezone: {user_timezone}\n"
+                f"User's local time: {local_now.strftime('%Y-%m-%d %H:%M %Z (UTC%z)')}\n"
+                f"When the user mentions a time like \"4 PM\", interpret it "
+                f"as their LOCAL time and convert to UTC for due_at."
+            )
+        except Exception:  # noqa: BLE001 — bad tz string isn't worth crashing on
+            pass
 
     if conversation_history:
         recent = conversation_history[-5:]

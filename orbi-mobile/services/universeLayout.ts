@@ -66,6 +66,46 @@ function isOverdue(task: ServerTask, now: Date): boolean {
   return new Date(task.due_at) < now;
 }
 
+// Stop / weak-verb sets used by the shortLabel fallback so the
+// derivation matches the server-side derive_label_from_title.
+const _LABEL_STOP_WORDS = new Set([
+  "a", "an", "the", "to", "from", "about", "of", "for", "with",
+  "and", "or", "in", "on", "at", "by", "as", "is", "was", "are",
+  "be", "been", "this", "that", "these", "those", "my", "your",
+  "i", "im", "i'm", "ive", "i've",
+]);
+const _LABEL_LOW_SIGNAL_VERBS = new Set([
+  "call", "buy", "go", "send", "email", "remind", "make", "do",
+  "get", "have", "take", "pick", "drop", "visit", "see", "check",
+  "need", "want", "should", "must", "gotta", "going", "gonna",
+]);
+
+/** Server-style shortLabel fallback. Only invoked when a task has no
+ * stored label (pre-0005 rows). New tasks get their label from the
+ * server which uses the equivalent Python derive_label_from_title. */
+function deriveLabel(title: string, maxChars = 14): string {
+  const trimmed = (title ?? "").trim();
+  if (!trimmed) return "";
+  if (trimmed.length <= maxChars) return trimmed;
+  const words = trimmed.split(/\s+/);
+  const content = words.filter((w) => {
+    const lower = w.toLowerCase().replace(/[^a-z0-9']/g, "");
+    if (!lower) return false;
+    if (_LABEL_STOP_WORDS.has(lower)) return false;
+    if (_LABEL_LOW_SIGNAL_VERBS.has(lower)) return false;
+    return true;
+  });
+  const pickFrom = content.length > 0 ? content : words;
+  let out = "";
+  for (const w of pickFrom) {
+    const candidate = out ? `${out} ${w}` : w;
+    if (candidate.length > maxChars) break;
+    out = candidate;
+  }
+  if (!out) out = trimmed.slice(0, maxChars);
+  return out;
+}
+
 // Golden-angle spiral so non-dominant bubbles spread naturally without
 // piling up at any one angle. The dominant sits at (0, 0); index 1+
 // orbit out from there.
@@ -145,9 +185,15 @@ export function layoutUniverse(
     tasks.sort((a, b) => b.pressure_score - a.pressure_score);
     tasks.forEach((t, rank) => {
       const offset = offsetForRank(rank);
+      // Prefer the server-stored label; fall back to a client-side
+      // derivation for legacy rows from before the 0005 migration.
+      const label = t.label && t.label.trim().length > 0
+        ? t.label.trim()
+        : deriveLabel(t.title);
       bubbles.push({
         id: t.id,
         title: t.title,
+        label,
         clusterId: cluster.id,
         pressureScore: t.pressure_score,
         overdue: isOverdue(t, now),
