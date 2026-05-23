@@ -59,7 +59,16 @@
       "Bash(npx expo *)",
       "PowerShell(Get-NetTCPConnection *)",
       "PowerShell(Get-Process *)",
-      "PowerShell(Stop-Process *)"
+      "PowerShell(Stop-Process *)",
+      "PowerShell(where.exe python; python --version)",
+      "PowerShell(& \"C:\\\\Users\\\\lucas\\\\AppData\\\\Local\\\\Python\\\\bin\\\\python.exe\" -m py_compile orbi-backend/app/agents/cluster_manager.py orbi-backend/app/services/cluster_apply.py orbi-backend/app/routers/clusters.py; if \\($?\\) { \"compile OK\" })",
+      "PowerShell(& \"C:\\\\Users\\\\lucas\\\\AppData\\\\Local\\\\Python\\\\bin\\\\python.exe\" -m py_compile orbi-backend/app/agents/cluster_manager.py orbi-backend/app/services/cluster_apply.py orbi-backend/app/routers/clusters.py; if \\($?\\) { \"backend compile OK\" })",
+      "PowerShell(& \"C:\\\\Users\\\\lucas\\\\AppData\\\\Local\\\\Python\\\\bin\\\\python.exe\" -m py_compile C:/Users/lucas/Documents/Orbi/orbi-backend/app/agents/cluster_manager.py C:/Users/lucas/Documents/Orbi/orbi-backend/app/services/cluster_apply.py C:/Users/lucas/Documents/Orbi/orbi-backend/app/routers/clusters.py; if \\($?\\) { \"backend compile OK\" })",
+      "PowerShell(& \"C:\\\\Users\\\\lucas\\\\AppData\\\\Local\\\\Python\\\\bin\\\\python.exe\" -m py_compile C:/Users/lucas/Documents/Orbi/orbi-backend/app/routers/clusters.py; if \\($?\\) { \"compile OK\" })",
+      "PowerShell(Get-CimInstance *)",
+      "PowerShell(Start-Process -FilePath \"C:\\\\Users\\\\lucas\\\\AppData\\\\Local\\\\Python\\\\bin\\\\python3.12.exe\" -ArgumentList \"-m\",\"uvicorn\",\"main:app\",\"--host\",\"127.0.0.1\",\"--port\",\"8000\",\"--reload\" -WorkingDirectory \"C:\\\\Users\\\\lucas\\\\Documents\\\\Orbi\\\\orbi-backend\" -WindowStyle Hidden; Start-Sleep -Seconds 3; \"launched\")",
+      "PowerShell(Start-Sleep -Seconds 2; try { Invoke-WebRequest -Uri \"http://127.0.0.1:8000/health\" -UseBasicParsing -TimeoutSec 5 | Select-Object StatusCode, Content } catch { \"ERROR: $\\($_.Exception.Message\\)\" })",
+      "PowerShell(try { \\(Invoke-WebRequest -Uri \"http://127.0.0.1:8000/api/v1/clusters/auto-organize\" -Method POST -UseBasicParsing -TimeoutSec 5 -ErrorAction Stop\\) } catch { \"Status: $\\($_.Exception.Response.StatusCode.value__\\)  Body: $\\($_.ErrorDetails.Message\\)\" })"
     ]
   }
 }

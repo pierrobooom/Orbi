@@ -5,6 +5,7 @@
 // Sign out, and Dev tools (push register + test push) which used to
 // live in the upgrade modal.
 
+import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import * as Notifications from "expo-notifications";
 import { useRouter, type Href } from "expo-router";
 import React, { useEffect, useState } from "react";
@@ -22,10 +23,18 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { registerPushDevice } from "@/hooks/usePushRegistration";
-import { ApiError, sendTestPush } from "@/services/api";
+import { API_BASE_URL, ApiError, getHealth, sendTestPush } from "@/services/api";
 import { TIER_DISPLAY } from "@/services/tierGate";
 import { useAuthStore } from "@/stores/authStore";
 import { colors } from "@/theme/colors";
+
+// Backend reachability is shown in a dedicated Status section. Lives
+// here (and not on the canvas header) because it's debug-y context
+// the user only needs when something feels wrong.
+type HealthStatus =
+  | { kind: "loading" }
+  | { kind: "ok"; app: string; latencyMs: number }
+  | { kind: "error"; message: string };
 
 export default function SettingsScreen() {
   const router = useRouter();
@@ -37,11 +46,30 @@ export default function SettingsScreen() {
 
   const [notifsGranted, setNotifsGranted] = useState<boolean | null>(null);
   const [busy, setBusy] = useState<"signout" | "test" | "register" | null>(null);
+  const [health, setHealth] = useState<HealthStatus>({ kind: "loading" });
 
   useEffect(() => {
     Notifications.getPermissionsAsync()
       .then((p) => setNotifsGranted(p.granted))
       .catch(() => setNotifsGranted(null));
+  }, []);
+
+  // Ping the backend on mount + when the user taps "Recheck". Latency
+  // is useful debug context if a request feels slow.
+  const checkHealth = () => {
+    setHealth({ kind: "loading" });
+    const startedAt = Date.now();
+    getHealth()
+      .then((r) =>
+        setHealth({ kind: "ok", app: r.app, latencyMs: Date.now() - startedAt }),
+      )
+      .catch((e) =>
+        setHealth({ kind: "error", message: String(e?.message ?? e) }),
+      );
+  };
+
+  useEffect(() => {
+    checkHealth();
   }, []);
 
   const onToggleNotifs = async (next: boolean) => {
@@ -145,6 +173,35 @@ export default function SettingsScreen() {
           </Pressable>
         </Section>
 
+        <Section title="Universe">
+          <Pressable
+            onPress={() => router.push("/cluster-proposal" as Href)}
+            style={styles.universeRow}
+          >
+            <View style={styles.toggleLabelGroup}>
+              <Text style={styles.rowLabel}>Organise clusters</Text>
+              <Text style={styles.rowHint}>
+                Ask Orbi to suggest cluster merges, moves, and new groupings.
+              </Text>
+            </View>
+            <MaterialIcons name="chevron-right" size={22} color={colors.inkDim} />
+          </Pressable>
+          <Pressable
+            onPress={() => router.push("/cluster-editor?id=new" as Href)}
+            style={styles.universeRow}
+          >
+            <View style={styles.toggleLabelGroup}>
+              <Text style={styles.rowLabel}>New cluster</Text>
+              <Text style={styles.rowHint}>
+                Create a cluster manually. Tip: long-press the + button on the
+                canvas for the same thing, and long-press a cluster bubble to
+                rename, recolor, or delete it.
+              </Text>
+            </View>
+            <MaterialIcons name="chevron-right" size={22} color={colors.inkDim} />
+          </Pressable>
+        </Section>
+
         <Section title="Notifications">
           <View style={styles.toggleRow}>
             <View style={styles.toggleLabelGroup}>
@@ -163,6 +220,48 @@ export default function SettingsScreen() {
               disabled={notifsGranted === null}
               trackColor={{ false: colors.line, true: colors.accent }}
             />
+          </View>
+        </Section>
+
+        <Section title="Status">
+          <View style={styles.statusRow}>
+            <View style={styles.statusDotWrap}>
+              <View
+                style={[
+                  styles.statusDot,
+                  health.kind === "ok" && styles.statusDotOk,
+                  health.kind === "error" && styles.statusDotErr,
+                ]}
+              />
+            </View>
+            <View style={styles.toggleLabelGroup}>
+              <Text style={styles.rowLabel}>
+                {health.kind === "loading" && "Checking backend…"}
+                {health.kind === "ok" && "Backend reachable"}
+                {health.kind === "error" && "Backend unreachable"}
+              </Text>
+              <Text style={styles.rowHint}>
+                {health.kind === "ok"
+                  ? `${health.app} • ${health.latencyMs} ms`
+                  : health.kind === "error"
+                    ? health.message
+                    : "Pinging /health…"}
+              </Text>
+            </View>
+            <Pressable onPress={checkHealth} hitSlop={8} style={styles.statusRecheck}>
+              <MaterialIcons name="refresh" size={20} color={colors.inkDim} />
+            </Pressable>
+          </View>
+          <View style={styles.statusRow}>
+            <View style={styles.statusDotWrap}>
+              <MaterialIcons name="dns" size={16} color={colors.inkDim} />
+            </View>
+            <View style={styles.toggleLabelGroup}>
+              <Text style={styles.rowLabel}>API endpoint</Text>
+              <Text style={styles.rowHint} numberOfLines={1}>
+                {API_BASE_URL}
+              </Text>
+            </View>
           </View>
         </Section>
 
@@ -280,6 +379,29 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   toggleLabelGroup: { flex: 1 },
+  statusRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    gap: 12,
+  },
+  statusDotWrap: { width: 18, alignItems: "center" },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.inkDim,
+  },
+  statusDotOk: { backgroundColor: colors.health },
+  statusDotErr: { backgroundColor: colors.overdue },
+  statusRecheck: { padding: 4 },
+  universeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 12,
+    gap: 12,
+  },
   toolBtn: {
     paddingVertical: 12,
     paddingHorizontal: 14,

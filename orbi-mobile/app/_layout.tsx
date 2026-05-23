@@ -91,6 +91,14 @@ export default function RootLayout() {
                 }}
               />
               <Stack.Screen
+                name="cluster-proposal"
+                options={{ presentation: "modal", headerShown: false }}
+              />
+              <Stack.Screen
+                name="cluster-editor"
+                options={{ presentation: "modal", headerShown: false }}
+              />
+              <Stack.Screen
                 name="modal"
                 options={{ presentation: "modal", title: "Modal" }}
               />

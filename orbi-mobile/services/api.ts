@@ -395,6 +395,96 @@ export async function listClusters(): Promise<ServerCluster[]> {
   return (await res.json()) as ServerCluster[];
 }
 
+export interface CreateClusterInput {
+  name: string;
+  color: string;
+  summary?: string | null;
+}
+
+export async function createCluster(input: CreateClusterInput): Promise<ServerCluster> {
+  const res = await authFetch(`${V1}/clusters`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) throw await parseError(res);
+  return (await res.json()) as ServerCluster;
+}
+
+export interface UpdateClusterInput {
+  name?: string;
+  color?: string;
+  summary?: string | null;
+}
+
+export async function updateCluster(
+  id: string,
+  patch: UpdateClusterInput,
+): Promise<ServerCluster> {
+  const res = await authFetch(`${V1}/clusters/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) throw await parseError(res);
+  return (await res.json()) as ServerCluster;
+}
+
+export async function deleteCluster(id: string): Promise<void> {
+  const res = await authFetch(`${V1}/clusters/${id}`, { method: "DELETE" });
+  if (!res.ok) throw await parseError(res);
+}
+
+// ---------------------------------------------------------------------------
+// Auto-organisation — LLM-proposed cluster reshuffles the user reviews
+// ---------------------------------------------------------------------------
+
+// One reorganisation action. Mirrors the server's ProposalAction shape.
+// `type` is the discriminator; only a subset of the other fields is set
+// for each variant, and we keep the carrier loose so the server stays
+// the source of truth on what's valid.
+export interface ProposalAction {
+  type: "create_cluster" | "move_tasks" | "merge_clusters" | "rename_cluster";
+  // create_cluster
+  name?: string;
+  color?: string;
+  // rename_cluster
+  new_name?: string;
+  // rename_cluster / move_tasks
+  cluster_id?: string;
+  // merge_clusters
+  source_id?: string;
+  target_id?: string;
+  // create_cluster / move_tasks
+  task_ids?: string[];
+  // Human-readable reason shown in the review modal.
+  reason?: string;
+}
+
+export interface ProposalResponse {
+  actions: ProposalAction[];
+}
+
+export interface ApplyResponse {
+  applied: Record<string, number>;
+  skipped: { type: string; action: ProposalAction }[];
+}
+
+export async function proposeOrganisation(): Promise<ProposalResponse> {
+  const res = await authFetch(`${V1}/clusters/auto-organize`, { method: "POST" });
+  if (!res.ok) throw await parseError(res);
+  return (await res.json()) as ProposalResponse;
+}
+
+export async function applyOrganisation(
+  actions: ProposalAction[],
+): Promise<ApplyResponse> {
+  const res = await authFetch(`${V1}/clusters/apply-organisation`, {
+    method: "POST",
+    body: JSON.stringify({ actions }),
+  });
+  if (!res.ok) throw await parseError(res);
+  return (await res.json()) as ApplyResponse;
+}
+
 export interface CreateTaskInput {
   title: string;
   label?: string | null;

@@ -111,14 +111,26 @@ function deriveLabel(title: string, maxChars = 14): string {
 // orbit out from there.
 const GOLDEN_ANGLE = 137.5 * (Math.PI / 180);
 
-function offsetForRank(rank: number): { x: number; y: number } {
+function offsetForRank(rank: number, baseDistance = 60, stepDistance = 12): { x: number; y: number } {
   if (rank === 0) return { x: 0, y: 0 };
   // Generous distance so even the tightest pair clears the dominant
   // bubble's radius (~10–36px) with breathing room. Each successive
   // rank adds another step outward.
   const angle = rank * GOLDEN_ANGLE;
-  const distance = 60 + (rank - 1) * 12;
+  const distance = baseDistance + (rank - 1) * stepDistance;
   return { x: Math.cos(angle) * distance, y: Math.sin(angle) * distance };
+}
+
+// Cluster bubble radius scales by sqrt of task count so a cluster with
+// 25 tasks looks ~5x bigger than one with a single task — visible
+// hierarchy without dwarfing small clusters. Clamped to a sane range
+// so 1-task clusters are still readable and 100-task clusters don't
+// eat the canvas.
+const CLUSTER_BUBBLE_MIN_R = 30;
+const CLUSTER_BUBBLE_MAX_R = 72;
+function clusterRadius(taskCount: number): number {
+  const r = CLUSTER_BUBBLE_MIN_R + Math.sqrt(Math.max(1, taskCount)) * 9;
+  return Math.min(CLUSTER_BUBBLE_MAX_R, Math.max(CLUSTER_BUBBLE_MIN_R, r));
 }
 
 export interface LayoutResult {
@@ -130,6 +142,11 @@ export function layoutUniverse(
   serverClusters: ServerCluster[],
   serverTasks: ServerTask[],
   now: Date = new Date(),
+  // When set, the layout produces "drilled" view — only this cluster's
+  // task bubbles, spread across the full canvas. When null/undefined,
+  // it produces "cluster" view — one bubble per cluster, sized by task
+  // count.
+  activeClusterId: string | null = null,
 ): LayoutResult {
   // Build canvas clusters from server clusters.
   const canvasClusters: Cluster[] = serverClusters.map((c) => {
@@ -139,9 +156,11 @@ export function layoutUniverse(
       id: c.id,
       name: c.name,
       kind,
-      // Use the kind's canonical color so the canvas stays consistent
-      // even if a user picks a clashing color in the backend.
-      color: KIND_COLORS[kind],
+      // Use the color the user picked in the cluster editor when set;
+      // fall back to the canonical kind color only when the server
+      // returned no color (legacy rows). Previously we always used
+      // KIND_COLORS which silently ignored the user's choice.
+      color: (c.color && c.color.trim().length > 0) ? c.color : KIND_COLORS[kind],
       centerX: pos.x,
       centerY: pos.y,
     };
@@ -177,32 +196,84 @@ export function layoutUniverse(
     tasksByCluster.get(targetId)!.push(t);
   }
 
-  // Convert into canvas Bubbles, sorting each cluster by pressure desc
-  // and assigning isDominant + offset by rank.
-  const bubbles: Bubble[] = [];
-  for (const cluster of canvasClusters) {
-    const tasks = tasksByCluster.get(cluster.id) ?? [];
-    tasks.sort((a, b) => b.pressure_score - a.pressure_score);
-    tasks.forEach((t, rank) => {
-      const offset = offsetForRank(rank);
-      // Prefer the server-stored label; fall back to a client-side
-      // derivation for legacy rows from before the 0005 migration.
+  // -------------------------------------------------------------------
+  // Drilled view — one cluster's tasks, spread across the full canvas
+  // -------------------------------------------------------------------
+  // When `activeClusterId` matches a known cluster, we surface ONLY
+  // that cluster's task bubbles, repositioned around the canvas center
+  // with a wider orbit so they don't pile up. The other clusters are
+  // hidden — the back overlay handles navigation.
+  if (activeClusterId && knownClusterIds.has(activeClusterId)) {
+    const focused = canvasClusters.find((c) => c.id === activeClusterId)!;
+    const tasks = (tasksByCluster.get(activeClusterId) ?? [])
+      .slice()
+      .sort((a, b) => b.pressure_score - a.pressure_score);
+
+    // Force the cluster center to canvas-middle in drilled view so
+    // the bubbles use the whole screen, not their canonical corner.
+    const drilledCluster: Cluster = {
+      ...focused,
+      centerX: 0.5,
+      centerY: 0.46,
+    };
+
+    const bubbles: Bubble[] = tasks.map((t, rank) => {
+      // Wider orbital spread than the clustered view — more screen
+      // real estate to play with when only one cluster is shown.
+      const offset = offsetForRank(rank, 110, 22);
       const label = t.label && t.label.trim().length > 0
         ? t.label.trim()
         : deriveLabel(t.title);
-      bubbles.push({
+      return {
         id: t.id,
         title: t.title,
         label,
-        clusterId: cluster.id,
+        clusterId: drilledCluster.id,
         pressureScore: t.pressure_score,
         overdue: isOverdue(t, now),
-        isDominant: rank === 0,
+        // No dominant in drilled view — the cluster name is in the
+        // header overlay, every task bubble shows its own label only.
+        isDominant: false,
         offsetX: offset.x,
         offsetY: offset.y,
-      });
+        kind: "task",
+      };
     });
+
+    return { clusters: [drilledCluster], bubbles };
   }
+
+  // -------------------------------------------------------------------
+  // Top-level cluster view — one bubble per cluster
+  // -------------------------------------------------------------------
+  const bubbles: Bubble[] = canvasClusters.map((cluster) => {
+    const tasks = tasksByCluster.get(cluster.id) ?? [];
+    const count = tasks.length;
+    // A cluster reads as "overdue" if any of its tasks are — surfaces
+    // urgency without needing to drill in. Drift is excluded so the
+    // catch-all bucket doesn't pulse just because it caught one
+    // overdue task.
+    const hasOverdue =
+      cluster.kind !== "drift" && tasks.some((t) => isOverdue(t, now));
+    return {
+      // Use the cluster's id as the bubble id so taps map directly to
+      // enterCluster without a lookup.
+      id: cluster.id,
+      // Title is the cluster name; falls through to label for any
+      // place that reads from `title`.
+      title: cluster.name,
+      label: cluster.name,
+      clusterId: cluster.id,
+      pressureScore: 0, // unused for cluster bubbles
+      overdue: hasOverdue,
+      isDominant: false,
+      offsetX: 0,
+      offsetY: 0,
+      kind: "cluster",
+      radius: clusterRadius(count),
+      taskCount: count,
+    };
+  });
 
   return { clusters: canvasClusters, bubbles };
 }

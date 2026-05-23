@@ -8,7 +8,12 @@
 import { create } from "zustand";
 
 import type { Bubble, Cluster } from "@/components/universe/types";
-import { listClusters, listTasks, type ServerTask } from "@/services/api";
+import {
+  listClusters,
+  listTasks,
+  type ServerCluster,
+  type ServerTask,
+} from "@/services/api";
 import { layoutUniverse } from "@/services/universeLayout";
 
 export type UniverseStatus = "idle" | "loading" | "ready" | "error";
@@ -21,40 +26,20 @@ interface UniverseState {
   // Holds the raw server tasks so addTask() / replaceTask() / removeTask()
   // can recompute layout without a second network round-trip.
   serverTasks: ServerTask[];
+  // Also kept so the cluster-only top view and the drilled task view
+  // can both be rebuilt without re-fetching. Layout is recomputed any
+  // time activeClusterId changes.
+  serverClusters: ServerCluster[];
+  // null = top-level cluster view; a cluster id = drilled view showing
+  // only that cluster's tasks.
+  activeClusterId: string | null;
   hydrate: () => Promise<void>;
   addTask: (task: ServerTask) => void;
   replaceTask: (task: ServerTask) => void;
   removeTask: (taskId: string) => void;
   getServerTask: (taskId: string) => ServerTask | undefined;
-}
-
-// Server-cluster reconstruction used by every mutating action. We keep
-// the cluster shapes around in canvas form only; rebuilding the wire
-// shape for the layout pass is cheap and avoids re-fetching.
-function clustersToServerShape(canvas: Cluster[]): Array<{
-  id: string;
-  owner_id: string;
-  name: string;
-  summary: string | null;
-  color: string;
-  weight_score: number;
-  active_count: number;
-  parent_cluster_id: string | null;
-  created_at: string;
-}> {
-  return canvas
-    .filter((c) => c.id !== "synthetic-drift")
-    .map((c) => ({
-      id: c.id,
-      owner_id: "",
-      name: c.name,
-      summary: null,
-      color: c.color,
-      weight_score: 0,
-      active_count: 0,
-      parent_cluster_id: null,
-      created_at: "",
-    }));
+  enterCluster: (clusterId: string) => void;
+  exitCluster: () => void;
 }
 
 export const useUniverseStore = create<UniverseState>((set, get) => ({
@@ -63,18 +48,22 @@ export const useUniverseStore = create<UniverseState>((set, get) => ({
   clusters: [],
   bubbles: [],
   serverTasks: [],
+  serverClusters: [],
+  activeClusterId: null,
 
   hydrate: async () => {
     set({ status: "loading", errorMessage: null });
     try {
       const [tasks, clusters] = await Promise.all([listTasks(), listClusters()]);
-      const layout = layoutUniverse(clusters, tasks);
+      const { activeClusterId } = get();
+      const layout = layoutUniverse(clusters, tasks, new Date(), activeClusterId);
       set({
         status: "ready",
         errorMessage: null,
         clusters: layout.clusters,
         bubbles: layout.bubbles,
         serverTasks: tasks,
+        serverClusters: clusters,
       });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -84,6 +73,7 @@ export const useUniverseStore = create<UniverseState>((set, get) => ({
         clusters: [],
         bubbles: [],
         serverTasks: [],
+        serverClusters: [],
       });
     }
   },
@@ -92,9 +82,9 @@ export const useUniverseStore = create<UniverseState>((set, get) => ({
     // Recompute layout with the new task prepended. The full layout pass
     // is cheap (a few sorts over a small array) and guarantees the canvas
     // matches what a fresh hydrate() would produce.
-    const { serverTasks, clusters } = get();
+    const { serverTasks, serverClusters, activeClusterId } = get();
     const nextTasks = [task, ...serverTasks];
-    const layout = layoutUniverse(clustersToServerShape(clusters), nextTasks);
+    const layout = layoutUniverse(serverClusters, nextTasks, new Date(), activeClusterId);
     set({
       serverTasks: nextTasks,
       clusters: layout.clusters,
@@ -106,9 +96,9 @@ export const useUniverseStore = create<UniverseState>((set, get) => ({
     // Swap the existing record (by id) with an updated copy. If the new
     // status is no longer 'active', layoutUniverse will naturally drop
     // it from the bubble list since it only renders active tasks.
-    const { serverTasks, clusters } = get();
+    const { serverTasks, serverClusters, activeClusterId } = get();
     const nextTasks = serverTasks.map((t) => (t.id === task.id ? task : t));
-    const layout = layoutUniverse(clustersToServerShape(clusters), nextTasks);
+    const layout = layoutUniverse(serverClusters, nextTasks, new Date(), activeClusterId);
     set({
       serverTasks: nextTasks,
       clusters: layout.clusters,
@@ -117,9 +107,9 @@ export const useUniverseStore = create<UniverseState>((set, get) => ({
   },
 
   removeTask: (taskId) => {
-    const { serverTasks, clusters } = get();
+    const { serverTasks, serverClusters, activeClusterId } = get();
     const nextTasks = serverTasks.filter((t) => t.id !== taskId);
-    const layout = layoutUniverse(clustersToServerShape(clusters), nextTasks);
+    const layout = layoutUniverse(serverClusters, nextTasks, new Date(), activeClusterId);
     set({
       serverTasks: nextTasks,
       clusters: layout.clusters,
@@ -128,4 +118,26 @@ export const useUniverseStore = create<UniverseState>((set, get) => ({
   },
 
   getServerTask: (taskId) => get().serverTasks.find((t) => t.id === taskId),
+
+  enterCluster: (clusterId) => {
+    // Switching to drilled view — rebuild layout with the active id so
+    // the canvas sees the task bubbles for just that cluster.
+    const { serverTasks, serverClusters } = get();
+    const layout = layoutUniverse(serverClusters, serverTasks, new Date(), clusterId);
+    set({
+      activeClusterId: clusterId,
+      clusters: layout.clusters,
+      bubbles: layout.bubbles,
+    });
+  },
+
+  exitCluster: () => {
+    const { serverTasks, serverClusters } = get();
+    const layout = layoutUniverse(serverClusters, serverTasks, new Date(), null);
+    set({
+      activeClusterId: null,
+      clusters: layout.clusters,
+      bubbles: layout.bubbles,
+    });
+  },
 }));

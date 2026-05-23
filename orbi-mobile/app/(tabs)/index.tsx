@@ -1,6 +1,8 @@
-// Universe tab — the bubble canvas + a top status strip showing the
-// daily quota (mocked for now) and a /health connectivity badge.
+// Universe tab — the bubble canvas, the floating action menu, and a
+// minimal header with a profile-icon shortcut into Settings. Backend
+// health used to live up here; it now lives in Settings → Status.
 
+import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { useFocusEffect, useRouter, type Href } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -10,6 +12,12 @@ import {
   Text,
   View,
 } from "react-native";
+import Animated, {
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import BubbleCanvas from "@/components/universe/BubbleCanvas";
@@ -18,7 +26,6 @@ import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
 import {
   ApiError,
   chatMessage,
-  getHealth,
   isQuotaError,
   transcribeAudio,
 } from "@/services/api";
@@ -27,11 +34,6 @@ import { useAuthStore, type SubscriptionTier } from "@/stores/authStore";
 import { useUniverseStore } from "@/stores/universeStore";
 import { useUsageStore } from "@/stores/usageStore";
 import { colors } from "@/theme/colors";
-
-type HealthBadge =
-  | { status: "loading" }
-  | { status: "ok"; app: string }
-  | { status: "error"; message: string };
 
 // Internal DB values stay 'free'|'pro'|'premium'; marketing names appear here.
 const TIER_LABEL: Record<SubscriptionTier, string> = {
@@ -49,11 +51,11 @@ export default function UniverseScreen() {
   const tier = useAuthStore((s) => s.tier);
   const universeStatus = useUniverseStore((s) => s.status);
   const bubblesCount = useUniverseStore((s) => s.bubbles.length);
+  const activeClusterId = useUniverseStore((s) => s.activeClusterId);
   const errorMessage = useUniverseStore((s) => s.errorMessage);
   const hydrate = useUniverseStore((s) => s.hydrate);
   const usage = useUsageStore((s) => s.usage);
   const hydrateUsage = useUsageStore((s) => s.hydrate);
-  const [health, setHealth] = useState<HealthBadge>({ status: "loading" });
 
   const bubbleGate = canCreateBubble({ tier, bubbleCount: bubblesCount });
   const aiCapHit = isAtAiCap(usage);
@@ -95,15 +97,6 @@ export default function UniverseScreen() {
   const [voiceStage, setVoiceStage] = useState<"idle" | "processing">("idle");
   const [voiceError, setVoiceError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    getHealth()
-      .then((r) => !cancelled && setHealth({ status: "ok", app: r.app }))
-      .catch((e) => !cancelled && setHealth({ status: "error", message: String(e.message ?? e) }));
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   // Pull tasks + clusters once on mount. The store guards against
   // re-entry via its own status flag — but cheap to call again on a
@@ -200,12 +193,78 @@ export default function UniverseScreen() {
     }
   };
 
-  const onPlusPress = () => {
+  // ----- Arc create menu -------------------------------------------------
+  // Tapping + no longer routes straight to the task form — it now
+  // toggles a small arc menu with two options (Task / Cluster) so
+  // users can pick without leaving the canvas. Long-press still works
+  // as a power-user shortcut to skip the menu.
+  const [arcOpen, setArcOpen] = useState(false);
+  const arcProgress = useSharedValue(0);
+
+  const closeArc = () => {
+    arcProgress.value = withTiming(0, { duration: 140 }, (finished) => {
+      if (finished) runOnJS(setArcOpen)(false);
+    });
+  };
+  const openArc = () => {
+    setArcOpen(true);
+    arcProgress.value = withTiming(1, { duration: 200 });
+  };
+  const togglePlus = () => {
+    if (arcOpen) closeArc();
+    else openArc();
+  };
+
+  const goNewTask = () => {
+    closeArc();
     if (!bubbleGate.allowed) {
       setVoiceError(bubbleGate.hint);
       return;
     }
     router.push("/new-task" as Href);
+  };
+  const goNewCluster = () => {
+    closeArc();
+    router.push("/cluster-editor?id=new" as Href);
+  };
+
+  // Long-press → skip the menu, go straight to new cluster (the less
+  // common action — long-press feels right for the shortcut).
+  const onPlusLongPress = () => {
+    router.push("/cluster-editor?id=new" as Href);
+  };
+
+  // + spins to a × when the arc is open. Same shared value drives
+  // both the spin and the arc-button entry animations.
+  const plusIconStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${arcProgress.value * 45}deg` }],
+  }));
+  // Arc buttons fade + scale in. The translate component carries them
+  // up/up-left from + as the progress climbs, giving the arc reveal.
+  const taskArcStyle = useAnimatedStyle(() => ({
+    opacity: arcProgress.value,
+    transform: [
+      { translateX: (1 - arcProgress.value) * 22 },
+      { translateY: (1 - arcProgress.value) * 50 },
+      { scale: 0.6 + arcProgress.value * 0.4 },
+    ],
+  }));
+  const clusterArcStyle = useAnimatedStyle(() => ({
+    opacity: arcProgress.value,
+    transform: [
+      { translateX: (1 - arcProgress.value) * 60 },
+      { translateY: (1 - arcProgress.value) * 60 },
+      { scale: 0.6 + arcProgress.value * 0.4 },
+    ],
+  }));
+
+  // Long-press on a cluster bubble → open the editor for that
+  // cluster. Drift is filtered out because it's synthetic — the
+  // editor will refuse it anyway, but blocking here avoids a
+  // confusing navigation.
+  const onClusterLongPress = (clusterId: string) => {
+    if (clusterId === "synthetic-drift") return;
+    router.push({ pathname: "/cluster-editor", params: { id: clusterId } });
   };
 
   const onTierPress = () => {
@@ -216,12 +275,27 @@ export default function UniverseScreen() {
     <SafeAreaView style={styles.root} edges={["top"]}>
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Text style={styles.date}>Today</Text>
+          <Pressable
+            onPress={onTierPress}
+            hitSlop={12}
+            style={styles.profileBtn}
+            accessibilityLabel="Open Settings"
+          >
+            <MaterialIcons
+              name="account-circle"
+              size={28}
+              color={colors.ink}
+            />
+          </Pressable>
+          {/* Tier still shows as a label next to the profile icon so
+              the user can see which plan they're on at a glance.
+              Backend health moved into Settings → Status to free up
+              the canvas header. */}
           <Pressable
             onPress={onTierPress}
             hitSlop={12}
             style={styles.tierPill}
-            accessibilityLabel="Settings"
+            accessibilityLabel="Subscription tier"
           >
             <Text style={styles.tierPillText}>{TIER_LABEL[tier]}</Text>
           </Pressable>
@@ -231,7 +305,6 @@ export default function UniverseScreen() {
             </Text>
           ) : null}
         </View>
-        <HealthChip health={health} />
       </View>
 
       <View style={styles.canvasWrap}>
@@ -247,10 +320,18 @@ export default function UniverseScreen() {
               <Text style={styles.retryText}>Retry</Text>
             </Pressable>
           </View>
-        ) : bubblesCount === 0 ? (
+        ) : bubblesCount === 0 && !activeClusterId ? (
+          // Full empty state only fires at the top level. When the user
+          // is drilled into an empty cluster we still render BubbleCanvas
+          // so the back overlay (and an inline "no tasks yet" hint) is
+          // visible — otherwise they'd be stranded with no way out.
           <EmptyState />
         ) : (
           <BubbleCanvas
+            onClusterLongPress={onClusterLongPress}
+            onEditFocusedCluster={(clusterId) =>
+              router.push({ pathname: "/cluster-editor", params: { id: clusterId } })
+            }
             onBubbleTap={(taskId) => {
               // Two guards:
               //   1. navLocked — set whenever a detail modal is up or
@@ -298,7 +379,50 @@ export default function UniverseScreen() {
           </Pressable>
         ) : null}
 
-        <View style={styles.fabRow}>
+        {/* Tap-anywhere backdrop — only mounted when the arc is open.
+            Lets the user tap outside the buttons to dismiss the menu
+            without selecting anything. Sits above the canvas but
+            below the FAB row so taps on +/mic still work. */}
+        {arcOpen ? (
+          <Pressable
+            onPress={closeArc}
+            style={StyleSheet.absoluteFill}
+            accessibilityLabel="Close create menu"
+          />
+        ) : null}
+
+        <View style={styles.fabRow} pointerEvents="box-none">
+          {/* Arc menu — absolutely positioned above + when open. We
+              mount the buttons unconditionally so their animations
+              run on the same shared value, but pointerEvents="none"
+              while closed makes them ignore taps. */}
+          <Animated.View
+            style={[styles.arcButtonTask, taskArcStyle]}
+            pointerEvents={arcOpen ? "auto" : "none"}
+          >
+            <Pressable onPress={goNewTask} style={styles.arcInner}>
+              <MaterialIcons name="add-task" size={22} color={colors.ink} />
+            </Pressable>
+            <Text style={styles.arcLabel}>Task</Text>
+          </Animated.View>
+          <Animated.View
+            style={[styles.arcButtonCluster, clusterArcStyle]}
+            pointerEvents={arcOpen ? "auto" : "none"}
+          >
+            <Pressable onPress={goNewCluster} style={styles.arcInner}>
+              <MaterialIcons name="bubble-chart" size={22} color={colors.ink} />
+            </Pressable>
+            <Text style={styles.arcLabel}>Cluster</Text>
+          </Animated.View>
+
+          <Pressable
+            onPress={() => router.push("/cluster-proposal" as Href)}
+            style={styles.fabOrganise}
+            hitSlop={6}
+            accessibilityLabel="Organise clusters"
+          >
+            <MaterialIcons name="auto-awesome" size={20} color={colors.inkDim} />
+          </Pressable>
           <Pressable
             onPressIn={onMicPressIn}
             onPressOut={onMicPressOut}
@@ -315,30 +439,17 @@ export default function UniverseScreen() {
           </Pressable>
 
           <Pressable
-            onPress={onPlusPress}
+            onPress={togglePlus}
+            onLongPress={onPlusLongPress}
             style={[styles.fabAdd, plusDisabled && styles.fabDisabled]}
             hitSlop={8}
-            accessibilityLabel="Add task"
+            accessibilityLabel={arcOpen ? "Close create menu" : "Create"}
           >
-            <Text style={styles.fabPlus}>+</Text>
+            <Animated.Text style={[styles.fabPlus, plusIconStyle]}>+</Animated.Text>
           </Pressable>
         </View>
       </View>
     </SafeAreaView>
-  );
-}
-
-function HealthChip({ health }: { health: HealthBadge }) {
-  if (health.status === "loading") {
-    return <Text style={styles.healthDim}>connecting…</Text>;
-  }
-  if (health.status === "ok") {
-    return <Text style={styles.healthOk}>● backend ok</Text>;
-  }
-  return (
-    <Text style={styles.healthErr} numberOfLines={1}>
-      ● backend unreachable
-    </Text>
   );
 }
 
@@ -352,7 +463,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   headerLeft: { flexDirection: "row", alignItems: "center", gap: 8 },
-  date: { color: colors.ink, fontSize: 14, fontWeight: "600" },
+  profileBtn: { padding: 2 },
   tierPill: {
     paddingHorizontal: 8,
     paddingVertical: 2,
@@ -362,9 +473,6 @@ const styles = StyleSheet.create({
   tierPillText: { color: "white", fontSize: 9, fontWeight: "700", letterSpacing: 1 },
   turnsChip: { color: colors.inkDim, fontSize: 11, fontWeight: "500", marginLeft: 4 },
   turnsChipFull: { color: colors.overdue, fontWeight: "700" },
-  healthOk: { color: colors.health, fontSize: 10 },
-  healthDim: { color: colors.inkDim, fontSize: 10 },
-  healthErr: { color: colors.overdue, fontSize: 10 },
   canvasWrap: { flex: 1, position: "relative" },
   centered: { flex: 1, justifyContent: "center", alignItems: "center", padding: 24 },
   errorTitle: { color: colors.overdue, fontSize: 15, fontWeight: "600", marginBottom: 6 },
@@ -385,6 +493,23 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
+  },
+  // Tertiary action — smaller and quieter than the primary FAB pair
+  // so it doesn't compete visually with the + and mic.
+  fabOrganise: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: colors.panel,
+    borderColor: colors.line,
+    borderWidth: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 4,
   },
   fabMic: {
     width: 56,
@@ -418,6 +543,48 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   fabPlus: { color: "white", fontSize: 28, fontWeight: "300", marginTop: -2 },
+  // Arc menu — buttons fan up + up-left from the + FAB. Positioned
+  // absolutely relative to fabRow so they sit above the canvas. Each
+  // wrapper holds the circular button + a small label below.
+  arcButtonTask: {
+    position: "absolute",
+    bottom: 80,
+    right: 6,
+    alignItems: "center",
+    width: 56,
+  },
+  arcButtonCluster: {
+    position: "absolute",
+    bottom: 64,
+    right: 70,
+    alignItems: "center",
+    width: 56,
+  },
+  arcInner: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: colors.panel,
+    borderColor: colors.line,
+    borderWidth: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 5,
+  },
+  arcLabel: {
+    color: colors.ink,
+    fontSize: 10,
+    fontWeight: "600",
+    marginTop: 4,
+    textAlign: "center",
+    textShadowColor: "rgba(0,0,0,0.7)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
   // Recording state pill — bottom-center, above the FAB row
   recordingPill: {
     position: "absolute",

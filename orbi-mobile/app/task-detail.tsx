@@ -323,28 +323,11 @@ export default function TaskDetailScreen() {
               <Text style={styles.editLinkText}>Edit</Text>
             </Pressable>
           ) : (
-            // Hold-to-dictate mic replaces the Edit link in edit mode.
-            // The mic icon turns red while recording so it's clear when
-            // it's listening.
-            <Pressable
-              onPressIn={onMicPressIn}
-              onPressOut={onMicPressOut}
-              disabled={voiceBusy}
-              hitSlop={12}
-              style={[
-                styles.headerSideRight,
-                styles.micButton,
-                voice.isRecording && styles.micButtonActive,
-                voiceBusy && styles.micButtonBusy,
-              ]}
-              accessibilityLabel="Hold to dictate title"
-            >
-              {voiceBusy ? (
-                <ActivityIndicator color={colors.ink} />
-              ) : (
-                <Text style={styles.micText}>🎙</Text>
-              )}
-            </Pressable>
+            // In edit mode the mic moved to its own circular button
+            // centered above the action buttons (see footer block).
+            // We leave a sized spacer here so the header title stays
+            // visually centered.
+            <View style={styles.headerSideRight} />
           )}
         </View>
 
@@ -497,6 +480,33 @@ export default function TaskDetailScreen() {
           {error ? <Text style={styles.error}>{error}</Text> : null}
           {voiceError ? <Text style={styles.error}>{voiceError}</Text> : null}
         </ScrollView>
+
+        {/* Edit-mode mic — sits in its OWN row above the footer's
+            top border so it floats just above the "Cancel | Save"
+            divider line. Used to live inside the footer; the new
+            position is closer to what Lucas asked for. */}
+        {mode === "edit" ? (
+          <View style={styles.micRow}>
+            <Pressable
+              onPressIn={onMicPressIn}
+              onPressOut={onMicPressOut}
+              disabled={voiceBusy}
+              hitSlop={8}
+              style={[
+                styles.micCircle,
+                voice.isRecording && styles.micCircleActive,
+                voiceBusy && styles.micButtonBusy,
+              ]}
+              accessibilityLabel="Hold to dictate task update"
+            >
+              {voiceBusy ? (
+                <ActivityIndicator color={colors.ink} />
+              ) : (
+                <Text style={styles.micText}>🎙</Text>
+              )}
+            </Pressable>
+          </View>
+        ) : null}
 
         <View style={styles.footer}>
           {mode === "view" ? (
@@ -726,6 +736,27 @@ const styles = StyleSheet.create({
     borderTopColor: colors.line,
     borderTopWidth: 1,
     backgroundColor: colors.canvas,
+  },
+  // Mic sits in the body flow above the footer's top border line,
+  // not inside the footer itself. Some bottom padding gives it
+  // breathing room above the divider.
+  micRow: {
+    alignItems: "center",
+    paddingBottom: 12,
+  },
+  micCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    borderColor: colors.line,
+    borderWidth: 1.5,
+    backgroundColor: colors.panel,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  micCircleActive: {
+    borderColor: colors.overdue,
+    backgroundColor: "rgba(255, 77, 109, 0.15)",
   },
   primaryBtn: {
     flex: 2,

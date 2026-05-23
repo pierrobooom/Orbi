@@ -11,9 +11,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from typing import Optional
 
-from app.db import clusters as clusters_db
+from app.agents.cluster_manager import propose_organisation
+from app.db import clusters as clusters_db, tasks as tasks_db
 from app.models.task import Cluster
-from app.services.auth import get_current_user
+from app.services.auth import get_current_user, get_current_user_with_tier
+from app.services.cluster_apply import apply_organisation
 
 router = APIRouter(prefix="/clusters", tags=["clusters"])
 
@@ -63,6 +65,122 @@ async def create_cluster(
     }
     row = await clusters_db.insert_cluster(payload)
     return row
+
+
+# ---------------------------------------------------------------------------
+# Auto-organisation — LLM-driven proposal / apply pair
+#
+# These static-path POSTs MUST be declared before the /{cluster_id}
+# routes below. FastAPI matches routes in registration order; a path
+# like /clusters/auto-organize would otherwise be captured by the
+# /{cluster_id} pattern (which only registers GET/PATCH/DELETE) and the
+# server would return 405 Method Not Allowed instead of routing here.
+# ---------------------------------------------------------------------------
+
+class ProposalAction(BaseModel):
+    """A single reorganisation action. Shape varies by `type`; the
+    cluster_manager agent validates the structure per type already, so
+    this is just a permissive carrier the mobile can echo back."""
+
+    type: str
+    name: Optional[str] = None
+    color: Optional[str] = None
+    new_name: Optional[str] = None
+    cluster_id: Optional[UUID] = None
+    source_id: Optional[UUID] = None
+    target_id: Optional[UUID] = None
+    task_ids: list[UUID] = []
+    reason: Optional[str] = None
+
+
+class ProposalResponse(BaseModel):
+    actions: list[ProposalAction]
+
+
+class ApplyRequest(BaseModel):
+    actions: list[ProposalAction]
+
+
+class ApplyResponse(BaseModel):
+    # Counts per action type, plus a list of any actions that were
+    # skipped during validation. Mobile uses this for the toast and to
+    # decide whether to refetch the universe.
+    applied: dict[str, int]
+    skipped: list[dict]
+
+
+@router.post("/auto-organize", response_model=ProposalResponse)
+async def auto_organize(auth: dict = Depends(get_current_user_with_tier)):
+    """Generate a reorganisation proposal for the caller's universe.
+
+    Read-only. The mobile reviews each action with a checkbox and only
+    approved actions reach /apply-organisation. We send the full
+    cluster + task state to the LLM each call; this is one AI turn
+    against the daily cap.
+    """
+    user_id = auth["user_id"]
+    user_tier = auth["tier"]
+
+    cluster_rows = await clusters_db.fetch_clusters_for_user(user_id)
+    task_rows = await tasks_db.fetch_tasks_for_user(user_id)
+
+    # Trim each row to just the fields the agent needs. Saves tokens
+    # and avoids leaking timestamps / scores into the prompt context.
+    cluster_payload = [
+        {
+            "id": str(c["id"]),
+            "name": c.get("name"),
+            "task_count": sum(
+                1 for t in task_rows
+                if str(t.get("parent_cluster_id") or "") == str(c["id"])
+            ),
+        }
+        for c in cluster_rows
+    ]
+    task_payload = [
+        {
+            "id": str(t["id"]),
+            "title": t.get("title"),
+            "label": t.get("label"),
+            "domain_hint": t.get("domain_hint"),
+            "parent_cluster_id": str(t["parent_cluster_id"]) if t.get("parent_cluster_id") else None,
+        }
+        for t in task_rows
+    ]
+
+    result = await propose_organisation(
+        clusters=cluster_payload,
+        tasks=task_payload,
+        user_id=user_id,
+        user_tier=user_tier,
+    )
+    return ProposalResponse(**result)
+
+
+@router.post("/apply-organisation", response_model=ApplyResponse)
+async def apply_organisation_route(
+    body: ApplyRequest,
+    user_id: UUID = Depends(get_current_user),
+):
+    """Apply the subset of proposal actions the user approved.
+
+    Server re-validates every id against the caller's data. Actions
+    that fail validation are silently skipped and surfaced in the
+    response's `skipped` list. The mobile refetches clusters + tasks
+    after this to redraw the canvas.
+    """
+    # Convert ProposalAction models back to plain dicts for the apply
+    # service — the service treats them as best-effort dicts so the
+    # shape stays loose and forward-compatible.
+    raw_actions = [a.model_dump(mode="json", exclude_none=False) for a in body.actions]
+    summary = await apply_organisation(raw_actions, user_id)
+    return ApplyResponse(**summary)
+
+
+# ---------------------------------------------------------------------------
+# Path-parameter routes — declared AFTER the static auto-organisation
+# paths so the /clusters/auto-organize POST isn't shadowed by /{cluster_id}.
+# ---------------------------------------------------------------------------
 
 
 @router.get("/{cluster_id}", response_model=Cluster)

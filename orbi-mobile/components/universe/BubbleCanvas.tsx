@@ -10,17 +10,27 @@
 // Higher pressure_score = bigger wiggle, so urgent bubbles read as restless
 // even before you notice their size or color.
 
-import React, { useEffect, useMemo, useRef } from "react";
-import { StyleSheet, useWindowDimensions, View } from "react-native";
+import MaterialIcons from "@expo/vector-icons/MaterialIcons";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import {
   Canvas,
   Circle,
   Group,
 } from "@shopify/react-native-skia";
-import {
+import Animated, {
+  Easing,
+  Keyframe,
+  runOnJS,
+  useAnimatedReaction,
+  useAnimatedStyle,
   useSharedValue,
   useDerivedValue,
   useFrameCallback,
+  withDecay,
+  withSpring,
+  withTiming,
   type SharedValue,
 } from "react-native-reanimated";
 
@@ -115,6 +125,16 @@ function shortLabel(title: string, maxChars: number = 14): string {
   return out;
 }
 
+// Resolve a bubble's display radius. Cluster bubbles carry an
+// explicit `radius` (set by the layout pass from sqrt(task count));
+// task bubbles fall back to the pressure-based calc. Overdue boost
+// only applies in task mode — pulsing the whole cluster bubble would
+// be noisy when many clusters have at least one overdue task.
+function radiusFor(b: Bubble): number {
+  if (b.radius !== undefined) return b.radius;
+  return pressureToRadius(b.pressureScore) + (b.overdue ? OVERDUE_RADIUS_BOOST : 0);
+}
+
 function buildInitialStates(
   bubbles: Bubble[],
   clusters: Cluster[],
@@ -136,24 +156,34 @@ function buildInitialStates(
       ty,
       // r is the collision radius — include the overdue boost so the
       // physics hitbox matches what the user sees.
-      r: pressureToRadius(b.pressureScore) + (b.overdue ? OVERDUE_RADIUS_BOOST : 0),
-      // Brownian amplitude. Slightly wider than the first calm pass —
-      // bubbles felt tethered too tightly before. Still gentle, the
-      // step coefficient in the worklet (wiggleScale) keeps per-frame
-      // motion small so the wider amplitude reads as drift, not jitter.
-      wiggle: 0.14 + (b.pressureScore / 10) * 0.3,
+      r: radiusFor(b),
+      // Brownian amplitude. Cluster bubbles drift more slowly than
+      // tasks (lower per-frame wiggle) so the top-level view feels
+      // calm and inspectable.
+      wiggle: b.kind === "cluster"
+        ? 0.08
+        : 0.14 + (b.pressureScore / 10) * 0.3,
     };
   });
 }
 
 interface BubbleCanvasProps {
-  // Called when the user taps a bubble. Receives the underlying task id
-  // (which is also the bubble id — they're one-to-one). Optional so the
-  // canvas remains usable in read-only contexts.
+  // Called when the user taps a task bubble. Receives the underlying
+  // task id (which is also the bubble id — they're one-to-one).
+  // Optional so the canvas remains usable in read-only contexts.
   onBubbleTap?: (taskId: string) => void;
+  // Called when the user long-presses a CLUSTER bubble (top-level
+  // view). The universe screen wires this up to open the cluster
+  // editor. Long-press on a task bubble is intentionally ignored.
+  onClusterLongPress?: (clusterId: string) => void;
+  // Called when the user taps the pencil in the drilled-view back
+  // overlay. Lets the parent open the cluster editor for the
+  // currently focused cluster without the canvas needing to know
+  // about navigation.
+  onEditFocusedCluster?: (clusterId: string) => void;
 }
 
-export default function BubbleCanvas({ onBubbleTap }: BubbleCanvasProps = {}) {
+export default function BubbleCanvas({ onBubbleTap, onClusterLongPress, onEditFocusedCluster }: BubbleCanvasProps = {}) {
   const { width, height } = useWindowDimensions();
   // Approximate canvas height — leaves room for the header strip + tab bar.
   // Actual layout will be tightened once those components ship.
@@ -161,23 +191,347 @@ export default function BubbleCanvas({ onBubbleTap }: BubbleCanvasProps = {}) {
 
   const clusters = useUniverseStore((s) => s.clusters);
   const bubbles = useUniverseStore((s) => s.bubbles);
+  const activeClusterId = useUniverseStore((s) => s.activeClusterId);
+  const enterCluster = useUniverseStore((s) => s.enterCluster);
+  const exitCluster = useUniverseStore((s) => s.exitCluster);
 
+  // The drilled view shows the focused cluster's name + back arrow at
+  // the top of the canvas. When active, taps on cluster bubbles open
+  // that cluster's task view; otherwise they open the task detail.
+  const focusedCluster = activeClusterId
+    ? clusters.find((c) => c.id === activeClusterId) ?? null
+    : null;
+
+  // ----- Zoom transition --------------------------------------------------
+  // We rely on Reanimated layout animations. The wrapping Animated.View
+  // is keyed on activeClusterId, so when the view changes the OLD
+  // subtree plays its exiting keyframe and unmounts cleanly while the
+  // NEW subtree mounts fresh with its own physics state — no shared
+  // state to go stale between them.
+  //
+  // We DO need to gate taps for the animation window: with crossfade,
+  // a rapid second tap before the first transition finishes leaves
+  // multiple subtrees stacked, and their hit areas / labels conflict
+  // with each other. The ref-based guard below drops any tap that
+  // arrives while a transition is still in flight.
+  const enterAnimation = useMemo(
+    () =>
+      new Keyframe({
+        0:   { opacity: 0, transform: [{ scale: 0.78 }] },
+        100: { opacity: 1, transform: [{ scale: 1    }] },
+      }).duration(280),
+    [],
+  );
+  const exitAnimation = useMemo(
+    () =>
+      new Keyframe({
+        0:   { opacity: 1, transform: [{ scale: 1    }] },
+        100: { opacity: 0, transform: [{ scale: 1.25 }] },
+      }).duration(220),
+    [],
+  );
+
+  // ----- Universe pan (horizontal scroll + elastic edges) --------------
+  // The universe is 120% of the screen width — 10% margin on each side
+  // populated by stars so the canvas always feels a little bigger than
+  // what fits in view. As the cluster count grows, future code can
+  // bump `universeWidth` higher and the gesture math below scales
+  // automatically. The math:
+  //   - target = pan-start offset + finger translation
+  //   - inside the bounds [-maxPan, maxPan], panX tracks target 1:1
+  //   - past a bound, the overshoot is tanh-clamped to ~60px so the
+  //     stretch feels rubbery and has a clear ceiling
+  //   - on release, withSpring pulls panX back to the nearest bound
+  const universeWidth = width * 1.2;
+  const overshoot = (universeWidth - width) / 2;
+  const maxPan = overshoot;
+  const ELASTIC_LIMIT = 60;
+
+  const panX = useSharedValue(0);
+  const panStart = useSharedValue(0);
+
+  const pan = Gesture.Pan()
+    .activeOffsetX([-10, 10]) // don't fight per-bubble taps
+    .onStart(() => {
+      "worklet";
+      panStart.value = panX.value;
+    })
+    .onUpdate((e) => {
+      "worklet";
+      // Linear elastic — fingers feel the resistance after the bound,
+      // but the math is just a fixed-ratio reduction instead of tanh.
+      // tanh is fine but at 120Hz touch sampling the cheaper version
+      // adds up on the UI thread budget.
+      const target = panStart.value + e.translationX;
+      if (target > maxPan) {
+        const overshoot = target - maxPan;
+        panX.value = maxPan + Math.min(ELASTIC_LIMIT, overshoot * 0.35);
+      } else if (target < -maxPan) {
+        const overshoot = -maxPan - target;
+        panX.value = -maxPan - Math.min(ELASTIC_LIMIT, overshoot * 0.35);
+      } else {
+        panX.value = target;
+      }
+    })
+    .onEnd((e) => {
+      "worklet";
+      // Single-stage decay with built-in rubber band at the clamp.
+      // Reanimated handles the elastic + spring-back internally; no
+      // need to chain a second animation, which keeps the worklet
+      // count low and the flick frame rate steady.
+      const VELOCITY_CAP = 700;
+      const capped =
+        Math.sign(e.velocityX) *
+        Math.min(Math.abs(e.velocityX), VELOCITY_CAP);
+      panX.value = withDecay({
+        velocity: capped,
+        deceleration: 0.985,
+        clamp: [-maxPan, maxPan],
+        rubberBandEffect: true,
+        rubberBandFactor: 0.65,
+      });
+    });
+
+  const panStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: panX.value }],
+  }));
+
+  // Reset pan whenever we enter / exit a cluster — keeps drilled view
+  // centered and gives a clean canvas when returning to top-level.
+  // withTiming + ease-out so there's no bouncy spring at the end.
+  useEffect(() => {
+    panX.value = withTiming(0, {
+      duration: 320,
+      easing: Easing.out(Easing.cubic),
+    });
+  }, [activeClusterId, panX]);
+
+  // Show a small "re-center" pill any time the user has moved the
+  // canvas more than ~20px from origin. Inspired by Google Maps. Only
+  // surfaces in the top-level cluster view (the drilled view doesn't
+  // pan, so the pill would be a no-op).
+  const [showRecenter, setShowRecenter] = useState(false);
+  useAnimatedReaction(
+    () => Math.abs(panX.value) > 20,
+    (current, previous) => {
+      if (current !== previous) {
+        runOnJS(setShowRecenter)(current);
+      }
+    },
+    [],
+  );
+  const recenter = () => {
+    // Pure ease-out deceleration into the center — no spring bounce.
+    // Cubic easing gives a clearly visible slowdown as it approaches
+    // 0, matching the "decelerating toward the middle" feel.
+    panX.value = withTiming(0, {
+      duration: 420,
+      easing: Easing.out(Easing.cubic),
+    });
+  };
+
+  // Slightly longer than the longest animation (280ms enter) so the
+  // crossfade fully resolves before another transition can start.
+  const TRANSITION_LOCK_MS = 320;
+  const transitioningRef = useRef(false);
+  const guardedEnter = (clusterId: string) => {
+    if (transitioningRef.current) return;
+    transitioningRef.current = true;
+    enterCluster(clusterId);
+    setTimeout(() => {
+      transitioningRef.current = false;
+    }, TRANSITION_LOCK_MS);
+  };
+  const guardedExit = () => {
+    if (transitioningRef.current) return;
+    transitioningRef.current = true;
+    exitCluster();
+    setTimeout(() => {
+      transitioningRef.current = false;
+    }, TRANSITION_LOCK_MS);
+  };
+
+  return (
+    <View style={styles.root}>
+     {/* Pan wrapper sits OUTSIDE the keyed animated view so the
+         pan offset survives the zoom transition (panning while you
+         enter a cluster would otherwise reset awkwardly). Drilled
+         view is centered (the useEffect above springs panX to 0). */}
+     <GestureDetector gesture={pan}>
+      <Animated.View style={[StyleSheet.absoluteFill, panStyle]}>
+       <Animated.View
+         key={activeClusterId ?? "top"}
+         entering={enterAnimation}
+         exiting={exitAnimation}
+         style={StyleSheet.absoluteFill}
+       >
+       {/* BubbleField owns its OWN physics shared value. The keyed
+           Animated.View wrapper means each view (cluster or drilled)
+           gets a fresh BubbleField instance with its own physics — no
+           shared-state leakage between the exiting and entering
+           subtrees that piled up labels / hit areas in earlier
+           iterations of this layout. */}
+       <BubbleField
+         bubbles={bubbles}
+         clusters={clusters}
+         width={width}
+         universeWidth={universeWidth}
+         // Star field extends 20% past the universe on each side
+         // (well, 10% per side for 20% total beyond the universe).
+         // The Skia Canvas is sized to this so stars can render in
+         // the margin past the pan barrier — visible as the user hits
+         // the elastic edge and peeks past the universe boundary.
+         starFieldWidth={universeWidth * 1.2}
+         canvasHeight={canvasHeight}
+         onBubblePress={(bubble) => {
+           if (bubble.kind === "cluster") {
+             guardedEnter(bubble.id);
+           } else if (onBubbleTap) {
+             onBubbleTap(bubble.id);
+           }
+         }}
+         onBubbleLongPress={(bubble) => {
+           // Long-press only opens the cluster editor when we're at
+           // the top-level cluster view. Task bubbles ignore it.
+           if (bubble.kind === "cluster" && onClusterLongPress) {
+             onClusterLongPress(bubble.id);
+           }
+         }}
+       />
+       </Animated.View>
+      </Animated.View>
+     </GestureDetector>
+      {/* Re-center pill — only when the user has panned non-trivially.
+          Lives outside the GestureDetector so taps on it always work,
+          and outside the keyed wrapper so it doesn't crossfade. */}
+      {showRecenter ? (
+        <Pressable
+          onPress={recenter}
+          style={[
+            styles.recenterBtn,
+            // When the back overlay is visible the recenter pill
+            // drops below it so they don't overlap on narrow screens.
+            focusedCluster && styles.recenterBtnDrilled,
+          ]}
+          hitSlop={8}
+          accessibilityLabel="Re-center universe"
+        >
+          <MaterialIcons name="my-location" size={16} color={colors.ink} />
+          <Text style={styles.recenterText}>Re-center</Text>
+        </Pressable>
+      ) : null}
+      {/* Back overlay — only visible in drilled view. Lives OUTSIDE
+          the animated wrapper so it remains tappable through any
+          residual transform; it triggers its own animated exit. */}
+      {/* Drilled view with no tasks — render a centered hint so the
+          screen isn't blank apart from the back overlay. */}
+      {focusedCluster && bubbles.length === 0 ? (
+        <View pointerEvents="none" style={styles.emptyClusterHint}>
+          <Text style={styles.emptyClusterTitle}>No tasks here yet</Text>
+          <Text style={styles.emptyClusterBody}>
+            Add one with the + button. New tasks find their own cluster
+            automatically based on what you say.
+          </Text>
+        </View>
+      ) : null}
+      {focusedCluster ? (
+        <View style={styles.backOverlay}>
+          <Pressable
+            onPress={guardedExit}
+            style={styles.backOverlayBack}
+            hitSlop={8}
+            accessibilityLabel="Back to clusters"
+          >
+            <MaterialIcons name="chevron-left" size={22} color={colors.ink} />
+            <Text style={styles.backOverlayText} numberOfLines={1}>
+              {focusedCluster.name}
+            </Text>
+          </Pressable>
+          {/* Pencil sits next to the cluster name so editing the
+              cluster you're inside is discoverable (long-press from
+              the top level still works too). Drift can't be edited
+              so we hide the pencil there. */}
+          {focusedCluster.kind !== "drift" && onEditFocusedCluster ? (
+            <Pressable
+              onPress={() => onEditFocusedCluster(focusedCluster.id)}
+              hitSlop={10}
+              style={styles.backOverlayPencil}
+              accessibilityLabel="Edit cluster"
+            >
+              <MaterialIcons name="edit" size={16} color={colors.inkDim} />
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// BubbleField — physics + rendering for a single view's bubble set
+// ---------------------------------------------------------------------------
+//
+// Pulled out from BubbleCanvas so each keyed instance of the wrapping
+// Animated.View gets its OWN physics shared value, useFrameCallback,
+// and overlay hit areas. The previous monolithic version kept physics
+// at the BubbleCanvas level, which meant the exiting and entering
+// subtrees both read from the same shared array — so the exiting
+// subtree's hit areas would stick around at wrong positions while the
+// new one mounted, intercepting taps and hiding labels. Putting
+// physics inside this child component scope means a fresh mount = a
+// clean physics array, every time.
+
+interface BubbleFieldProps {
+  bubbles: Bubble[];
+  clusters: Cluster[];
+  width: number;
+  universeWidth: number;
+  // Width of the star field, which can be wider than the universe so
+  // stars exist past the pan barrier. Stars draw across this whole
+  // span; bubbles stay confined to the universe range.
+  starFieldWidth: number;
+  canvasHeight: number;
+  onBubblePress: (bubble: Bubble) => void;
+  onBubbleLongPress?: (bubble: Bubble) => void;
+}
+
+function BubbleField({
+  bubbles,
+  clusters,
+  width,
+  universeWidth,
+  starFieldWidth,
+  canvasHeight,
+  onBubblePress,
+  onBubbleLongPress,
+}: BubbleFieldProps) {
+  // The Skia Canvas is sized to the FULL STAR FIELD (which is wider
+  // than the universe) and shifted left so the universe is centered
+  // on screen when pan = 0. Stars draw across the entire canvas in
+  // canvas-local coords; bubble physics is in screen-local coords,
+  // so bubbles add `drawOffsetX` to map into canvas-local coords.
+  // The RN-side overlays (labels / hit areas) live outside the
+  // Canvas in the screen-sized pan wrapper and use physics coords
+  // directly — bubble visual, label, and tap target stay aligned at
+  // the same screen position regardless of how wide the canvas is.
+  const canvasLeftOffset = (starFieldWidth - width) / 2;
+  // Universe sits centered within the star field, so bubbles draw at
+  // (physics.x + canvasLeftOffset). This is the screen→canvas shift.
+  const bubbleDrawOffsetX = canvasLeftOffset;
   const initial = useMemo(
     () => buildInitialStates(bubbles, clusters, width, canvasHeight),
     [bubbles, clusters, width, canvasHeight],
   );
 
+  // Each BubbleField instance owns its own physics state. When the
+  // parent's keyed Animated.View remounts on view change, this whole
+  // component remounts and the shared value resets from initial.
   const physics = useSharedValue<PhysicsState[]>(initial);
-  // Tracks which bubble IDs were in each physics slot the last time we
-  // synced. Lets the resync below preserve in-flight positions for
-  // bubbles that already exist while still adding entries for new ones.
   const lastSyncedIds = useRef<string[]>(bubbles.map((b) => b.id));
 
-  // Resync the shared array whenever the bubbles set changes (new task
-  // added, bubble removed, cluster moved). Without this, useSharedValue
-  // sticks with whatever was passed on first render and new bubbles end
-  // up reading physics.value[index] === undefined → (0, 0) → top-left
-  // corner.
+  // Resync physics when bubbles change WITHIN the same view (e.g., a
+  // new task arrives while the user is in cluster view). Preserves
+  // in-flight positions for bubbles whose ids match the previous pass.
   useEffect(() => {
     const prev = physics.value;
     const prevIds = lastSyncedIds.current;
@@ -185,9 +539,6 @@ export default function BubbleCanvas({ onBubbleTap }: BubbleCanvasProps = {}) {
       const id = bubbles[i].id;
       const prevIdx = prevIds.indexOf(id);
       if (prevIdx >= 0 && prev[prevIdx]) {
-        // Keep the running x/y/vx/vy from the live physics slot, but
-        // pick up any layout updates (target, radius, wiggle amplitude)
-        // from the freshly-built initial state.
         return {
           x: prev[prevIdx].x,
           y: prev[prevIdx].y,
@@ -205,7 +556,6 @@ export default function BubbleCanvas({ onBubbleTap }: BubbleCanvasProps = {}) {
     lastSyncedIds.current = bubbles.map((b) => b.id);
   }, [initial, bubbles, physics]);
 
-  // Monotonic UI-thread clock used by the overdue pulse effect.
   const tickMs = useSharedValue<number>(0);
 
   useFrameCallback((info) => {
@@ -213,19 +563,11 @@ export default function BubbleCanvas({ onBubbleTap }: BubbleCanvasProps = {}) {
     const dt = info.timeSincePreviousFrame ?? 16;
     if (!dt) return;
     tickMs.value += dt;
-
-    // Normalize dt to ~1 unit at 60fps so spring constants below behave
-    // the same on phones with different refresh rates.
     const step = Math.min(dt / 16, 2);
-
     const next = physics.value.slice();
 
-    // ---- Pass 1: spring + wiggle + damping + integrate ---------------
-    // Spring tug toward each bubble's orbital target. Weakened
-    // further so bubbles have more room to roam — combined with the
-    // higher wiggle amplitude, the visual feel is "drifting in a
-    // gentle current" rather than "tethered to a peg".
-    const springK = 0.0016;       // was 0.0022
+    // Spring + wiggle + damping + integrate
+    const springK = 0.0016;
     const damping = 0.95;
     const wiggleScale = 0.10;
     for (let i = 0; i < next.length; i++) {
@@ -242,11 +584,7 @@ export default function BubbleCanvas({ onBubbleTap }: BubbleCanvasProps = {}) {
       b.y += b.vy * step;
     }
 
-    // ---- Pass 2: pairwise collision resolution ----------------------
-    // For each overlapping pair, push them apart along the contact
-    // normal and exchange normal-velocity components (equal-mass
-    // elastic collision) with a mild damping factor so the bounce
-    // feels soft rather than rubbery. O(n^2) is fine at 50ish bubbles.
+    // Pairwise collision resolution
     const restitution = 0.55;
     for (let i = 0; i < next.length; i++) {
       const a = next[i];
@@ -260,17 +598,12 @@ export default function BubbleCanvas({ onBubbleTap }: BubbleCanvasProps = {}) {
         const dist = Math.sqrt(distSq);
         const nx = ddx / dist;
         const ny = ddy / dist;
-        // Separate so they're no longer overlapping. Move each by half
-        // the overlap; mass-equal split keeps the system symmetric.
         const overlap = minDist - dist;
         const half = overlap * 0.5;
         a.x -= nx * half;
         a.y -= ny * half;
         b.x += nx * half;
         b.y += ny * half;
-        // Bounce only if they're moving toward each other (positive
-        // relative velocity along the normal would mean separating;
-        // skipping that prevents sticky re-bounces).
         const relVx = b.vx - a.vx;
         const relVy = b.vy - a.vy;
         const relV_n = relVx * nx + relVy * ny;
@@ -287,11 +620,21 @@ export default function BubbleCanvas({ onBubbleTap }: BubbleCanvasProps = {}) {
   });
 
   return (
-    <View style={styles.root}>
-      <Canvas style={StyleSheet.absoluteFill}>
-        {/* Star field renders behind the bubbles — same canvas, drawn
-            first so the bubbles z-order over it. */}
-        <StarField width={width} height={canvasHeight} tickMs={tickMs} />
+    <>
+      <Canvas
+        style={{
+          position: "absolute",
+          left: -canvasLeftOffset,
+          top: 0,
+          width: starFieldWidth,
+          height: canvasHeight,
+        }}
+      >
+        {/* Stars fill the entire canvas, including the 20% margin
+            that lives beyond the universe boundary. The margins are
+            only visible when the user reaches the elastic edge —
+            then they peek past the universe and see more cosmos. */}
+        <StarField width={starFieldWidth} height={canvasHeight} tickMs={tickMs} />
         {bubbles.map((b, i) => {
           const cluster = clusters.find((c) => c.id === b.clusterId)!;
           return (
@@ -302,24 +645,31 @@ export default function BubbleCanvas({ onBubbleTap }: BubbleCanvasProps = {}) {
               index={i}
               physics={physics}
               tickMs={tickMs}
+              drawOffsetX={bubbleDrawOffsetX}
             />
           );
         })}
       </Canvas>
-      {/* Labels and touch overlays drift with the bubbles via the same
-          shared physics value. Rendered as siblings (not children) of
-          Canvas because Skia nodes can't host RN views. */}
       {bubbles.map((b, i) => {
         const cluster = clusters.find((c) => c.id === b.clusterId)!;
-        // Bubble carries a server-stored label (with a client-side
-        // fallback for legacy rows) — no further shortening needed.
         const label = b.label || shortLabel(b.title ?? "");
         if (!label) return null;
-        // Dominant cluster-name overlay only makes sense for real
-        // clusters (Work / Health / etc). Drift is a synthetic
-        // catch-all for tasks with no parent — labelling its
-        // dominant with "DRIFT" just confuses the user about what
-        // the bubble represents.
+        if (b.kind === "cluster") {
+          return (
+            <BubbleLabel
+              key={`label-${b.id}`}
+              index={i}
+              physics={physics}
+              label={cluster.name}
+              subtitle={
+                b.taskCount !== undefined
+                  ? `${b.taskCount} task${b.taskCount === 1 ? "" : "s"}`
+                  : undefined
+              }
+              size="dominant"
+            />
+          );
+        }
         const showAsDominant = b.isDominant && cluster.kind !== "drift";
         return (
           <BubbleLabel
@@ -332,22 +682,98 @@ export default function BubbleCanvas({ onBubbleTap }: BubbleCanvasProps = {}) {
           />
         );
       })}
-      {onBubbleTap
-        ? bubbles.map((b, i) => (
-            <BubbleHitArea
-              key={`hit-${b.id}`}
-              index={i}
-              physics={physics}
-              onPress={() => onBubbleTap(b.id)}
-            />
-          ))
-        : null}
-    </View>
+      {bubbles.map((b, i) => (
+        <BubbleHitArea
+          key={`hit-${b.id}`}
+          index={i}
+          physics={physics}
+          onPress={() => onBubblePress(b)}
+          onLongPress={onBubbleLongPress ? () => onBubbleLongPress(b) : undefined}
+        />
+      ))}
+    </>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas, position: "relative" },
+  backOverlay: {
+    position: "absolute",
+    top: 10,
+    left: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 6,
+    paddingLeft: 4,
+    paddingRight: 8,
+    backgroundColor: "rgba(17, 20, 42, 0.7)",
+    borderRadius: 18,
+    borderColor: colors.line,
+    borderWidth: 1,
+    maxWidth: "75%",
+    gap: 2,
+  },
+  backOverlayBack: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingRight: 8,
+    gap: 2,
+  },
+  backOverlayText: {
+    color: colors.ink,
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  backOverlayPencil: {
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    borderLeftColor: colors.line,
+    borderLeftWidth: 1,
+    marginLeft: 2,
+  },
+  emptyClusterHint: {
+    position: "absolute",
+    top: "40%",
+    left: 40,
+    right: 40,
+    alignItems: "center",
+  },
+  emptyClusterTitle: {
+    color: colors.ink,
+    fontSize: 16,
+    fontWeight: "600",
+    textAlign: "center",
+  },
+  emptyClusterBody: {
+    color: colors.inkDim,
+    fontSize: 12,
+    marginTop: 8,
+    textAlign: "center",
+    lineHeight: 17,
+  },
+  // Re-center pill — small, top-center, only visible while panned.
+  // Picks up the same panel-on-canvas treatment as the back overlay
+  // so it feels like part of the same UI layer.
+  recenterBtn: {
+    position: "absolute",
+    top: 10,
+    alignSelf: "center",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    backgroundColor: "rgba(17, 20, 42, 0.85)",
+    borderRadius: 16,
+    borderColor: colors.line,
+    borderWidth: 1,
+  },
+  recenterText: {
+    color: colors.ink,
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  recenterBtnDrilled: { top: 56 },
 });
 
 interface BubbleProps {
@@ -356,6 +782,12 @@ interface BubbleProps {
   index: number;
   physics: SharedValue<PhysicsState[]>;
   tickMs: SharedValue<number>;
+  // Constant X offset added to the Skia draw position. Used when the
+  // Canvas is wider than the screen and shifted left so that the
+  // universe extends past both edges — the bubble physics still
+  // computes positions in screen coords; we add the Canvas's left
+  // shift when drawing so they line up with their RN-side label.
+  drawOffsetX?: number;
 }
 
 const BubbleNode: React.FC<BubbleProps> = ({
@@ -364,13 +796,19 @@ const BubbleNode: React.FC<BubbleProps> = ({
   index,
   physics,
   tickMs,
+  drawOffsetX = 0,
 }) => {
-  const baseRadius =
-    pressureToRadius(bubble.pressureScore) + (bubble.overdue ? OVERDUE_RADIUS_BOOST : 0);
+  // Cluster bubbles carry an explicit radius set by the layout pass
+  // (sqrt of task count). Task bubbles fall back to pressure-based
+  // sizing plus the overdue chunkiness boost. Without this, every
+  // cluster bubble would draw at 16px because pressureScore is 0 for
+  // them, while their physics hitbox is correct (30–72px).
+  const baseRadius = radiusFor(bubble);
   const baseColor = bubble.overdue ? colors.overdue : cluster.color;
 
-  // Position
-  const cx = useDerivedValue(() => physics.value[index]?.x ?? 0);
+  // Position. cx adds drawOffsetX so the screen-coord physics value
+  // lands at the right place inside the wider-than-screen Canvas.
+  const cx = useDerivedValue(() => (physics.value[index]?.x ?? 0) + drawOffsetX);
   const cy = useDerivedValue(() => physics.value[index]?.y ?? 0);
 
   // Overdue bubbles breathe: radius and opacity oscillate.

@@ -39,9 +39,13 @@ interface Props {
   // outward from the visible edge.
   padding?: number;
   onPress: () => void;
+  // Optional secondary gesture — used on the universe canvas so a long
+  // press on a cluster bubble opens the cluster editor instead of
+  // drilling in. Task bubbles don't pass this through.
+  onLongPress?: () => void;
 }
 
-export default function BubbleHitArea({ index, physics, padding = 6, onPress }: Props) {
+export default function BubbleHitArea({ index, physics, padding = 6, onPress, onLongPress }: Props) {
   const overlayStyle = useAnimatedStyle(() => {
     const p = physics.value[index];
     if (!p) {
@@ -60,6 +64,7 @@ export default function BubbleHitArea({ index, physics, padding = 6, onPress }: 
   return (
     <AnimatedPressable
       onPress={onPress}
+      onLongPress={onLongPress}
       style={overlayStyle}
       accessibilityRole="button"
     />
