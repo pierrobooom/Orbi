@@ -6,10 +6,20 @@
 // payment works yet.
 
 import { useRouter } from "expo-router";
-import React from "react";
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import React, { useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { registerPushDevice } from "@/hooks/usePushRegistration";
+import { ApiError, sendTestPush } from "@/services/api";
 import { useAuthStore, type SubscriptionTier } from "@/stores/authStore";
 import { colors } from "@/theme/colors";
 
@@ -64,6 +74,8 @@ const PLANS: PlanCard[] = [
 export default function UpgradeScreen() {
   const router = useRouter();
   const currentTier = useAuthStore((s) => s.tier);
+  const [testPushBusy, setTestPushBusy] = useState(false);
+  const [registerBusy, setRegisterBusy] = useState(false);
 
   const onUpgradeTap = (tier: SubscriptionTier) => {
     Alert.alert(
@@ -71,6 +83,36 @@ export default function UpgradeScreen() {
       "Payments land in Phase 5 via the App Store and Play Store. Sit tight.",
       [{ text: "OK" }],
     );
+  };
+
+  const onTestPush = async () => {
+    setTestPushBusy(true);
+    try {
+      const result = await sendTestPush();
+      Alert.alert(
+        "Test push sent",
+        `Pushed to ${result.sent} device${result.sent === 1 ? "" : "s"}. Watch for the banner in a moment.`,
+      );
+    } catch (e) {
+      const msg = e instanceof ApiError ? e.message : String(e);
+      Alert.alert("Test push failed", msg);
+    } finally {
+      setTestPushBusy(false);
+    }
+  };
+
+  const onRegisterDevice = async () => {
+    setRegisterBusy(true);
+    const result = await registerPushDevice();
+    setRegisterBusy(false);
+    if (result.ok) {
+      Alert.alert(
+        "Device registered",
+        `Push token sent to the backend. Last 12 chars: …${result.token.slice(-12)}`,
+      );
+    } else {
+      Alert.alert("Registration failed", result.reason);
+    }
   };
 
   return (
@@ -121,6 +163,42 @@ export default function UpgradeScreen() {
           Caps reset at midnight UTC each day. Monthly Claude calls reset on
           the 1st of each month.
         </Text>
+
+        <View style={styles.devSection}>
+          <Text style={styles.devLabel}>Dev tools</Text>
+
+          <Pressable
+            onPress={onRegisterDevice}
+            disabled={registerBusy}
+            style={[styles.devButton, registerBusy && styles.devButtonDisabled]}
+          >
+            {registerBusy ? (
+              <ActivityIndicator color={colors.ink} />
+            ) : (
+              <Text style={styles.devButtonText}>Register push device</Text>
+            )}
+          </Pressable>
+          <Text style={styles.devHint}>
+            Re-runs the Expo push registration with permission prompt and
+            sends the token to the backend. Use this to debug push issues.
+          </Text>
+
+          <Pressable
+            onPress={onTestPush}
+            disabled={testPushBusy}
+            style={[styles.devButton, styles.devButtonStacked, testPushBusy && styles.devButtonDisabled]}
+          >
+            {testPushBusy ? (
+              <ActivityIndicator color={colors.ink} />
+            ) : (
+              <Text style={styles.devButtonText}>Send test push</Text>
+            )}
+          </Pressable>
+          <Text style={styles.devHint}>
+            Fires a notification to every device registered for this user.
+            Helps verify the push chain end-to-end. Removed before launch.
+          </Text>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -170,4 +248,30 @@ const styles = StyleSheet.create({
   ctaText: { color: "white", fontSize: 14, fontWeight: "700" },
   ctaTextCurrent: { color: colors.inkDim, fontWeight: "600" },
   footnote: { color: colors.inkDim, fontSize: 11, marginTop: 16, lineHeight: 16 },
+  devSection: {
+    marginTop: 28,
+    paddingTop: 18,
+    borderTopColor: colors.line,
+    borderTopWidth: 1,
+  },
+  devLabel: {
+    color: colors.inkDim,
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 1,
+    textTransform: "uppercase",
+    marginBottom: 10,
+  },
+  devButton: {
+    backgroundColor: colors.panel,
+    borderColor: colors.line,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  devButtonDisabled: { opacity: 0.5 },
+  devButtonStacked: { marginTop: 14 },
+  devButtonText: { color: colors.ink, fontSize: 14, fontWeight: "600" },
+  devHint: { color: colors.inkDim, fontSize: 11, marginTop: 8, lineHeight: 15 },
 });

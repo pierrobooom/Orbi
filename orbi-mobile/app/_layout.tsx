@@ -12,6 +12,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import "react-native-reanimated";
 
+import { usePushRegistration } from "@/hooks/usePushRegistration";
 // Importing the authStore here ensures supabase.auth.onAuthStateChange is
 // subscribed before any screen reads from it.
 import { useAuthStore } from "@/stores/authStore";
@@ -82,6 +83,9 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   const bootstrapping = useAuthStore((s) => s.bootstrapping);
   const segments = useSegments();
   const router = useRouter();
+  // Kick off Expo push registration after sign-in. Hook is no-op until
+  // the session is non-null, and self-guards against duplicate runs.
+  usePushRegistration();
 
   useEffect(() => {
     if (bootstrapping) return;

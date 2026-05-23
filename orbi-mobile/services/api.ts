@@ -179,6 +179,56 @@ export function isQuotaError(err: unknown): err is ApiError {
 }
 
 // ---------------------------------------------------------------------------
+// Push notification device tokens
+// ---------------------------------------------------------------------------
+
+export type DevicePlatform = "ios" | "android" | "web";
+
+export interface DeviceToken {
+  id: string;
+  user_id: string;
+  token: string;
+  platform: DevicePlatform;
+  created_at: string;
+  last_seen_at: string;
+}
+
+export async function registerPushToken(
+  token: string,
+  platform: DevicePlatform,
+): Promise<DeviceToken> {
+  const res = await authFetch(`${V1}/users/me/device-tokens`, {
+    method: "POST",
+    body: JSON.stringify({ token, platform }),
+  });
+  if (!res.ok) throw await parseError(res);
+  return (await res.json()) as DeviceToken;
+}
+
+export async function unregisterPushToken(token: string): Promise<void> {
+  // The token contains brackets ("ExponentPushToken[...]") so it has to be
+  // URI-encoded before going into the path.
+  const res = await authFetch(
+    `${V1}/users/me/device-tokens/${encodeURIComponent(token)}`,
+    { method: "DELETE" },
+  );
+  if (!res.ok && res.status !== 404) throw await parseError(res);
+}
+
+export interface TestPushResponse {
+  sent: number;
+  tickets: Array<{ status: string; id?: string; message?: string }>;
+}
+
+export async function sendTestPush(): Promise<TestPushResponse> {
+  const res = await authFetch(`${V1}/users/me/device-tokens/test`, {
+    method: "POST",
+  });
+  if (!res.ok) throw await parseError(res);
+  return (await res.json()) as TestPushResponse;
+}
+
+// ---------------------------------------------------------------------------
 // Tasks + Clusters
 // ---------------------------------------------------------------------------
 //

@@ -5,13 +5,16 @@ a service or db function, and formats the response.
 """
 
 from datetime import datetime, timezone
+from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, Field
 
-from app.db import users as users_db
+from app.db import device_tokens as device_tokens_db, users as users_db
 from app.models.user import UsageSnapshot, UserPreference, UserProfile
 from app.services.auth import get_current_user, get_current_user_with_tier
+from app.services.push import send_push
 from app.services.usage_tracker import get_user_usage
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -115,3 +118,80 @@ async def set_my_preferences(
 
     row = await users_db.upsert_preferences(payload)
     return row
+
+
+# ---------------------------------------------------------------------------
+# Push notification device tokens
+# ---------------------------------------------------------------------------
+
+class DeviceTokenRegister(BaseModel):
+    # Expo push token: "ExponentPushToken[...]" (~50 chars). FCM/APNs raw
+    # tokens are longer but Expo Go only ever issues the Exponent format.
+    token: str = Field(min_length=1, max_length=500)
+    platform: Literal["ios", "android", "web"]
+
+
+class DeviceTokenResponse(BaseModel):
+    id: UUID
+    user_id: UUID
+    token: str
+    platform: str
+    created_at: datetime
+    last_seen_at: datetime
+
+
+class TestPushResponse(BaseModel):
+    sent: int
+    tickets: list[dict]
+
+
+@router.post("/me/device-tokens", response_model=DeviceTokenResponse, status_code=status.HTTP_201_CREATED)
+async def register_device_token(
+    body: DeviceTokenRegister,
+    user_id: UUID = Depends(get_current_user),
+):
+    """Register or refresh a device's Expo push token for the current user.
+
+    Idempotent — re-registering the same token bumps last_seen_at.
+    """
+    row = await device_tokens_db.upsert_token(user_id, body.token, body.platform)
+    return row
+
+
+@router.delete("/me/device-tokens/{token}", status_code=status.HTTP_204_NO_CONTENT)
+async def unregister_device_token(
+    token: str,
+    user_id: UUID = Depends(get_current_user),
+):
+    """Drop a device token. Called on sign-out from the device that owns it."""
+    deleted = await device_tokens_db.delete_token(user_id, token)
+    if not deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_error("Device token not found.", "DEVICE_TOKEN_NOT_FOUND"),
+        )
+
+
+@router.post("/me/device-tokens/test", response_model=TestPushResponse)
+async def send_test_push(user_id: UUID = Depends(get_current_user)):
+    """Fire a smoke-test push to every device registered for this user.
+
+    Useful during dev to prove the registration + Expo Push chain works
+    end-to-end without waiting on the reminder scheduler.
+    """
+    tokens = await device_tokens_db.list_tokens_for_user(user_id)
+    if not tokens:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_error(
+                "No device tokens registered for this user.",
+                "NO_DEVICE_TOKENS",
+            ),
+        )
+    tickets = await send_push(
+        tokens,
+        title="Hello from Orbi",
+        body="Push registration is working.",
+        data={"kind": "test"},
+    )
+    return TestPushResponse(sent=len(tokens), tickets=tickets)
