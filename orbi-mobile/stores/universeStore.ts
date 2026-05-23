@@ -18,11 +18,43 @@ interface UniverseState {
   errorMessage: string | null;
   clusters: Cluster[];
   bubbles: Bubble[];
-  // Holds the raw server tasks so addTask() can recompute layout without
-  // a second network round-trip when a new task is created.
+  // Holds the raw server tasks so addTask() / replaceTask() / removeTask()
+  // can recompute layout without a second network round-trip.
   serverTasks: ServerTask[];
   hydrate: () => Promise<void>;
   addTask: (task: ServerTask) => void;
+  replaceTask: (task: ServerTask) => void;
+  removeTask: (taskId: string) => void;
+  getServerTask: (taskId: string) => ServerTask | undefined;
+}
+
+// Server-cluster reconstruction used by every mutating action. We keep
+// the cluster shapes around in canvas form only; rebuilding the wire
+// shape for the layout pass is cheap and avoids re-fetching.
+function clustersToServerShape(canvas: Cluster[]): Array<{
+  id: string;
+  owner_id: string;
+  name: string;
+  summary: string | null;
+  color: string;
+  weight_score: number;
+  active_count: number;
+  parent_cluster_id: string | null;
+  created_at: string;
+}> {
+  return canvas
+    .filter((c) => c.id !== "synthetic-drift")
+    .map((c) => ({
+      id: c.id,
+      owner_id: "",
+      name: c.name,
+      summary: null,
+      color: c.color,
+      weight_score: 0,
+      active_count: 0,
+      parent_cluster_id: null,
+      created_at: "",
+    }));
 }
 
 export const useUniverseStore = create<UniverseState>((set, get) => ({
@@ -62,29 +94,38 @@ export const useUniverseStore = create<UniverseState>((set, get) => ({
     // matches what a fresh hydrate() would produce.
     const { serverTasks, clusters } = get();
     const nextTasks = [task, ...serverTasks];
-    // Re-fetching clusters isn't necessary because creating a task
-    // never adds a cluster — but we still need the server cluster
-    // shapes for the layout pass. Reconstruct ServerCluster-shaped
-    // input from the canvas Cluster list. The synthetic Drift cluster
-    // is skipped because layoutUniverse will re-add it if needed.
-    const serverClusterShape = clusters
-      .filter((c) => c.id !== "synthetic-drift")
-      .map((c) => ({
-        id: c.id,
-        owner_id: "",
-        name: c.name,
-        summary: null,
-        color: c.color,
-        weight_score: 0,
-        active_count: 0,
-        parent_cluster_id: null,
-        created_at: "",
-      }));
-    const layout = layoutUniverse(serverClusterShape, nextTasks);
+    const layout = layoutUniverse(clustersToServerShape(clusters), nextTasks);
     set({
       serverTasks: nextTasks,
       clusters: layout.clusters,
       bubbles: layout.bubbles,
     });
   },
+
+  replaceTask: (task) => {
+    // Swap the existing record (by id) with an updated copy. If the new
+    // status is no longer 'active', layoutUniverse will naturally drop
+    // it from the bubble list since it only renders active tasks.
+    const { serverTasks, clusters } = get();
+    const nextTasks = serverTasks.map((t) => (t.id === task.id ? task : t));
+    const layout = layoutUniverse(clustersToServerShape(clusters), nextTasks);
+    set({
+      serverTasks: nextTasks,
+      clusters: layout.clusters,
+      bubbles: layout.bubbles,
+    });
+  },
+
+  removeTask: (taskId) => {
+    const { serverTasks, clusters } = get();
+    const nextTasks = serverTasks.filter((t) => t.id !== taskId);
+    const layout = layoutUniverse(clustersToServerShape(clusters), nextTasks);
+    set({
+      serverTasks: nextTasks,
+      clusters: layout.clusters,
+      bubbles: layout.bubbles,
+    });
+  },
+
+  getServerTask: (taskId) => get().serverTasks.find((t) => t.id === taskId),
 }));

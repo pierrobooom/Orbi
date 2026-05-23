@@ -63,6 +63,22 @@ export default function RootLayout() {
                 options={{ presentation: "modal", headerShown: false }}
               />
               <Stack.Screen
+                name="new-expense"
+                options={{ presentation: "modal", headerShown: false }}
+              />
+              <Stack.Screen
+                name="task-detail"
+                options={{
+                  // formSheet on iOS slides up over the canvas and lets
+                  // the user swipe down to dismiss — perfect for a quick
+                  // inspect-and-act sheet.
+                  presentation: "formSheet",
+                  headerShown: false,
+                  sheetGrabberVisible: true,
+                  sheetAllowedDetents: [0.5, 0.9],
+                }}
+              />
+              <Stack.Screen
                 name="modal"
                 options={{ presentation: "modal", title: "Modal" }}
               />

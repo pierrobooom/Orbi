@@ -224,7 +224,14 @@ export default function UniverseScreen() {
         ) : bubblesCount === 0 ? (
           <EmptyState />
         ) : (
-          <BubbleCanvas />
+          <BubbleCanvas
+            onBubbleTap={(taskId) =>
+              router.push({
+                pathname: "/task-detail",
+                params: { id: taskId },
+              })
+            }
+          />
         )}
 
         {voice.isRecording ? (

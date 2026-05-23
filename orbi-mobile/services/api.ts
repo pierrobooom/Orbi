@@ -229,6 +229,89 @@ export async function sendTestPush(): Promise<TestPushResponse> {
 }
 
 // ---------------------------------------------------------------------------
+// Finance
+// ---------------------------------------------------------------------------
+
+export type EntryType = "income" | "expense";
+
+export interface ServerFinanceEntry {
+  id: string;
+  user_id: string;
+  amount: number;
+  currency: string;
+  merchant: string;
+  category: string;
+  entry_type: EntryType;
+  entry_date: string; // ISO date YYYY-MM-DD
+  source_type: string;
+  linked_bubble_id: string | null;
+  notes: string | null;
+  created_at: string;
+}
+
+export async function listFinanceEntries(month?: string): Promise<ServerFinanceEntry[]> {
+  const qs = month ? `?month=${encodeURIComponent(month)}` : "";
+  const res = await authFetch(`${V1}/finance/entries${qs}`);
+  if (!res.ok) throw await parseError(res);
+  return (await res.json()) as ServerFinanceEntry[];
+}
+
+export interface CreateFinanceEntryInput {
+  amount: number;
+  merchant: string;
+  entry_date: string; // YYYY-MM-DD
+  entry_type?: EntryType;
+  currency?: string;
+  category?: string; // optional override; backend categorises if absent
+  notes?: string | null;
+}
+
+export async function createFinanceEntry(
+  input: CreateFinanceEntryInput,
+): Promise<ServerFinanceEntry> {
+  // owner is forced server-side from JWT but the Pydantic model marks
+  // user_id required — pull from session to satisfy validation.
+  const { data } = await supabase.auth.getSession();
+  const userId = data.session?.user.id;
+  if (!userId) {
+    throw new ApiError(401, "Not authenticated.", "NOT_AUTHENTICATED");
+  }
+  const body = {
+    user_id: userId,
+    amount: input.amount,
+    currency: input.currency ?? "GBP",
+    merchant: input.merchant,
+    // Backend re-categorises via the rule table; sending "uncategorized"
+    // makes the intent explicit when the caller doesn't want to override.
+    category: input.category ?? "uncategorized",
+    entry_type: input.entry_type ?? "expense",
+    entry_date: input.entry_date,
+    source_type: "manual",
+    notes: input.notes ?? null,
+  };
+  const res = await authFetch(`${V1}/finance/entries`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw await parseError(res);
+  return (await res.json()) as ServerFinanceEntry;
+}
+
+export interface FinanceSummary {
+  month: string;
+  totals: Record<string, number>;
+  total_spend: number;
+  total_income: number;
+}
+
+export async function getFinanceSummary(month?: string): Promise<FinanceSummary> {
+  const qs = month ? `?month=${encodeURIComponent(month)}` : "";
+  const res = await authFetch(`${V1}/finance/summary${qs}`);
+  if (!res.ok) throw await parseError(res);
+  return (await res.json()) as FinanceSummary;
+}
+
+// ---------------------------------------------------------------------------
 // Tasks + Clusters
 // ---------------------------------------------------------------------------
 //
@@ -358,6 +441,30 @@ export async function chatMessage(
   });
   if (!res.ok) throw await parseError(res);
   return (await res.json()) as ChatResponse;
+}
+
+export interface UpdateTaskInput {
+  title?: string;
+  status?: ServerTaskStatus;
+  due_at?: string | null;
+  importance?: number;
+  parent_cluster_id?: string | null;
+}
+
+export async function updateTask(id: string, patch: UpdateTaskInput): Promise<ServerTask> {
+  const res = await authFetch(`${V1}/tasks/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) throw await parseError(res);
+  return (await res.json()) as ServerTask;
+}
+
+export async function deleteTask(id: string): Promise<void> {
+  const res = await authFetch(`${V1}/tasks/${id}`, { method: "DELETE" });
+  // 204 No Content is the documented success response; 404 is acceptable
+  // because the caller may have already optimistically removed it locally.
+  if (!res.ok && res.status !== 404) throw await parseError(res);
 }
 
 export async function createTask(input: CreateTaskInput): Promise<ServerTask> {

@@ -11,7 +11,7 @@
 // even before you notice their size or color.
 
 import React, { useEffect, useMemo, useRef } from "react";
-import { useWindowDimensions } from "react-native";
+import { StyleSheet, useWindowDimensions, View } from "react-native";
 import {
   Canvas,
   Circle,
@@ -29,6 +29,7 @@ import {
 
 import { colors } from "@/theme/colors";
 import { useUniverseStore } from "@/stores/universeStore";
+import BubbleHitArea from "./BubbleHitArea";
 import type { Cluster, Bubble } from "./types";
 
 interface PhysicsState {
@@ -76,7 +77,14 @@ function buildInitialStates(
   });
 }
 
-export default function BubbleCanvas() {
+interface BubbleCanvasProps {
+  // Called when the user taps a bubble. Receives the underlying task id
+  // (which is also the bubble id — they're one-to-one). Optional so the
+  // canvas remains usable in read-only contexts.
+  onBubbleTap?: (taskId: string) => void;
+}
+
+export default function BubbleCanvas({ onBubbleTap }: BubbleCanvasProps = {}) {
   const { width, height } = useWindowDimensions();
   // Approximate canvas height — leaves room for the header strip + tab bar.
   // Actual layout will be tightened once those components ship.
@@ -169,26 +177,45 @@ export default function BubbleCanvas() {
   });
 
   return (
-    <Canvas style={{ flex: 1, backgroundColor: colors.canvas }}>
-      {bubbles.map((b, i) => {
-        const cluster = clusters.find((c) => c.id === b.clusterId)!;
-        return (
-          <BubbleNode
-            key={b.id}
-            bubble={b}
-            cluster={cluster}
-            index={i}
-            physics={physics}
-            tickMs={tickMs}
-            font={labelFont}
-            dimFont={dimLabelFont}
-            dominantFont={dominantFont}
-          />
-        );
-      })}
-    </Canvas>
+    <View style={styles.root}>
+      <Canvas style={StyleSheet.absoluteFill}>
+        {bubbles.map((b, i) => {
+          const cluster = clusters.find((c) => c.id === b.clusterId)!;
+          return (
+            <BubbleNode
+              key={b.id}
+              bubble={b}
+              cluster={cluster}
+              index={i}
+              physics={physics}
+              tickMs={tickMs}
+              font={labelFont}
+              dimFont={dimLabelFont}
+              dominantFont={dominantFont}
+            />
+          );
+        })}
+      </Canvas>
+      {/* Touch overlays drift with the bubbles via the same shared physics
+          value. Rendered as siblings (not children) of Canvas because
+          Skia nodes can't host RN touchables. */}
+      {onBubbleTap
+        ? bubbles.map((b, i) => (
+            <BubbleHitArea
+              key={`hit-${b.id}`}
+              index={i}
+              physics={physics}
+              onPress={() => onBubbleTap(b.id)}
+            />
+          ))
+        : null}
+    </View>
   );
 }
+
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: colors.canvas, position: "relative" },
+});
 
 interface BubbleProps {
   bubble: Bubble;
