@@ -142,3 +142,161 @@ export async function patchMyProfile(fields: { full_name: string }): Promise<Use
   if (!res.ok) throw await parseError(res);
   return (await res.json()) as UserProfile;
 }
+
+// ---------------------------------------------------------------------------
+// Tasks + Clusters
+// ---------------------------------------------------------------------------
+//
+// Names prefixed with `Server` to distinguish the wire shapes from the
+// canvas-side Cluster / Bubble types in components/universe/types.ts. The
+// canvas types include layout fields (kind, centerX/Y, isDominant, offsets)
+// that don't exist server-side — services/universeLayout.ts derives them.
+
+export type ServerTaskStatus = "active" | "completed" | "snoozed" | "archived";
+export type ServerVisibility = "private" | "shared" | "collaborative";
+
+export interface ServerTask {
+  id: string;
+  owner_id: string;
+  title: string;
+  description: string | null;
+  status: ServerTaskStatus;
+  due_at: string | null;
+  importance: number;
+  urgency_score: number;
+  pressure_score: number;
+  domain_hint: string | null;
+  parent_cluster_id: string | null;
+  source_type: string;
+  confidence: number;
+  visibility: ServerVisibility;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ServerCluster {
+  id: string;
+  owner_id: string;
+  name: string;
+  summary: string | null;
+  color: string;
+  weight_score: number;
+  active_count: number;
+  parent_cluster_id: string | null;
+  created_at: string;
+}
+
+export async function listTasks(): Promise<ServerTask[]> {
+  const res = await authFetch(`${V1}/tasks`);
+  if (!res.ok) throw await parseError(res);
+  return (await res.json()) as ServerTask[];
+}
+
+export async function listClusters(): Promise<ServerCluster[]> {
+  const res = await authFetch(`${V1}/clusters`);
+  if (!res.ok) throw await parseError(res);
+  return (await res.json()) as ServerCluster[];
+}
+
+export interface CreateTaskInput {
+  title: string;
+  parent_cluster_id?: string | null;
+  due_at?: string | null;
+  importance?: number;
+}
+
+// ---------------------------------------------------------------------------
+// Voice + Chat
+// ---------------------------------------------------------------------------
+
+export interface TranscriptionResult {
+  transcript: string;
+  confidence: number;
+  duration_seconds: number;
+  provider: string;
+  model: string;
+}
+
+export async function transcribeAudio(
+  uri: string,
+  mimeType: string,
+): Promise<TranscriptionResult> {
+  // multipart/form-data upload. Don't set Content-Type manually — the
+  // fetch boundary is generated when the browser/RN builds the body.
+  const form = new FormData();
+  // React Native's FormData accepts an object with { uri, name, type }
+  // for file fields; the cast to any is the standard workaround for the
+  // type mismatch with DOM FormData.
+  form.append("audio", {
+    uri,
+    name: "recording.m4a",
+    type: mimeType,
+  } as unknown as Blob);
+
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  const headers: Record<string, string> = {};
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  // Bypass authFetch because it sets Content-Type: application/json
+  // unconditionally, which breaks the multipart boundary.
+  const res = await fetch(`${API_BASE_URL}${V1}/voice/transcribe`, {
+    method: "POST",
+    headers,
+    body: form,
+  });
+  if (!res.ok) throw await parseError(res);
+  return (await res.json()) as TranscriptionResult;
+}
+
+export interface ChatResponse {
+  reply: string;
+  session_id: string;
+  intent: string;
+  agent_used: string | null;
+  data: Record<string, unknown> | null;
+}
+
+export async function chatMessage(
+  message: string,
+  source: "voice" | "text" = "text",
+  sessionId?: string,
+): Promise<ChatResponse> {
+  const body = {
+    message,
+    source,
+    session_id: sessionId,
+  };
+  const res = await authFetch(`${V1}/chat`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw await parseError(res);
+  return (await res.json()) as ChatResponse;
+}
+
+export async function createTask(input: CreateTaskInput): Promise<ServerTask> {
+  // owner_id is required by the Pydantic model but the router overrides
+  // it with the JWT subject — we still have to send a value to satisfy
+  // validation. Pulling it from the session here so callers don't repeat
+  // this boilerplate.
+  const { data } = await supabase.auth.getSession();
+  const ownerId = data.session?.user.id;
+  if (!ownerId) {
+    throw new ApiError(401, "Not authenticated.", "NOT_AUTHENTICATED");
+  }
+  const body = {
+    owner_id: ownerId,
+    title: input.title,
+    parent_cluster_id: input.parent_cluster_id ?? null,
+    due_at: input.due_at ?? null,
+    importance: input.importance ?? 5,
+    source_type: "manual",
+  };
+  const res = await authFetch(`${V1}/tasks`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw await parseError(res);
+  return (await res.json()) as ServerTask;
+}

@@ -8,6 +8,7 @@ import json
 import logging
 from uuid import UUID
 
+from app.agents._utils import strip_json_fences
 from app.services.ai_router import get_ai_response, load_prompt
 
 logger = logging.getLogger(__name__)
@@ -66,7 +67,7 @@ async def continue_debrief(
 
     # Try to parse as JSON (extraction mode)
     try:
-        result = json.loads(raw)
+        result = json.loads(strip_json_fences(raw))
         if "extraction" in result:
             return {
                 "response": result.get("response", "Got it, here's what I captured."),

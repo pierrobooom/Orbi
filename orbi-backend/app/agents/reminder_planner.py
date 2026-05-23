@@ -9,6 +9,7 @@ import logging
 from datetime import datetime, timezone
 from uuid import UUID
 
+from app.agents._utils import strip_json_fences
 from app.services.ai_router import get_ai_response, load_prompt
 
 logger = logging.getLogger(__name__)
@@ -52,7 +53,7 @@ async def plan_reminders(
     )
 
     try:
-        result = json.loads(raw)
+        result = json.loads(strip_json_fences(raw))
         if not isinstance(result, list):
             raise ValueError("Expected a JSON array of notification plans")
         return result

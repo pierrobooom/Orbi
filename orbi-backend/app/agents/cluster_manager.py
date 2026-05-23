@@ -8,6 +8,7 @@ import json
 import logging
 from uuid import UUID
 
+from app.agents._utils import strip_json_fences
 from app.services.ai_router import get_ai_response, load_prompt
 
 logger = logging.getLogger(__name__)
@@ -58,7 +59,7 @@ async def assign_task_to_cluster(
     )
 
     try:
-        result = json.loads(raw)
+        result = json.loads(strip_json_fences(raw))
         if "cluster_name" not in result:
             raise ValueError("Missing 'cluster_name' in response")
         return result
@@ -101,7 +102,7 @@ async def suggest_reorganisation(
     )
 
     try:
-        result = json.loads(raw)
+        result = json.loads(strip_json_fences(raw))
         return result
     except (json.JSONDecodeError, ValueError) as exc:
         logger.warning("Cluster manager reorg failed: %s | raw=%s", exc, raw[:200])

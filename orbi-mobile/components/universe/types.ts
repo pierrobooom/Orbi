@@ -24,7 +24,7 @@ export interface Cluster {
   centerY: number;
 }
 
-export interface SeedBubble {
+export interface Bubble {
   id: string;
   title: string;
   clusterId: string;

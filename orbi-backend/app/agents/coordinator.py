@@ -10,6 +10,7 @@ import logging
 from datetime import datetime, timezone
 from uuid import UUID
 
+from app.agents._utils import strip_json_fences
 from app.services.ai_router import get_ai_response, load_prompt
 
 logger = logging.getLogger(__name__)
@@ -56,7 +57,7 @@ async def classify_intent(
     )
 
     try:
-        result = json.loads(raw)
+        result = json.loads(strip_json_fences(raw))
         required_keys = {"intent", "confidence", "agent"}
         if not required_keys.issubset(result.keys()):
             raise ValueError(f"Missing keys: {required_keys - result.keys()}")

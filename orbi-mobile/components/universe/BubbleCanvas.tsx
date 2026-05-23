@@ -10,7 +10,7 @@
 // Higher pressure_score = bigger wiggle, so urgent bubbles read as restless
 // even before you notice their size or color.
 
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useRef } from "react";
 import { useWindowDimensions } from "react-native";
 import {
   Canvas,
@@ -29,15 +29,19 @@ import {
 
 import { colors } from "@/theme/colors";
 import { useUniverseStore } from "@/stores/universeStore";
-import type { Cluster, SeedBubble } from "./types";
+import type { Cluster, Bubble } from "./types";
 
 interface PhysicsState {
   x: number;
   y: number;
   vx: number;
   vy: number;
-  cx: number; // cluster center x
-  cy: number;
+  // The per-bubble target the spring force pulls toward. Each non-
+  // dominant bubble settles at its own orbital spot around the cluster
+  // center; without this, every bubble would spring back to the shared
+  // cluster center and they'd all overlap.
+  tx: number;
+  ty: number;
   r: number;
   wiggle: number;
 }
@@ -48,7 +52,7 @@ function pressureToRadius(p: number): number {
 }
 
 function buildInitialStates(
-  bubbles: SeedBubble[],
+  bubbles: Bubble[],
   clusters: Cluster[],
   width: number,
   height: number,
@@ -57,13 +61,15 @@ function buildInitialStates(
     const cluster = clusters.find((c) => c.id === b.clusterId)!;
     const cx = cluster.centerX * width;
     const cy = cluster.centerY * height;
+    const tx = cx + b.offsetX;
+    const ty = cy + b.offsetY;
     return {
-      x: cx + b.offsetX,
-      y: cy + b.offsetY,
+      x: tx,
+      y: ty,
       vx: 0,
       vy: 0,
-      cx,
-      cy,
+      tx,
+      ty,
       r: pressureToRadius(b.pressureScore),
       wiggle: 0.25 + (b.pressureScore / 10) * 0.9,
     };
@@ -89,6 +95,43 @@ export default function BubbleCanvas() {
   );
 
   const physics = useSharedValue<PhysicsState[]>(initial);
+  // Tracks which bubble IDs were in each physics slot the last time we
+  // synced. Lets the resync below preserve in-flight positions for
+  // bubbles that already exist while still adding entries for new ones.
+  const lastSyncedIds = useRef<string[]>(bubbles.map((b) => b.id));
+
+  // Resync the shared array whenever the bubbles set changes (new task
+  // added, bubble removed, cluster moved). Without this, useSharedValue
+  // sticks with whatever was passed on first render and new bubbles end
+  // up reading physics.value[index] === undefined → (0, 0) → top-left
+  // corner.
+  useEffect(() => {
+    const prev = physics.value;
+    const prevIds = lastSyncedIds.current;
+    const next = initial.map((init, i) => {
+      const id = bubbles[i].id;
+      const prevIdx = prevIds.indexOf(id);
+      if (prevIdx >= 0 && prev[prevIdx]) {
+        // Keep the running x/y/vx/vy from the live physics slot, but
+        // pick up any layout updates (target, radius, wiggle amplitude)
+        // from the freshly-built initial state.
+        return {
+          x: prev[prevIdx].x,
+          y: prev[prevIdx].y,
+          vx: prev[prevIdx].vx,
+          vy: prev[prevIdx].vy,
+          tx: init.tx,
+          ty: init.ty,
+          r: init.r,
+          wiggle: init.wiggle,
+        };
+      }
+      return init;
+    });
+    physics.value = next;
+    lastSyncedIds.current = bubbles.map((b) => b.id);
+  }, [initial, bubbles, physics]);
+
   // Monotonic UI-thread clock used by the overdue pulse effect.
   const tickMs = useSharedValue<number>(0);
 
@@ -105,9 +148,10 @@ export default function BubbleCanvas() {
     const next = physics.value.slice();
     for (let i = 0; i < next.length; i++) {
       const b = next[i];
-      // 1. Cluster spring force
-      const dx = b.cx - b.x;
-      const dy = b.cy - b.y;
+      // 1. Spring toward this bubble's own target (not the cluster
+      // center) so each bubble settles at its own orbital spot.
+      const dx = b.tx - b.x;
+      const dy = b.ty - b.y;
       const springK = 0.004;
       b.vx += dx * springK * step;
       b.vy += dy * springK * step;
@@ -129,7 +173,7 @@ export default function BubbleCanvas() {
       {bubbles.map((b, i) => {
         const cluster = clusters.find((c) => c.id === b.clusterId)!;
         return (
-          <Bubble
+          <BubbleNode
             key={b.id}
             bubble={b}
             cluster={cluster}
@@ -147,7 +191,7 @@ export default function BubbleCanvas() {
 }
 
 interface BubbleProps {
-  bubble: SeedBubble;
+  bubble: Bubble;
   cluster: Cluster;
   index: number;
   physics: SharedValue<PhysicsState[]>;
@@ -157,7 +201,7 @@ interface BubbleProps {
   dominantFont: SkFont;
 }
 
-const Bubble: React.FC<BubbleProps> = ({
+const BubbleNode: React.FC<BubbleProps> = ({
   bubble,
   cluster,
   index,
