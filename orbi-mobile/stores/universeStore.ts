@@ -33,6 +33,12 @@ interface UniverseState {
   // null = top-level cluster view; a cluster id = drilled view showing
   // only that cluster's tasks.
   activeClusterId: string | null;
+  // null = no search active. Otherwise the most recent search's
+  // matched task IDs. When set, layout switches to search view (all
+  // task bubbles, matches highlighted, non-matches dimmed) and the
+  // canvas shows a result pill at the top.
+  searchResults: string[] | null;
+  searchQuery: string | null;
   hydrate: () => Promise<void>;
   addTask: (task: ServerTask) => void;
   replaceTask: (task: ServerTask) => void;
@@ -40,6 +46,8 @@ interface UniverseState {
   getServerTask: (taskId: string) => ServerTask | undefined;
   enterCluster: (clusterId: string) => void;
   exitCluster: () => void;
+  setSearchResults: (query: string, taskIds: string[]) => void;
+  clearSearch: () => void;
 }
 
 export const useUniverseStore = create<UniverseState>((set, get) => ({
@@ -50,13 +58,15 @@ export const useUniverseStore = create<UniverseState>((set, get) => ({
   serverTasks: [],
   serverClusters: [],
   activeClusterId: null,
+  searchResults: null,
+  searchQuery: null,
 
   hydrate: async () => {
     set({ status: "loading", errorMessage: null });
     try {
       const [tasks, clusters] = await Promise.all([listTasks(), listClusters()]);
-      const { activeClusterId } = get();
-      const layout = layoutUniverse(clusters, tasks, new Date(), activeClusterId);
+      const { activeClusterId, searchResults } = get();
+      const layout = layoutUniverse(clusters, tasks, new Date(), activeClusterId, searchResults);
       set({
         status: "ready",
         errorMessage: null,
@@ -82,9 +92,9 @@ export const useUniverseStore = create<UniverseState>((set, get) => ({
     // Recompute layout with the new task prepended. The full layout pass
     // is cheap (a few sorts over a small array) and guarantees the canvas
     // matches what a fresh hydrate() would produce.
-    const { serverTasks, serverClusters, activeClusterId } = get();
+    const { serverTasks, serverClusters, activeClusterId, searchResults } = get();
     const nextTasks = [task, ...serverTasks];
-    const layout = layoutUniverse(serverClusters, nextTasks, new Date(), activeClusterId);
+    const layout = layoutUniverse(serverClusters, nextTasks, new Date(), activeClusterId, searchResults);
     set({
       serverTasks: nextTasks,
       clusters: layout.clusters,
@@ -96,9 +106,9 @@ export const useUniverseStore = create<UniverseState>((set, get) => ({
     // Swap the existing record (by id) with an updated copy. If the new
     // status is no longer 'active', layoutUniverse will naturally drop
     // it from the bubble list since it only renders active tasks.
-    const { serverTasks, serverClusters, activeClusterId } = get();
+    const { serverTasks, serverClusters, activeClusterId, searchResults } = get();
     const nextTasks = serverTasks.map((t) => (t.id === task.id ? task : t));
-    const layout = layoutUniverse(serverClusters, nextTasks, new Date(), activeClusterId);
+    const layout = layoutUniverse(serverClusters, nextTasks, new Date(), activeClusterId, searchResults);
     set({
       serverTasks: nextTasks,
       clusters: layout.clusters,
@@ -107,9 +117,9 @@ export const useUniverseStore = create<UniverseState>((set, get) => ({
   },
 
   removeTask: (taskId) => {
-    const { serverTasks, serverClusters, activeClusterId } = get();
+    const { serverTasks, serverClusters, activeClusterId, searchResults } = get();
     const nextTasks = serverTasks.filter((t) => t.id !== taskId);
-    const layout = layoutUniverse(serverClusters, nextTasks, new Date(), activeClusterId);
+    const layout = layoutUniverse(serverClusters, nextTasks, new Date(), activeClusterId, searchResults);
     set({
       serverTasks: nextTasks,
       clusters: layout.clusters,
@@ -121,21 +131,50 @@ export const useUniverseStore = create<UniverseState>((set, get) => ({
 
   enterCluster: (clusterId) => {
     // Switching to drilled view — rebuild layout with the active id so
-    // the canvas sees the task bubbles for just that cluster.
+    // the canvas sees the task bubbles for just that cluster. Drilling
+    // clears any active search so the cluster's tasks render normally.
     const { serverTasks, serverClusters } = get();
-    const layout = layoutUniverse(serverClusters, serverTasks, new Date(), clusterId);
+    const layout = layoutUniverse(serverClusters, serverTasks, new Date(), clusterId, null);
     set({
       activeClusterId: clusterId,
+      searchResults: null,
+      searchQuery: null,
       clusters: layout.clusters,
       bubbles: layout.bubbles,
     });
   },
 
   exitCluster: () => {
-    const { serverTasks, serverClusters } = get();
-    const layout = layoutUniverse(serverClusters, serverTasks, new Date(), null);
+    const { serverTasks, serverClusters, searchResults } = get();
+    const layout = layoutUniverse(serverClusters, serverTasks, new Date(), null, searchResults);
     set({
       activeClusterId: null,
+      clusters: layout.clusters,
+      bubbles: layout.bubbles,
+    });
+  },
+
+  setSearchResults: (query, taskIds) => {
+    // Search view spans the entire universe — exit drilled view if
+    // we're in one. Same layout pass as the other actions so the
+    // result is immediately visible on the canvas.
+    const { serverTasks, serverClusters } = get();
+    const layout = layoutUniverse(serverClusters, serverTasks, new Date(), null, taskIds);
+    set({
+      activeClusterId: null,
+      searchResults: taskIds,
+      searchQuery: query,
+      clusters: layout.clusters,
+      bubbles: layout.bubbles,
+    });
+  },
+
+  clearSearch: () => {
+    const { serverTasks, serverClusters, activeClusterId } = get();
+    const layout = layoutUniverse(serverClusters, serverTasks, new Date(), activeClusterId, null);
+    set({
+      searchResults: null,
+      searchQuery: null,
       clusters: layout.clusters,
       bubbles: layout.bubbles,
     });

@@ -8,14 +8,16 @@ from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from pydantic import BaseModel
 
 from app.agents.task_updater import parse_voice_update
 from app.db import tasks as tasks_db
 from app.models.task import TaskBubble, TaskBubbleCreate, TaskBubbleUpdate, TaskStatus
 from app.services.auth import get_current_user, get_current_user_with_tier
+from app.services.embeddings import generate_embedding
 from app.services.scoring import calculate_pressure_score
+from app.services.task_embedding import regenerate_task_embedding
 from app.services.task_sanitizer import derive_label_from_title
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
@@ -40,12 +42,15 @@ async def list_tasks(user_id: UUID = Depends(get_current_user)):
 @router.post("", response_model=TaskBubble, status_code=status.HTTP_201_CREATED)
 async def create_task(
     body: TaskBubbleCreate,
+    background_tasks: BackgroundTasks,
     user_id: UUID = Depends(get_current_user),
 ):
     """Create a new TaskBubble.
 
     owner_id is always taken from the auth token — never trusted from the
     request body. Pressure score is calculated immediately on creation.
+    The semantic-search embedding is generated AFTER the response is
+    returned via FastAPI's BackgroundTasks so the create stays fast.
     """
     now = datetime.now(timezone.utc)
     task_id = uuid4()
@@ -85,6 +90,9 @@ async def create_task(
     payload["pressure_score"] = pressure
 
     row = await tasks_db.insert_task(payload)
+    # Generate the search embedding off-thread — we never make the
+    # create response wait on an OpenAI round-trip.
+    background_tasks.add_task(regenerate_task_embedding, task_id, user_id)
     return row
 
 
@@ -104,9 +112,15 @@ async def get_task(task_id: UUID, user_id: UUID = Depends(get_current_user)):
 async def update_task(
     task_id: UUID,
     body: TaskBubbleUpdate,
+    background_tasks: BackgroundTasks,
     user_id: UUID = Depends(get_current_user),
 ):
-    """Partially update a task and recalculate its pressure score."""
+    """Partially update a task and recalculate its pressure score.
+
+    Re-embeds the task on title / label / description changes so search
+    stays current. Other field changes (status, due_at, etc.) don't
+    affect the embedding so we skip the OpenAI call for them.
+    """
     existing = await tasks_db.fetch_task_by_id(task_id, user_id)
     if existing is None:
         raise HTTPException(
@@ -132,6 +146,13 @@ async def update_task(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=_error("Task not found.", "TASK_NOT_FOUND"),
         )
+
+    # Re-embed only when one of the searchable fields actually changed
+    # — saves an OpenAI call on status/due_at/importance edits.
+    incoming = body.model_dump(exclude_none=True)
+    if any(k in incoming for k in ("title", "label", "description")):
+        background_tasks.add_task(regenerate_task_embedding, task_id, user_id)
+
     return row
 
 
@@ -204,3 +225,77 @@ async def voice_update_task(
         user_timezone=body.user_timezone,
     )
     return VoiceUpdateResponse(patch=result["patch"], reply=result["reply"])
+
+
+# ---------------------------------------------------------------------------
+# Semantic search — embed query, cosine-match against task embeddings
+# ---------------------------------------------------------------------------
+
+
+class TaskSearchRequest(BaseModel):
+    query: str
+    # Caps the returned set so the mobile doesn't have to filter a huge
+    # list itself. 25 is enough for any one user's relevant matches.
+    limit: int = 25
+
+
+class TaskSearchHit(BaseModel):
+    id: UUID
+    title: str
+    label: Optional[str] = None
+    similarity: float
+    parent_cluster_id: Optional[UUID] = None
+
+
+class TaskSearchResponse(BaseModel):
+    query: str
+    # If the query produced no embedding (OpenAI down, empty input)
+    # the mobile uses this flag to show a different empty state than
+    # "no matches found". Hits is always a list, never null.
+    embedded: bool
+    hits: list[TaskSearchHit]
+
+
+@router.post("/search", response_model=TaskSearchResponse)
+async def search_tasks(
+    body: TaskSearchRequest,
+    user_id: UUID = Depends(get_current_user),
+):
+    """Semantic search across the caller's active tasks.
+
+    Embeds the query via OpenAI, runs a pgvector cosine-similarity
+    scan, and returns matched tasks ranked by relevance. Tasks
+    without an embedding (created before the backfill, or where
+    generation failed) are excluded — the next update or a backfill
+    pass will make them searchable.
+    """
+    q = (body.query or "").strip()
+    if not q:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=_error("Query is empty.", "QUERY_EMPTY"),
+        )
+
+    embedding = await generate_embedding(q)
+    if embedding is None:
+        # Embedding failed (OpenAI hiccup, missing key). Return an
+        # empty result with embedded=false so the mobile can surface
+        # a "search unavailable" message rather than "no matches".
+        return TaskSearchResponse(query=q, embedded=False, hits=[])
+
+    rows = await tasks_db.search_tasks_by_embedding(
+        owner_id=user_id,
+        query_embedding=embedding,
+        match_count=max(1, min(body.limit, 50)),
+    )
+    hits = [
+        TaskSearchHit(
+            id=row["id"],
+            title=row.get("title") or "",
+            label=row.get("label"),
+            similarity=row.get("similarity") or 0.0,
+            parent_cluster_id=row.get("parent_cluster_id"),
+        )
+        for row in rows
+    ]
+    return TaskSearchResponse(query=q, embedded=True, hits=hits)

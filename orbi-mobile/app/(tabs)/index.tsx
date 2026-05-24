@@ -305,6 +305,17 @@ export default function UniverseScreen() {
             </Text>
           ) : null}
         </View>
+        {/* Search icon top-right, mirror of the profile icon on the
+            left. Single tap opens the search modal which embeds the
+            query server-side and tags matching task IDs in the store. */}
+        <Pressable
+          onPress={() => router.push("/search" as Href)}
+          hitSlop={12}
+          style={styles.searchBtn}
+          accessibilityLabel="Search"
+        >
+          <MaterialIcons name="search" size={26} color={colors.ink} />
+        </Pressable>
       </View>
 
       <View style={styles.canvasWrap}>
@@ -464,6 +475,7 @@ const styles = StyleSheet.create({
   },
   headerLeft: { flexDirection: "row", alignItems: "center", gap: 8 },
   profileBtn: { padding: 2 },
+  searchBtn: { padding: 4 },
   tierPill: {
     paddingHorizontal: 8,
     paddingVertical: 2,

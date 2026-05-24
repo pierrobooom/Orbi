@@ -485,6 +485,36 @@ export async function applyOrganisation(
   return (await res.json()) as ApplyResponse;
 }
 
+// ---------------------------------------------------------------------------
+// Semantic task search — embed the query server-side, cosine-match
+// against the user's task embeddings
+// ---------------------------------------------------------------------------
+
+export interface TaskSearchHit {
+  id: string;
+  title: string;
+  label: string | null;
+  similarity: number;
+  parent_cluster_id: string | null;
+}
+
+export interface TaskSearchResponse {
+  query: string;
+  // false when the embedding service was unavailable — mobile shows a
+  // "search unavailable" message rather than "no matches found".
+  embedded: boolean;
+  hits: TaskSearchHit[];
+}
+
+export async function searchTasks(query: string): Promise<TaskSearchResponse> {
+  const res = await authFetch(`${V1}/tasks/search`, {
+    method: "POST",
+    body: JSON.stringify({ query }),
+  });
+  if (!res.ok) throw await parseError(res);
+  return (await res.json()) as TaskSearchResponse;
+}
+
 export interface CreateTaskInput {
   title: string;
   label?: string | null;

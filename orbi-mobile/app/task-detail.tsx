@@ -69,7 +69,12 @@ export default function TaskDetailScreen() {
 
   const removeTask = useUniverseStore((s) => s.removeTask);
   const replaceTask = useUniverseStore((s) => s.replaceTask);
+  // Canvas-shaped clusters (carries `name` + color in the same shape
+  // the chip uses), but indexed via serverClusters too so the lookup
+  // works in search view / drilled view where the canvas list is
+  // filtered down to just one cluster.
   const clusters = useUniverseStore((s) => s.clusters);
+  const serverClusters = useUniverseStore((s) => s.serverClusters);
 
   // Subscribe directly to serverTasks so this screen re-renders when
   // replaceTask() lands a Save. The earlier useMemo over a stable
@@ -78,10 +83,15 @@ export default function TaskDetailScreen() {
   const task = useUniverseStore((s) =>
     taskId ? s.serverTasks.find((t) => t.id === taskId) : undefined,
   );
-  const currentCluster = useMemo(
-    () => (task?.parent_cluster_id ? clusters.find((c) => c.id === task.parent_cluster_id) : undefined),
-    [task, clusters],
-  );
+  // Look up the task's cluster via serverClusters (the full list,
+  // always populated) rather than `clusters` (the canvas state,
+  // which only contains the synthetic search/drilled cluster when
+  // those modes are active — search results that came from a real
+  // cluster would otherwise show "No cluster").
+  const currentCluster = useMemo(() => {
+    if (!task?.parent_cluster_id) return undefined;
+    return serverClusters.find((c) => c.id === task.parent_cluster_id);
+  }, [task, serverClusters]);
 
   const [mode, setMode] = useState<"view" | "edit">("view");
   const [busy, setBusy] = useState<"complete" | "delete" | "save" | null>(null);

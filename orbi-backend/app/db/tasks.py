@@ -64,3 +64,51 @@ async def archive_task(task_id: UUID, owner_id: UUID) -> bool:
         .execute()
     )
     return bool(response.data)
+
+
+async def search_tasks_by_embedding(
+    owner_id: UUID,
+    query_embedding: list[float],
+    match_count: int = 25,
+    match_threshold: float = 0.3,
+) -> list[dict]:
+    """Semantic similarity search over the user's task bubbles.
+
+    Calls the search_task_bubbles_by_embedding RPC (migration 0006)
+    which performs a pgvector cosine-similarity scan filtered by
+    ownership and a min-similarity threshold. Archived tasks are
+    excluded by the RPC. Default threshold 0.3 is loose enough to
+    catch broader matches; the mobile can re-rank by similarity if
+    needed.
+    """
+    response = (
+        get_client().rpc(
+            "search_task_bubbles_by_embedding",
+            {
+                "p_owner_id": str(owner_id),
+                "p_embedding": query_embedding,
+                "p_match_count": match_count,
+                "p_match_threshold": match_threshold,
+            },
+        ).execute()
+    )
+    return response.data or []
+
+
+async def fetch_tasks_without_embeddings(owner_id: UUID | None = None, limit: int = 100) -> list[dict]:
+    """Return tasks whose embedding column is NULL.
+
+    Used by the backfill script. When owner_id is None, scans all users
+    (admin/cron path); when set, only that user's tasks. Limit caps the
+    batch so the backfill can pace OpenAI calls.
+    """
+    query = (
+        get_client().table("task_bubbles")
+        .select("id, owner_id, title, label, description")
+        .is_("embedding", "null")
+        .limit(limit)
+    )
+    if owner_id is not None:
+        query = query.eq("owner_id", str(owner_id))
+    response = query.execute()
+    return response.data or []

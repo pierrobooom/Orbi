@@ -194,6 +194,11 @@ export default function BubbleCanvas({ onBubbleTap, onClusterLongPress, onEditFo
   const activeClusterId = useUniverseStore((s) => s.activeClusterId);
   const enterCluster = useUniverseStore((s) => s.enterCluster);
   const exitCluster = useUniverseStore((s) => s.exitCluster);
+  const searchQuery = useUniverseStore((s) => s.searchQuery);
+  const searchResults = useUniverseStore((s) => s.searchResults);
+  const clearSearch = useUniverseStore((s) => s.clearSearch);
+  const searchActive = searchResults !== null;
+  const matchCount = searchResults?.length ?? 0;
 
   // The drilled view shows the focused cluster's name + back arrow at
   // the top of the canvas. When active, taps on cluster bubbles open
@@ -360,7 +365,15 @@ export default function BubbleCanvas({ onBubbleTap, onClusterLongPress, onEditFo
      <GestureDetector gesture={pan}>
       <Animated.View style={[StyleSheet.absoluteFill, panStyle]}>
        <Animated.View
-         key={activeClusterId ?? "top"}
+         // Key changes whenever the visible "mode" changes: cluster
+         // (top), drilled into one cluster, or search-results view.
+         // The keyed remount is what gives the matched-bubbles
+         // pull-into-centre animation AND what cleanly resets the
+         // BubbleField's physics state — without keying on search,
+         // clearing the pill left labels + hit areas stale because
+         // the same BubbleField instance kept its previous physics
+         // array indexed against the old bubble set.
+         key={activeClusterId ?? (searchActive ? "search" : "top")}
          entering={enterAnimation}
          exiting={exitAnimation}
          style={StyleSheet.absoluteFill}
@@ -401,6 +414,27 @@ export default function BubbleCanvas({ onBubbleTap, onClusterLongPress, onEditFo
        </Animated.View>
       </Animated.View>
      </GestureDetector>
+      {/* Search-result pill — visible whenever a search is active. Sits
+          top-center, shows the query + match count, tap to clear. */}
+      {searchActive ? (
+        <Pressable
+          onPress={clearSearch}
+          style={[
+            styles.searchPill,
+            focusedCluster && styles.searchPillDrilled,
+          ]}
+          hitSlop={8}
+          accessibilityLabel="Clear search"
+        >
+          <MaterialIcons name="search" size={14} color={colors.ink} />
+          <Text style={styles.searchPillText} numberOfLines={1}>
+            {`"${searchQuery}" — ${matchCount} ${matchCount === 1 ? "match" : "matches"}`}
+          </Text>
+          <View style={styles.searchPillClear}>
+            <MaterialIcons name="close" size={14} color={colors.inkDim} />
+          </View>
+        </Pressable>
+      ) : null}
       {/* Re-center pill — only when the user has panned non-trivially.
           Lives outside the GestureDetector so taps on it always work,
           and outside the keyed wrapper so it doesn't crossfade. */}
@@ -409,9 +443,10 @@ export default function BubbleCanvas({ onBubbleTap, onClusterLongPress, onEditFo
           onPress={recenter}
           style={[
             styles.recenterBtn,
-            // When the back overlay is visible the recenter pill
-            // drops below it so they don't overlap on narrow screens.
-            focusedCluster && styles.recenterBtnDrilled,
+            // Drop below whichever chrome is occupying the top slot:
+            // the back overlay when drilled, OR the search pill when
+            // a search is active. They both sit at top: 10 by default.
+            (focusedCluster || searchActive) && styles.recenterBtnShifted,
           ]}
           hitSlop={8}
           accessibilityLabel="Re-center universe"
@@ -773,7 +808,39 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "600",
   },
-  recenterBtnDrilled: { top: 56 },
+  // Pushes the re-center pill below whichever overlay is already at
+  // top: 10 (back-to-clusters chevron when drilled, or the search
+  // result pill when search is active).
+  recenterBtnShifted: { top: 50 },
+  // Search-result pill — top-center, same chrome family as the back
+  // overlay so it reads as part of the same UI layer. Drops below the
+  // back overlay when drilled (rare combo but possible if the user
+  // drills into a cluster while a search is also active).
+  searchPill: {
+    position: "absolute",
+    top: 10,
+    alignSelf: "center",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 6,
+    paddingLeft: 12,
+    paddingRight: 6,
+    backgroundColor: "rgba(17, 20, 42, 0.85)",
+    borderRadius: 16,
+    borderColor: colors.line,
+    borderWidth: 1,
+    maxWidth: "82%",
+  },
+  searchPillDrilled: { top: 56 },
+  searchPillText: { color: colors.ink, fontSize: 12, fontWeight: "600" },
+  searchPillClear: {
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    marginLeft: 4,
+    borderLeftColor: colors.line,
+    borderLeftWidth: 1,
+  },
 });
 
 interface BubbleProps {
@@ -804,7 +871,12 @@ const BubbleNode: React.FC<BubbleProps> = ({
   // cluster bubble would draw at 16px because pressureScore is 0 for
   // them, while their physics hitbox is correct (30–72px).
   const baseRadius = radiusFor(bubble);
-  const baseColor = bubble.overdue ? colors.overdue : cluster.color;
+  // Color resolution order: overdue (red pulse) > bubble.color override
+  // (used in search view so each match keeps its origin cluster color)
+  // > the bubble's current cluster color.
+  const baseColor = bubble.overdue
+    ? colors.overdue
+    : bubble.color ?? cluster.color;
 
   // Position. cx adds drawOffsetX so the screen-coord physics value
   // lands at the right place inside the wider-than-screen Canvas.

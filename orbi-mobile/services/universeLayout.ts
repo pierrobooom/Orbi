@@ -21,6 +21,10 @@ import type { ServerCluster, ServerTask } from "@/services/api";
 
 // ID for the synthetic catch-all cluster. Doesn't exist on the backend.
 const DRIFT_ID = "synthetic-drift";
+// ID for the synthetic "search results" cluster — only present when a
+// search is active. Hosts every matched task bubble in a single tight
+// orbit at canvas centre.
+const SEARCH_RESULTS_ID = "synthetic-search-results";
 
 const KIND_POSITIONS: Record<ClusterKind, { x: number; y: number }> = {
   work: { x: 0.25, y: 0.22 },
@@ -145,8 +149,13 @@ export function layoutUniverse(
   // When set, the layout produces "drilled" view — only this cluster's
   // task bubbles, spread across the full canvas. When null/undefined,
   // it produces "cluster" view — one bubble per cluster, sized by task
-  // count.
+  // count. Search view (below) takes precedence over both.
   activeClusterId: string | null = null,
+  // When set, the layout produces "search" view — ALL task bubbles
+  // across ALL clusters, with each bubble tagged as match / non-match
+  // so the canvas can dim non-matches and highlight matches. Ignores
+  // activeClusterId because search spans the whole universe.
+  searchResults: string[] | null = null,
 ): LayoutResult {
   // Build canvas clusters from server clusters.
   const canvasClusters: Cluster[] = serverClusters.map((c) => {
@@ -194,6 +203,68 @@ export function layoutUniverse(
         : DRIFT_ID;
     if (!tasksByCluster.has(targetId)) tasksByCluster.set(targetId, []);
     tasksByCluster.get(targetId)!.push(t);
+  }
+
+  // -------------------------------------------------------------------
+  // Search view — pull all matched tasks into a single synthetic
+  // "search results" cluster centred on the canvas, regardless of
+  // their original clusters. Each bubble keeps its ORIGINAL cluster
+  // color (via the `color` field) so the user can see at a glance
+  // where each match came from — a Drift bubble that would otherwise
+  // be visually buried surfaces alongside the rest.
+  // -------------------------------------------------------------------
+  if (searchResults !== null) {
+    const matchSet = new Set(searchResults);
+    const matched: { task: ServerTask; originColor: string }[] = [];
+    for (const cluster of canvasClusters) {
+      const tasks = tasksByCluster.get(cluster.id) ?? [];
+      for (const t of tasks) {
+        if (matchSet.has(t.id)) {
+          matched.push({ task: t, originColor: cluster.color });
+        }
+      }
+    }
+    // Sort matched tasks by pressure desc so the most pressing is the
+    // visual centre of the focus group.
+    matched.sort((a, b) => b.task.pressure_score - a.task.pressure_score);
+
+    const searchCluster: Cluster = {
+      id: SEARCH_RESULTS_ID,
+      name: "Search results",
+      kind: "drift", // placeholder; bubbles use their own `color` field
+      color: colors.accent,
+      centerX: 0.5,
+      centerY: 0.46,
+    };
+
+    const bubbles: Bubble[] = matched.map(({ task, originColor }, rank) => {
+      // Wide orbital spread because the matched group has the whole
+      // canvas to itself — same generous distances as the drilled
+      // task view.
+      const offset = offsetForRank(rank, 110, 22);
+      const label = task.label && task.label.trim().length > 0
+        ? task.label.trim()
+        : deriveLabel(task.title);
+      return {
+        id: task.id,
+        title: task.title,
+        label,
+        // clusterId points at the synthetic cluster (drives the
+        // initial position around canvas centre); color is the bubble
+        // overrides for rendering so each match wears its origin
+        // cluster's color.
+        clusterId: SEARCH_RESULTS_ID,
+        pressureScore: task.pressure_score,
+        overdue: isOverdue(task, now),
+        isDominant: false,
+        offsetX: offset.x,
+        offsetY: offset.y,
+        kind: "task",
+        color: originColor,
+      };
+    });
+
+    return { clusters: [searchCluster], bubbles };
   }
 
   // -------------------------------------------------------------------
