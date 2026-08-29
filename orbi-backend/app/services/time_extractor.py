@@ -40,16 +40,105 @@ _RE_OCLOCK = re.compile(
     re.IGNORECASE,
 )
 
+# --------------------------------------------------------------------
+# Portuguese (pt-PT)
+# --------------------------------------------------------------------
+# Portuguese states time in ways none of the English patterns catch:
+# "às oito da noite" (word number + part-of-day), "meio-dia", "20h30",
+# "às oito e meia". Without these, every pt-PT capture with a spoken
+# time silently lost it — the English patterns matched nothing and the
+# LLM's own (unreliable) hour survived.
 
-def extract_local_clock(transcript: str) -> tuple[int, int] | None:
+_PT_NUMBER_WORDS = {
+    "uma": 1, "duas": 2, "tres": 3, "três": 3, "quatro": 4, "cinco": 5,
+    "seis": 6, "sete": 7, "oito": 8, "nove": 9, "dez": 10, "onze": 11,
+    "doze": 12,
+}
+
+# "20h30", "20h 30", "8h05" — the h-separated form is how Portuguese
+# writes times far more often than "20:30".
+_RE_PT_HMIN = re.compile(r"\b(\d{1,2})\s*h\s*(\d{2})\b", re.IGNORECASE)
+
+# "às 8", "as 20", "à uma", "as oito" — with an optional part-of-day
+# qualifier that decides AM vs PM.
+_RE_PT_AT = re.compile(
+    r"\b[àa]s?\s+(\d{1,2}|" + "|".join(_PT_NUMBER_WORDS) + r")"
+    r"(?:\s*[:h]\s*(\d{2}))?"
+    r"(\s+e\s+meia)?"
+    r"(?:\s+(?:da|de)\s+(manhã|manha|tarde|noite|madrugada))?",
+    re.IGNORECASE,
+)
+
+_RE_PT_MIDDAY = re.compile(r"\bmeio[-\s]?dia\b", re.IGNORECASE)
+_RE_PT_MIDNIGHT = re.compile(r"\bmeia[-\s]?noite\b", re.IGNORECASE)
+
+
+def _extract_portuguese_clock(transcript: str) -> tuple[int, int] | None:
+    """Portuguese clock phrases. Returns (hour, minute) or None."""
+    if _RE_PT_MIDDAY.search(transcript):
+        return (12, 0)
+    if _RE_PT_MIDNIGHT.search(transcript):
+        return (0, 0)
+
+    m = _RE_PT_HMIN.search(transcript)
+    if m:
+        hour, minute = int(m.group(1)), int(m.group(2))
+        if 0 <= hour < 24 and 0 <= minute < 60:
+            return (hour, minute)
+
+    m = _RE_PT_AT.search(transcript)
+    if m:
+        raw_hour = m.group(1).lower()
+        hour = (
+            int(raw_hour)
+            if raw_hour.isdigit()
+            else _PT_NUMBER_WORDS.get(raw_hour, -1)
+        )
+        if hour < 0:
+            return None
+        minute = int(m.group(2) or 0)
+        if m.group(3):  # "e meia" — half past
+            minute = 30
+        part = (m.group(4) or "").lower()
+        # Part-of-day disambiguates a 1-12 hour. "às oito da noite" is
+        # 20:00; a bare "às 20" is already unambiguous and left alone.
+        if part in {"tarde", "noite"} and hour < 12:
+            hour += 12
+        elif part == "madrugada" and hour == 12:
+            hour = 0
+        elif part in {"manhã", "manha"} and hour == 12:
+            hour = 0
+        if 0 <= hour < 24 and 0 <= minute < 60:
+            return (hour, minute)
+
+    return None
+
+
+def extract_local_clock(
+    transcript: str,
+    language: str | None = None,
+) -> tuple[int, int] | None:
     """Return (hour, minute) for the most prominent clock time in the
     transcript, or None if no explicit time is mentioned.
 
     Patterns are tried in order of specificity — AM/PM first (most
     unambiguous), then HH:MM, then "X o'clock" / "X hours".
+
+    For Portuguese the language-specific patterns run FIRST, because the
+    English ones produce wrong answers on Portuguese input rather than
+    simply failing: "às 8 da noite" hits the bare HH pattern and yields
+    08:00 instead of 20:00. Language defaults to English, so existing
+    English callers are unaffected.
     """
     if not transcript:
         return None
+
+    from app.services.locale import is_portuguese
+
+    if is_portuguese(language):
+        pt = _extract_portuguese_clock(transcript)
+        if pt is not None:
+            return pt
 
     # --- 12-hour AM/PM ---------------------------------------------
     m = _RE_AMPM.search(transcript)
@@ -84,6 +173,7 @@ def override_due_at_clock(
     llm_due_at: str | None,
     transcript: str,
     user_timezone: str | None,
+    language: str | None = None,
 ) -> str | None:
     """If the transcript has an explicit clock time, replace the
     hour/minute of the LLM's due_at with it. Keeps the LLM's date.
@@ -100,7 +190,7 @@ def override_due_at_clock(
         )
         return llm_due_at
 
-    clock = extract_local_clock(transcript)
+    clock = extract_local_clock(transcript, language=language)
     if clock is None:
         logger.warning(
             "time_extractor: no clock in transcript. transcript=%r tz=%s llm=%s",

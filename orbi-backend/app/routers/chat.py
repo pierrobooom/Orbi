@@ -20,6 +20,7 @@ from app.db import (
     conversations as conv_db,
     finance as finance_db,
     tasks as tasks_db,
+    users as users_db,
 )
 from app.models.conversation import ConversationSource
 from app.services.auth import get_current_user_with_tier
@@ -42,6 +43,9 @@ class ChatRequest(BaseModel):
     # it to resolve user-stated times like "4 PM" in the user's local
     # zone before emitting ISO 8601 with the right offset.
     user_timezone: Optional[str] = None
+    # BCP-47 tag. Optional — when absent the server falls back to the
+    # user's stored preference, then to English.
+    language: Optional[str] = None
 
 
 class ChatResponse(BaseModel):
@@ -76,6 +80,20 @@ async def chat(
     session_id = body.session_id or uuid4()
     now = datetime.now(timezone.utc)
 
+    # Language precedence: explicit request field, then the stored
+    # preference, then English. The request field lets the client react
+    # to a settings change without waiting for a round-trip, while the
+    # stored value keeps voice capture correct for clients that don't
+    # send one.
+    language = body.language
+    if not language:
+        try:
+            prefs = await users_db.fetch_preferences(user_id)
+            language = (prefs or {}).get("language")
+        except Exception as exc:  # noqa: BLE001 — never block capture
+            logger.warning("Could not read language preference: %s", exc)
+            language = None
+
     # Store user message
     await conv_db.insert_conversation_event({
         "id": str(uuid4()),
@@ -98,6 +116,7 @@ async def chat(
         user_tier=user_tier,
         conversation_history=history_messages,
         user_timezone=body.user_timezone,
+        language=language,
     )
 
     intent = classification.get("intent", "general_chat")
@@ -176,6 +195,7 @@ async def chat(
                 raw_parsed,
                 now=now,
                 user_timezone=body.user_timezone,
+                language=language,
             )
 
             # Authoritative clock-time override: if the transcript
@@ -194,6 +214,7 @@ async def chat(
                     parsed.get("due_at"),
                     body.message,
                     body.user_timezone,
+                    language=language,
                 )
 
             # Resolve the cluster. Without this the mobile always lands

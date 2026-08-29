@@ -22,7 +22,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, s
 from fastapi.responses import Response
 
 from app.agents import debrief_agent
-from app.db import conversations as conv_db, voice_sessions as voice_db
+from app.db import conversations as conv_db, users as users_db, voice_sessions as voice_db
 from app.models.conversation import ConversationSource
 from app.models.voice import (
     TranscriptionResult,
@@ -54,6 +54,10 @@ def _error(message: str, error_code: str) -> dict:
 @router.post("/transcribe", response_model=TranscriptionResult)
 async def transcribe(
     audio: UploadFile = File(..., description="Recorded audio file (webm, m4a, wav, mp3)"),
+    language: str | None = Form(
+        None,
+        description="BCP-47 tag, e.g. 'pt-PT'. Falls back to the stored preference.",
+    ),
     auth: dict = Depends(get_current_user_with_tier),
 ):
     """Transcribe an uploaded audio file via Deepgram.
@@ -63,6 +67,17 @@ async def transcribe(
     """
     user_id = auth["user_id"]
     user_tier = auth["tier"]
+
+    # Deepgram needs the language up front — it can't be inferred from
+    # the audio. An explicit form field wins so the client reflects a
+    # settings change immediately; otherwise use the stored preference.
+    if not language:
+        try:
+            prefs = await users_db.fetch_preferences(user_id)
+            language = (prefs or {}).get("language")
+        except Exception as exc:  # noqa: BLE001 — never block transcription
+            logger.warning("Could not read language preference: %s", exc)
+            language = None
 
     audio_bytes = await audio.read()
     if not audio_bytes:
@@ -77,6 +92,7 @@ async def transcribe(
             user_id=user_id,
             user_tier=user_tier,
             mimetype=audio.content_type or "audio/webm",
+            language=language,
         )
     except transcription.TranscriptionQuotaExceeded as exc:
         raise HTTPException(

@@ -23,7 +23,17 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { registerPushDevice } from "@/hooks/usePushRegistration";
-import { API_BASE_URL, ApiError, getHealth, sendTestPush } from "@/services/api";
+import {
+  API_BASE_URL,
+  ApiError,
+  getHealth,
+  getMyPreferences,
+  sendTestPush,
+  setMyPreferences,
+  SUPPORTED_LANGUAGES,
+  type LanguageTag,
+  type UserPreferences,
+} from "@/services/api";
 import { TIER_DISPLAY } from "@/services/tierGate";
 import { useAuthStore } from "@/stores/authStore";
 import { colors } from "@/theme/colors";
@@ -47,6 +57,12 @@ export default function SettingsScreen() {
   const [notifsGranted, setNotifsGranted] = useState<boolean | null>(null);
   const [busy, setBusy] = useState<"signout" | "test" | "register" | null>(null);
   const [health, setHealth] = useState<HealthStatus>({ kind: "loading" });
+  // Language lives in user_preferences server-side; it drives speech
+  // recognition, which language the agents reply in, and how titles
+  // are cleaned up. Null until the first fetch resolves.
+  const [prefs, setPrefs] = useState<UserPreferences | null>(null);
+  const [savingLanguage, setSavingLanguage] = useState<LanguageTag | null>(null);
+  const [languageError, setLanguageError] = useState<string | null>(null);
 
   useEffect(() => {
     Notifications.getPermissionsAsync()
@@ -105,6 +121,42 @@ export default function SettingsScreen() {
           { text: "Open Settings", onPress: () => Linking.openSettings() },
         ],
       );
+    }
+  };
+
+  useEffect(() => {
+    // A user who has never opened preferences has no row yet; the
+    // backend 404s rather than auto-creating one, so fall back to the
+    // same defaults the DB column uses.
+    getMyPreferences()
+      .then(setPrefs)
+      .catch(() => {
+        setPrefs({
+          user_id: "",
+          quiet_hours_start: "22:00:00",
+          quiet_hours_end: "08:00:00",
+          proactivity_level: 3,
+          preferred_reminder_channel: "push",
+          language: "en-GB",
+        });
+      });
+  }, []);
+
+  const onSelectLanguage = async (tag: LanguageTag) => {
+    if (!prefs || prefs.language === tag) return;
+    setLanguageError(null);
+    setSavingLanguage(tag);
+    const previous = prefs;
+    // Optimistic — the row highlights immediately and reverts on failure.
+    setPrefs({ ...prefs, language: tag });
+    try {
+      const saved = await setMyPreferences({ ...prefs, language: tag });
+      setPrefs(saved);
+    } catch (e) {
+      setPrefs(previous);
+      setLanguageError(e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setSavingLanguage(null);
     }
   };
 
@@ -221,6 +273,40 @@ export default function SettingsScreen() {
               trackColor={{ false: colors.line, true: colors.accent }}
             />
           </View>
+        </Section>
+
+        <Section title="Language">
+          <Text style={styles.languageHint}>
+            Used for speech recognition and for the language Orbi replies in.
+          </Text>
+          {SUPPORTED_LANGUAGES.map((option) => {
+            const active = prefs?.language === option.tag;
+            return (
+              <Pressable
+                key={option.tag}
+                onPress={() => onSelectLanguage(option.tag)}
+                disabled={savingLanguage !== null || prefs === null}
+                style={[styles.languageRow, active && styles.languageRowActive]}
+              >
+                <Text
+                  style={[styles.languageLabel, active && styles.languageLabelActive]}
+                >
+                  {option.label}
+                </Text>
+                {savingLanguage === option.tag ? (
+                  <ActivityIndicator size="small" color={colors.inkDim} />
+                ) : active ? (
+                  <Text style={styles.languageCheck}>✓</Text>
+                ) : null}
+              </Pressable>
+            );
+          })}
+          {prefs === null ? (
+            <Text style={styles.languageHint}>Loading…</Text>
+          ) : null}
+          {languageError ? (
+            <Text style={styles.languageError}>{languageError}</Text>
+          ) : null}
         </Section>
 
         <Section title="Status">
@@ -342,6 +428,30 @@ const styles = StyleSheet.create({
   headerCancel: { color: colors.accent, fontSize: 14, fontWeight: "600", width: 50 },
   body: { padding: 20, paddingBottom: 60 },
   section: { marginBottom: 22 },
+  languageRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 13,
+    paddingHorizontal: 16,
+  },
+  languageRowActive: { backgroundColor: colors.panel },
+  languageLabel: { color: colors.ink, fontSize: 14 },
+  languageLabelActive: { fontWeight: "700" },
+  languageCheck: { color: colors.accent, fontSize: 15, fontWeight: "700" },
+  languageHint: {
+    color: colors.inkDim,
+    fontSize: 11,
+    lineHeight: 16,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+  },
+  languageError: {
+    color: colors.overdue,
+    fontSize: 12,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+  },
   sectionTitle: {
     color: colors.inkDim,
     fontSize: 11,

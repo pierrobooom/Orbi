@@ -45,6 +45,12 @@ class UserPreference(BaseModel):
     # 1 = minimal interruptions, 5 = highly proactive
     proactivity_level: int
     preferred_reminder_channel: str
+    # BCP-47 tag. Drives speech-to-text language, the language the agents
+    # reply in, and which locale pack the sanitizer / time extractor use.
+    language: str = "en-GB"
+    # BCP-47 tag. Drives speech-to-text language, the language the agents
+    # reply in, and which locale pack the sanitizer / time extractor use.
+    language: str = "en-GB"
 
     model_config = {
         "json_schema_extra": {

@@ -543,6 +543,7 @@ export interface TranscriptionResult {
 export async function transcribeAudio(
   uri: string,
   mimeType: string,
+  language?: string | null,
 ): Promise<TranscriptionResult> {
   // multipart/form-data upload. Don't set Content-Type manually — the
   // fetch boundary is generated when the browser/RN builds the body.
@@ -555,6 +556,10 @@ export async function transcribeAudio(
     name: "recording.m4a",
     type: mimeType,
   } as unknown as Blob);
+
+  // Deepgram can't infer the language from the audio, so it has to be
+  // sent with the upload. Omitted means "use my stored preference".
+  if (language) form.append("language", language);
 
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token;
@@ -578,6 +583,40 @@ export interface ChatResponse {
   intent: string;
   agent_used: string | null;
   data: Record<string, unknown> | null;
+}
+
+export const SUPPORTED_LANGUAGES = [
+  { tag: "en-GB", label: "English (UK)" },
+  { tag: "en-US", label: "English (US)" },
+  { tag: "pt-PT", label: "Português (Portugal)" },
+] as const;
+
+export type LanguageTag = (typeof SUPPORTED_LANGUAGES)[number]["tag"];
+
+export interface UserPreferences {
+  user_id: string;
+  quiet_hours_start: string;
+  quiet_hours_end: string;
+  proactivity_level: number;
+  preferred_reminder_channel: string;
+  language: LanguageTag;
+}
+
+export async function getMyPreferences(): Promise<UserPreferences> {
+  const res = await authFetch(`${V1}/users/me/preferences`);
+  if (!res.ok) throw await parseError(res);
+  return (await res.json()) as UserPreferences;
+}
+
+export async function setMyPreferences(
+  prefs: UserPreferences,
+): Promise<UserPreferences> {
+  const res = await authFetch(`${V1}/users/me/preferences`, {
+    method: "PUT",
+    body: JSON.stringify(prefs),
+  });
+  if (!res.ok) throw await parseError(res);
+  return (await res.json()) as UserPreferences;
 }
 
 export async function chatMessage(

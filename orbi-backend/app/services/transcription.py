@@ -46,7 +46,10 @@ _MIN_BILLABLE_SECONDS = 1
 
 _DEEPGRAM_API_KEY = os.environ.get("DEEPGRAM_API_KEY", "")
 _DEEPGRAM_MODEL = "nova-2"
-_DEEPGRAM_LANGUAGE = "en"
+# Fallback only. The real value comes from the caller's locale — see
+# services/locale.py. Pinning this to "en" was why Portuguese speech came
+# back as garbled English homophones.
+_DEEPGRAM_LANGUAGE = "en-GB"
 
 _deepgram_client: Optional[DeepgramClient] = None
 
@@ -67,11 +70,21 @@ def _get_client() -> DeepgramClient:
     return _deepgram_client
 
 
+def _resolve_language(tag: str | None) -> str:
+    """Map a user language tag to Deepgram's language parameter."""
+    from app.services.locale import get_locale
+
+    if not tag:
+        return _DEEPGRAM_LANGUAGE
+    return get_locale(tag).deepgram_language
+
+
 async def transcribe_audio(
     audio_bytes: bytes,
     user_id: UUID,
     user_tier: str,
     mimetype: str = "audio/webm",
+    language: str | None = None,
 ) -> dict:
     """Transcribe an audio payload via Deepgram, gated by the daily STT cap.
 
@@ -114,7 +127,7 @@ async def transcribe_audio(
 
     options = PrerecordedOptions(
         model=_DEEPGRAM_MODEL,
-        language=_DEEPGRAM_LANGUAGE,
+        language=_resolve_language(language),
         smart_format=True,
         punctuate=True,
     )

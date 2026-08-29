@@ -26,6 +26,7 @@ async def classify_intent(
     user_tier: str,
     conversation_history: list[dict] | None = None,
     user_timezone: str | None = None,
+    language: str | None = None,
 ) -> dict:
     """Classify the user's intent and determine which agent should handle it.
 
@@ -65,6 +66,13 @@ async def classify_intent(
             f"{msg['role']}: {msg['content']}" for msg in recent
         )
         context_lines.append(f"Recent conversation:\n{history_text}")
+
+    # The prompt is written in English, so without an explicit
+    # instruction the model replies in English even when the user spoke
+    # Portuguese. The locale supplies that instruction.
+    from app.services.locale import get_locale
+
+    context_lines.append(get_locale(language).prompt_instruction)
 
     system = _SYSTEM_PROMPT + "\n\n" + "\n".join(context_lines)
 

@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 from app.db import device_tokens as device_tokens_db, users as users_db
 from app.models.user import UsageSnapshot, UserPreference, UserProfile
 from app.services.auth import get_current_user, get_current_user_with_tier
+from app.services.locale import get_locale
 from app.services.push import send_push
 from app.services.usage_tracker import get_user_usage
 
@@ -115,6 +116,12 @@ async def set_my_preferences(
     """
     payload = body.model_dump(mode="json")
     payload["user_id"] = str(user_id)
+    # Coerce rather than reject: an unsupported tag from a stale client
+    # falls back to English instead of 500ing on the DB check constraint.
+    payload["language"] = get_locale(payload.get("language")).tag
+    # Coerce rather than reject: an unsupported tag from a stale client
+    # falls back to English instead of 500ing on the DB check constraint.
+    payload["language"] = get_locale(payload.get("language")).tag
 
     row = await users_db.upsert_preferences(payload)
     return row

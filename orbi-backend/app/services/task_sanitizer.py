@@ -96,11 +96,19 @@ _DUE_PAST_TOLERANCE = timedelta(hours=1)  # accept times up to 1h in the past
 _DUE_FUTURE_HORIZON = timedelta(days=365 * 5)  # five years out
 
 
-def _strip_verbose_prefix(title: str) -> str:
-    """Drop common "remind me to ..." / "I need to ..." preambles."""
+def _strip_verbose_prefix(title: str, language: str | None = None) -> str:
+    """Drop common "remind me to ..." / "I need to ..." preambles.
+
+    The prefix list comes from the user's locale. Without this a
+    Portuguese capture kept its lead-in and produced a task titled
+    "Preciso de ligar à minha mãe" instead of "Ligar à minha mãe".
+    """
+    from app.services.locale import get_locale
+
+    prefixes = get_locale(language).title_prefixes or _VERBOSE_TITLE_PREFIXES
     s = title.strip()
     lower = s.lower()
-    for prefix in _VERBOSE_TITLE_PREFIXES:
+    for prefix in prefixes:
         if lower.startswith(prefix + " ") or lower == prefix:
             s = s[len(prefix):].strip()
             lower = s.lower()
@@ -199,6 +207,7 @@ def sanitize_parsed_task(
     data: dict,
     now: datetime | None = None,
     user_timezone: str | None = None,
+    language: str | None = None,
 ) -> dict:
     """Return a cleaned-up copy of the LLM's parsed task dict.
 
@@ -216,7 +225,7 @@ def sanitize_parsed_task(
     # --- title -------------------------------------------------------
     raw_title = cleaned.get("title")
     if isinstance(raw_title, str):
-        title = _strip_verbose_prefix(raw_title)
+        title = _strip_verbose_prefix(raw_title, language=language)
         if len(title) > _TITLE_MAX_LEN:
             title = title[:_TITLE_MAX_LEN].rstrip()
         cleaned["title"] = title
