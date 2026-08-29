@@ -377,6 +377,10 @@ export interface ServerCluster {
   name: string;
   summary: string | null;
   color: string;
+  // Stored server-side since migration 0007. Optional so a stale client
+  // reading a pre-0007 row still type-checks; universeLayout falls back
+  // to name classification when it's missing.
+  kind?: string | null;
   weight_score: number;
   active_count: number;
   parent_cluster_id: string | null;

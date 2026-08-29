@@ -83,6 +83,9 @@ class Cluster(BaseModel):
     name: str
     summary: Optional[str] = None
     color: str
+    # Canvas placement/palette anchor. Assigned once at creation and never
+    # re-derived from the name — see services/cluster_kind.py for why.
+    kind: str = "drift"
     weight_score: float
     active_count: int
     parent_cluster_id: Optional[UUID] = None

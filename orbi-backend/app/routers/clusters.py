@@ -16,6 +16,7 @@ from app.db import clusters as clusters_db, tasks as tasks_db
 from app.models.task import Cluster
 from app.services.auth import get_current_user, get_current_user_with_tier
 from app.services.cluster_apply import apply_organisation
+from app.services.cluster_kind import coerce_kind
 
 router = APIRouter(prefix="/clusters", tags=["clusters"])
 
@@ -24,6 +25,8 @@ class ClusterCreate(BaseModel):
     name: str
     summary: Optional[str] = None
     color: str = "#7C6FE0"
+    # Optional — the server classifies from the name when omitted.
+    kind: Optional[str] = None
     parent_cluster_id: Optional[UUID] = None
 
 
@@ -31,6 +34,10 @@ class ClusterUpdate(BaseModel):
     name: Optional[str] = None
     summary: Optional[str] = None
     color: Optional[str] = None
+    # Deliberately changeable, but ONLY when the client asks explicitly.
+    # A rename must never imply a kind change — that was the bug where a
+    # renamed cluster turned grey and jumped to canvas centre.
+    kind: Optional[str] = None
     parent_cluster_id: Optional[UUID] = None
 
 
@@ -58,6 +65,7 @@ async def create_cluster(
         "name": body.name,
         "summary": body.summary,
         "color": body.color,
+        "kind": coerce_kind(body.kind, fallback_name=body.name),
         "weight_score": 0.0,
         "active_count": 0,
         "parent_cluster_id": str(body.parent_cluster_id) if body.parent_cluster_id else None,
@@ -210,6 +218,13 @@ async def update_cluster(
         )
 
     update_payload = body.model_dump(exclude_none=True, mode="json")
+    if "kind" in update_payload:
+        # Drop a bogus kind rather than 500 on the DB check constraint.
+        # Note this never fires on a plain rename — `kind` is only in the
+        # payload when the client explicitly sent one.
+        update_payload["kind"] = coerce_kind(
+            update_payload["kind"], fallback_name=existing.get("name")
+        )
     if not update_payload:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

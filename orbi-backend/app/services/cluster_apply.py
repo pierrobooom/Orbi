@@ -26,7 +26,8 @@ import logging
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
-from app.db import clusters as clusters_db, tasks as tasks_db
+from app.db import clusters as clusters_db
+from app.services.cluster_kind import classify_kind, tasks as tasks_db
 
 logger = logging.getLogger(__name__)
 
@@ -152,6 +153,9 @@ async def _do_create(
         "name": name,
         "summary": None,
         "color": color,
+        # LLM-created clusters get the same one-time classification as
+        # user-created ones; a later rename won't move them.
+        "kind": classify_kind(name),
         "weight_score": 0.0,
         "active_count": len(task_ids),
         "parent_cluster_id": None,

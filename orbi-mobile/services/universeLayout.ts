@@ -56,12 +56,50 @@ const KIND_KEYWORDS: ReadonlyArray<[ClusterKind, ReadonlyArray<string>]> = [
   ["learning", ["learning", "study", "reading", "course"]],
 ];
 
+const VALID_KINDS = new Set<ClusterKind>([
+  "work", "health", "finance", "personal", "home", "learning", "drift",
+]);
+
+/** Name-based classification. FALLBACK ONLY — used for pre-0007 rows that
+ * have no stored kind. Never call this on a rename: deriving kind from the
+ * current name is exactly the bug that made renamed clusters turn grey and
+ * jump to canvas centre. The server stores `kind` at creation time now. */
 function classifyKind(name: string): ClusterKind {
   const n = name.toLowerCase();
   for (const [kind, keywords] of KIND_KEYWORDS) {
     if (keywords.some((k) => n.includes(k))) return kind;
   }
   return "drift";
+}
+
+function resolveKind(c: ServerCluster): ClusterKind {
+  const stored = c.kind as ClusterKind | null | undefined;
+  if (stored && VALID_KINDS.has(stored)) return stored;
+  return classifyKind(c.name);
+}
+
+// Several clusters can legitimately share a kind — three 'drift' clusters
+// with idiosyncratic names is normal, and they'd otherwise stack exactly on
+// top of each other at the kind's anchor point. Fan the 2nd, 3rd, ... out
+// around the anchor on a fixed ring so positions stay stable across renders
+// (no randomness, no dependence on task counts).
+const COLLISION_RING_X = 0.13;
+const COLLISION_RING_Y = 0.11;
+function spreadPosition(
+  anchor: { x: number; y: number },
+  indexWithinKind: number,
+): { x: number; y: number } {
+  if (indexWithinKind === 0) return anchor;
+  // Alternate around the anchor: right, left, down, up, then diagonals.
+  const angle = (indexWithinKind - 1) * GOLDEN_ANGLE;
+  const ring = 1 + Math.floor((indexWithinKind - 1) / 6);
+  const x = anchor.x + Math.cos(angle) * COLLISION_RING_X * ring;
+  const y = anchor.y + Math.sin(angle) * COLLISION_RING_Y * ring;
+  // Keep the bubble on-canvas with a margin for its radius + label.
+  return {
+    x: Math.min(0.92, Math.max(0.08, x)),
+    y: Math.min(0.88, Math.max(0.12, y)),
+  };
 }
 
 function isOverdue(task: ServerTask, now: Date): boolean {
@@ -158,9 +196,12 @@ export function layoutUniverse(
   searchResults: string[] | null = null,
 ): LayoutResult {
   // Build canvas clusters from server clusters.
+  const seenPerKind = new Map<ClusterKind, number>();
   const canvasClusters: Cluster[] = serverClusters.map((c) => {
-    const kind = classifyKind(c.name);
-    const pos = KIND_POSITIONS[kind];
+    const kind = resolveKind(c);
+    const indexWithinKind = seenPerKind.get(kind) ?? 0;
+    seenPerKind.set(kind, indexWithinKind + 1);
+    const pos = spreadPosition(KIND_POSITIONS[kind], indexWithinKind);
     return {
       id: c.id,
       name: c.name,
@@ -179,15 +220,22 @@ export function layoutUniverse(
   const hasUncategorized = serverTasks.some(
     (t) => t.parent_cluster_id == null && t.status === "active",
   );
-  const driftAlreadyPresent = canvasClusters.some((c) => c.kind === "drift");
+  // Key on the synthetic ID, NOT on kind. Keying on kind meant any real
+  // cluster that happened to classify as 'drift' (e.g. "Car Stuff")
+  // suppressed the catch-all entirely, and every uncategorised task
+  // silently vanished into that unrelated cluster.
+  const driftAlreadyPresent = canvasClusters.some((c) => c.id === DRIFT_ID);
   if (hasUncategorized && !driftAlreadyPresent) {
+    const driftIndex = seenPerKind.get("drift") ?? 0;
+    seenPerKind.set("drift", driftIndex + 1);
+    const driftPos = spreadPosition(KIND_POSITIONS.drift, driftIndex);
     canvasClusters.push({
       id: DRIFT_ID,
       name: "Drift",
       kind: "drift",
       color: KIND_COLORS.drift,
-      centerX: KIND_POSITIONS.drift.x,
-      centerY: KIND_POSITIONS.drift.y,
+      centerX: driftPos.x,
+      centerY: driftPos.y,
     });
   }
 
@@ -325,7 +373,7 @@ export function layoutUniverse(
     // catch-all bucket doesn't pulse just because it caught one
     // overdue task.
     const hasOverdue =
-      cluster.kind !== "drift" && tasks.some((t) => isOverdue(t, now));
+      cluster.id !== DRIFT_ID && tasks.some((t) => isOverdue(t, now));
     return {
       // Use the cluster's id as the bubble id so taps map directly to
       // enterCluster without a lookup.
