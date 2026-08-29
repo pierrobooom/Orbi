@@ -39,10 +39,20 @@ logger = logging.getLogger(__name__)
 _groq_client = Groq(api_key=os.environ["GROQ_API_KEY"])
 _anthropic_client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
 
-# Two Llama variants — Spark uses the cheap 8B, paid tiers use the bigger 70B
-# for daily chat. Claude is reserved for Genius's premium intents only.
-_GROQ_MODEL_SMALL = "llama-3.1-8b-instant"
-_GROQ_MODEL_LARGE = "llama-3.1-70b-versatile"
+# Two GPT-OSS variants — Spark uses the cheap 20B, paid tiers use the bigger
+# 120B for daily chat. Claude is reserved for Genius's premium intents only.
+#
+# These replaced llama-3.1-8b-instant / llama-3.1-70b-versatile, which Groq
+# retired: every call 404'd with model_not_found. Because get_ai_response
+# swallows provider errors and returns _FALLBACK_RESPONSE, the outage showed
+# up downstream as "coordinator failed to parse AI response" rather than as a
+# model error — worth remembering the next time parsing mysteriously breaks.
+#
+# Both GPT-OSS models advertise json_mode AND structured_outputs, which the
+# coordinator and task_parser rely on to get parseable JSON back. Qwen was
+# the other candidate but offers json_mode only, at 4-5x the price.
+_GROQ_MODEL_SMALL = "openai/gpt-oss-20b"
+_GROQ_MODEL_LARGE = "openai/gpt-oss-120b"
 _CLAUDE_MODEL = "claude-sonnet-4-6"
 
 # Intents that are eligible for Claude on the Genius tier. Anything else —
@@ -150,7 +160,17 @@ async def _call_groq(
     model: str,
     user_tier: str,
 ) -> str:
-    """Call Groq Llama and return the response text."""
+    """Call Groq and return the response text.
+
+    reasoning_effort="low" is not optional here. The GPT-OSS models are
+    reasoning models: they spend completion tokens on a hidden reasoning
+    pass before emitting any content, and that reasoning is billed against
+    the same max_tokens budget. At the default effort a 100-token budget
+    (finance_agent's merchant categoriser) is consumed entirely by reasoning
+    and `content` comes back as an empty string — which _FALLBACK_RESPONSE
+    then masks as a generic failure. "low" keeps a trivial categorisation at
+    ~34 completion tokens, leaving every existing caller's budget workable.
+    """
     start_ms = time.monotonic()
     try:
         response = _groq_client.chat.completions.create(
@@ -160,6 +180,11 @@ async def _call_groq(
                 {"role": "user", "content": prompt},
             ],
             max_tokens=max_tokens,
+            # Passed via extra_body because groq-python 0.9.0 predates the
+            # parameter and rejects it as an unexpected kwarg. extra_body
+            # goes straight into the request JSON, so it works today and
+            # stays correct after an SDK upgrade.
+            extra_body={"reasoning_effort": "low"},
         )
         elapsed_ms = int((time.monotonic() - start_ms) * 1000)
         result = response.choices[0].message.content or _FALLBACK_RESPONSE

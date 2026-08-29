@@ -18,7 +18,7 @@ from app.services.usage_tracker import (
     cap_for,
     check_and_record,
 )
-from app.services.ai_router import _resolve_provider
+from app.services.ai_router import _GROQ_MODEL_LARGE, _GROQ_MODEL_SMALL, _resolve_provider
 
 
 # ---------------------------------------------------------------------------
@@ -191,22 +191,22 @@ class TestCheckAndRecord:
 # These don't hit the DB or the network — pure mapping logic.
 
 class TestResolveProvider:
-    def test_spark_always_uses_8b_llama(self):
+    def test_spark_always_uses_small_model(self):
         for intent in ("daily_chat", "debrief", "weekly_review", "monthly_synthesis"):
             provider, model = _resolve_provider("free", intent)
             assert provider == "groq"
-            assert "8b" in model
+            assert model == _GROQ_MODEL_SMALL
 
-    def test_pro_always_uses_70b_llama(self):
+    def test_pro_always_uses_large_model(self):
         for intent in ("daily_chat", "debrief", "weekly_review", "monthly_synthesis"):
             provider, model = _resolve_provider("pro", intent)
             assert provider == "groq"
-            assert "70b" in model
+            assert model == _GROQ_MODEL_LARGE
 
-    def test_genius_daily_chat_uses_70b_not_claude(self):
+    def test_genius_daily_chat_uses_large_model_not_claude(self):
         provider, model = _resolve_provider("premium", "daily_chat")
         assert provider == "groq"
-        assert "70b" in model
+        assert model == _GROQ_MODEL_LARGE
 
     def test_genius_debrief_uses_claude(self):
         provider, model = _resolve_provider("premium", "debrief")
