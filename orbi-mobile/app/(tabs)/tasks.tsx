@@ -32,6 +32,7 @@ import {
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { useT } from "@/i18n";
 import { useUniverseStore } from "@/stores/universeStore";
 import { colors } from "@/theme/colors";
 import { searchTasks, type ServerTask } from "@/services/api";
@@ -86,6 +87,7 @@ function byDue(a: ServerTask, b: ServerTask): number {
 }
 
 export default function TasksScreen() {
+  const t = useT();
   const router = useRouter();
   const status = useUniverseStore((s) => s.status);
   const serverTasks = useUniverseStore((s) => s.serverTasks);
@@ -184,13 +186,15 @@ export default function TasksScreen() {
     if (sortMode !== "cluster") return [];
     const groups = new Map<string, { meta: ClusterMeta; data: ServerTask[] }>();
     const UNASSIGNED = "__drift__";
-    for (const t of sorted) {
-      const key = t.parent_cluster_id ?? UNASSIGNED;
+    // Named `task`, not `t` — `t` is the translate function in this scope.
+    for (const task of sorted) {
+      const key = task.parent_cluster_id ?? UNASSIGNED;
       const meta =
-        (t.parent_cluster_id ? clusterLookup.get(t.parent_cluster_id) : undefined) ??
-        { name: "Drift", color: colors.drift };
+        (task.parent_cluster_id
+          ? clusterLookup.get(task.parent_cluster_id)
+          : undefined) ?? { name: t("Drift"), color: colors.drift };
       if (!groups.has(key)) groups.set(key, { meta, data: [] });
-      groups.get(key)!.data.push(t);
+      groups.get(key)!.data.push(task);
     }
     // Biggest clusters first; Drift always last so the catch-all doesn't
     // lead the screen.
@@ -206,7 +210,7 @@ export default function TasksScreen() {
         color: group.meta.color,
         data: group.data,
       }));
-  }, [sortMode, sorted, clusterLookup]);
+  }, [sortMode, sorted, clusterLookup, t]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -251,10 +255,10 @@ export default function TasksScreen() {
     return (
       <SafeAreaView style={styles.root} edges={["top"]}>
         <View style={styles.centered}>
-          <Text style={styles.errorTitle}>Could not load tasks</Text>
+          <Text style={styles.errorTitle}>{t("Could not load tasks")}</Text>
           <Text style={styles.errorBody}>{errorMessage ?? "Unknown error"}</Text>
           <Pressable onPress={() => hydrate()} style={styles.retryBtn}>
-            <Text style={styles.retryText}>Retry</Text>
+            <Text style={styles.retryText}>{t("Retry")}</Text>
           </Pressable>
         </View>
       </SafeAreaView>
@@ -266,9 +270,11 @@ export default function TasksScreen() {
   return (
     <SafeAreaView style={styles.root} edges={["top"]}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Tasks</Text>
+        <Text style={styles.headerTitle}>{t("Tasks")}</Text>
         <Text style={styles.headerCount}>
-          {filtering ? `${sorted.length} of ${activeTasks.length}` : `${activeTasks.length} active`}
+          {filtering
+            ? t("{n} of {total}", { n: sorted.length, total: activeTasks.length })
+            : t("{n} active", { n: activeTasks.length })}
         </Text>
       </View>
 
@@ -277,7 +283,7 @@ export default function TasksScreen() {
         <TextInput
           value={query}
           onChangeText={setQuery}
-          placeholder="Filter tasks"
+          placeholder={t("Filter tasks")}
           placeholderTextColor={colors.inkDim}
           style={styles.searchInput}
           autoCapitalize="none"
@@ -301,7 +307,7 @@ export default function TasksScreen() {
               onPress={() => setSortMode(mode)}
               style={[styles.sortChip, active && styles.sortChipActive]}>
               <Text style={[styles.sortChipText, active && styles.sortChipTextActive]}>
-                {SORT_LABELS[mode]}
+                {t(SORT_LABELS[mode])}
               </Text>
             </Pressable>
           );
@@ -311,12 +317,12 @@ export default function TasksScreen() {
       {sorted.length === 0 ? (
         <View style={styles.centered}>
           <Text style={styles.emptyTitle}>
-            {filtering ? "No matches" : "No active tasks"}
+            {filtering ? t("No matches") : t("No active tasks")}
           </Text>
           <Text style={styles.emptyBody}>
             {filtering
-              ? `Nothing matches "${query.trim()}".`
-              : "Hold the mic or tap + on the Universe to add one."}
+              ? t('Nothing matches "{q}".', { q: query.trim() })
+              : t("Hold the mic or tap + on the Universe to add one.")}
           </Text>
         </View>
       ) : sortMode === "cluster" ? (
@@ -373,6 +379,7 @@ interface TaskRowProps {
 }
 
 function TaskRow({ task, cluster, related, showCluster, onPress }: TaskRowProps) {
+  const t = useT();
   const due = task.due_at ? new Date(task.due_at) : null;
   const isOverdue = due !== null && due < new Date();
 
@@ -409,7 +416,7 @@ function TaskRow({ task, cluster, related, showCluster, onPress }: TaskRowProps)
             // The query doesn't appear anywhere in this row — say so, or
             // it reads as a bug.
             <View style={styles.relatedPill}>
-              <Text style={styles.relatedText}>related</Text>
+              <Text style={styles.relatedText}>{t("related")}</Text>
             </View>
           ) : null}
         </View>

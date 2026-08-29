@@ -20,6 +20,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { useT } from "@/i18n";
 import BubbleCanvas from "@/components/universe/BubbleCanvas";
 import EmptyState from "@/components/universe/EmptyState";
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
@@ -58,6 +59,7 @@ interface ParsedVoiceTask {
 }
 
 export default function UniverseScreen() {
+  const t = useT();
   const router = useRouter();
   const tier = useAuthStore((s) => s.tier);
   const universeStatus = useUniverseStore((s) => s.status);
@@ -339,10 +341,10 @@ export default function UniverseScreen() {
           </View>
         ) : universeStatus === "error" ? (
           <View style={styles.centered}>
-            <Text style={styles.errorTitle}>Could not load tasks</Text>
+            <Text style={styles.errorTitle}>{t("Could not load tasks")}</Text>
             <Text style={styles.errorBody}>{errorMessage ?? "Unknown error"}</Text>
             <Pressable onPress={() => hydrate()} style={styles.retryBtn}>
-              <Text style={styles.retryText}>Retry</Text>
+              <Text style={styles.retryText}>{t("Retry")}</Text>
             </Pressable>
           </View>
         ) : bubblesCount === 0 && !activeClusterId ? (
@@ -384,14 +386,14 @@ export default function UniverseScreen() {
         {voice.isRecording ? (
           <View pointerEvents="none" style={styles.recordingPill}>
             <View style={styles.recordingDot} />
-            <Text style={styles.recordingText}>Listening…</Text>
+            <Text style={styles.recordingText}>{t("Listening…")}</Text>
           </View>
         ) : null}
 
         {voiceStage === "processing" ? (
           <View pointerEvents="none" style={styles.processingOverlay}>
             <ActivityIndicator color={colors.accent} />
-            <Text style={styles.processingText}>Parsing…</Text>
+            <Text style={styles.processingText}>{t("Parsing…")}</Text>
           </View>
         ) : null}
 
@@ -431,7 +433,7 @@ export default function UniverseScreen() {
             <Pressable onPress={goNewTask} style={styles.arcInner}>
               <MaterialIcons name="add-task" size={22} color={colors.ink} />
             </Pressable>
-            <Text style={styles.arcLabel}>Task</Text>
+            <Text style={styles.arcLabel}>{t("Task")}</Text>
           </Animated.View>
           <Animated.View
             style={[styles.arcButtonCluster, clusterArcStyle]}
@@ -440,7 +442,7 @@ export default function UniverseScreen() {
             <Pressable onPress={goNewCluster} style={styles.arcInner}>
               <MaterialIcons name="bubble-chart" size={22} color={colors.ink} />
             </Pressable>
-            <Text style={styles.arcLabel}>Cluster</Text>
+            <Text style={styles.arcLabel}>{t("Cluster")}</Text>
           </Animated.View>
 
           <Pressable

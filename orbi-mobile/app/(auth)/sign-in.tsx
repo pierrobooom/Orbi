@@ -15,10 +15,12 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { useT } from "@/i18n";
 import { supabase } from "@/services/supabase";
 import { colors } from "@/theme/colors";
 
 export default function SignInScreen() {
+  const t = useT();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -48,11 +50,11 @@ export default function SignInScreen() {
         style={styles.flex}
       >
         <View style={styles.body}>
-          <Text style={styles.title}>Welcome back</Text>
-          <Text style={styles.subtitle}>Sign in to your Orbi universe</Text>
+          <Text style={styles.title}>{t("Welcome back")}</Text>
+          <Text style={styles.subtitle}>{t("Sign in to your Orbi universe")}</Text>
 
           <View style={styles.field}>
-            <Text style={styles.label}>Email</Text>
+            <Text style={styles.label}>{t("Email")}</Text>
             <TextInput
               value={email}
               onChangeText={setEmail}
@@ -60,14 +62,14 @@ export default function SignInScreen() {
               autoCorrect={false}
               keyboardType="email-address"
               textContentType="emailAddress"
-              placeholder="you@example.com"
+              placeholder={t("you@example.com")}
               placeholderTextColor={colors.inkDim}
               style={styles.input}
             />
           </View>
 
           <View style={styles.field}>
-            <Text style={styles.label}>Password</Text>
+            <Text style={styles.label}>{t("Password")}</Text>
             <TextInput
               value={password}
               onChangeText={setPassword}
@@ -91,14 +93,14 @@ export default function SignInScreen() {
             {submitting ? (
               <ActivityIndicator color="white" />
             ) : (
-              <Text style={styles.primaryText}>Sign in</Text>
+              <Text style={styles.primaryText}>{t("Sign in")}</Text>
             )}
           </Pressable>
 
           <View style={styles.footer}>
-            <Text style={styles.footerText}>New to Orbi?</Text>
+            <Text style={styles.footerText}>{t("New to Orbi?")}</Text>
             <Link href={"/(auth)/sign-up" as Href} replace style={styles.footerLink}>
-              Create an account
+              {t("Create an account")}
             </Link>
           </View>
         </View>

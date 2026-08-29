@@ -18,6 +18,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { translate, useT } from "@/i18n";
 import { registerPushDevice } from "@/hooks/usePushRegistration";
 import { ApiError, sendTestPush } from "@/services/api";
 import { useAuthStore, type SubscriptionTier } from "@/stores/authStore";
@@ -72,16 +73,15 @@ const PLANS: PlanCard[] = [
 ];
 
 export default function UpgradeScreen() {
+  const t = useT();
   const router = useRouter();
   const currentTier = useAuthStore((s) => s.tier);
   const [testPushBusy, setTestPushBusy] = useState(false);
   const [registerBusy, setRegisterBusy] = useState(false);
 
   const onUpgradeTap = (tier: SubscriptionTier) => {
-    Alert.alert(
-      "Coming soon",
-      "Payments land in Phase 5 via the App Store and Play Store. Sit tight.",
-      [{ text: "OK" }],
+    Alert.alert(translate("Coming soon"), translate("Payments land in Phase 5 via the App Store and Play Store. Sit tight."),
+      [{ text: translate("OK") }],
     );
   };
 
@@ -89,13 +89,12 @@ export default function UpgradeScreen() {
     setTestPushBusy(true);
     try {
       const result = await sendTestPush();
-      Alert.alert(
-        "Test push sent",
+      Alert.alert(translate("Test push sent"),
         `Pushed to ${result.sent} device${result.sent === 1 ? "" : "s"}. Watch for the banner in a moment.`,
       );
     } catch (e) {
       const msg = e instanceof ApiError ? e.message : String(e);
-      Alert.alert("Test push failed", msg);
+      Alert.alert(translate("Test push failed"), msg);
     } finally {
       setTestPushBusy(false);
     }
@@ -106,12 +105,11 @@ export default function UpgradeScreen() {
     const result = await registerPushDevice();
     setRegisterBusy(false);
     if (result.ok) {
-      Alert.alert(
-        "Device registered",
+      Alert.alert(translate("Device registered"),
         `Push token sent to the backend. Last 12 chars: …${result.token.slice(-12)}`,
       );
     } else {
-      Alert.alert("Registration failed", result.reason);
+      Alert.alert(translate("Registration failed"), result.reason);
     }
   };
 
@@ -119,15 +117,15 @@ export default function UpgradeScreen() {
     <SafeAreaView style={styles.root} edges={["top", "bottom"]}>
       <View style={styles.header}>
         <Pressable onPress={() => router.back()} hitSlop={12}>
-          <Text style={styles.headerCancel}>Close</Text>
+          <Text style={styles.headerCancel}>{t("Close")}</Text>
         </Pressable>
-        <Text style={styles.headerTitle}>Your plan</Text>
+        <Text style={styles.headerTitle}>{t("Your plan")}</Text>
         <View style={{ width: 60 }} />
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll}>
         <Text style={styles.intro}>
-          Orbi has three tiers. Pick the one that fits your universe.
+          {t("Orbi has three tiers. Pick the one that fits your universe.")}
         </Text>
 
         {PLANS.map((plan) => {
@@ -165,7 +163,7 @@ export default function UpgradeScreen() {
         </Text>
 
         <View style={styles.devSection}>
-          <Text style={styles.devLabel}>Dev tools</Text>
+          <Text style={styles.devLabel}>{t("Dev tools")}</Text>
 
           <Pressable
             onPress={onRegisterDevice}
@@ -175,7 +173,7 @@ export default function UpgradeScreen() {
             {registerBusy ? (
               <ActivityIndicator color={colors.ink} />
             ) : (
-              <Text style={styles.devButtonText}>Register push device</Text>
+              <Text style={styles.devButtonText}>{t("Register push device")}</Text>
             )}
           </Pressable>
           <Text style={styles.devHint}>
@@ -191,7 +189,7 @@ export default function UpgradeScreen() {
             {testPushBusy ? (
               <ActivityIndicator color={colors.ink} />
             ) : (
-              <Text style={styles.devButtonText}>Send test push</Text>
+              <Text style={styles.devButtonText}>{t("Send test push")}</Text>
             )}
           </Pressable>
           <Text style={styles.devHint}>

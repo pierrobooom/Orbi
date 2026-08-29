@@ -6,9 +6,11 @@ import React from "react";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 
 import { HapticTab } from "@/components/haptic-tab";
+import { useT } from "@/i18n";
 import { colors } from "@/theme/colors";
 
 export default function TabLayout() {
+  const t = useT();
   return (
     <Tabs
       screenOptions={{
@@ -24,7 +26,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="tasks"
         options={{
-          title: "Tasks",
+          title: t("Tasks"),
           tabBarIcon: ({ color, size }) => (
             <MaterialIcons name="checklist" size={size} color={color} />
           ),
@@ -33,7 +35,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: "Universe",
+          title: t("Universe"),
           tabBarIcon: ({ color, size }) => (
             <MaterialIcons name="bubble-chart" size={size} color={color} />
           ),
@@ -42,7 +44,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="money"
         options={{
-          title: "Money",
+          title: t("Money"),
           tabBarIcon: ({ color, size }) => (
             <MaterialIcons name="account-balance-wallet" size={size} color={color} />
           ),

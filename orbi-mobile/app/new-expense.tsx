@@ -23,6 +23,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { useT } from "@/i18n";
 import { ApiError, createFinanceEntry } from "@/services/api";
 import { useFinanceStore } from "@/stores/financeStore";
 import { colors } from "@/theme/colors";
@@ -38,6 +39,7 @@ function isoDate(d: Date): string {
 }
 
 export default function NewExpenseScreen() {
+  const t = useT();
   const router = useRouter();
   const addEntry = useFinanceStore((s) => s.addEntry);
 
@@ -85,9 +87,9 @@ export default function NewExpenseScreen() {
       >
         <View style={styles.header}>
           <Pressable onPress={() => router.back()} hitSlop={12}>
-            <Text style={styles.headerCancel}>Cancel</Text>
+            <Text style={styles.headerCancel}>{t("Cancel")}</Text>
           </Pressable>
-          <Text style={styles.headerTitle}>New expense</Text>
+          <Text style={styles.headerTitle}>{t("New expense")}</Text>
           <View style={{ width: 50 }} />
         </View>
 
@@ -96,7 +98,7 @@ export default function NewExpenseScreen() {
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
         >
-          <Text style={styles.label}>Amount</Text>
+          <Text style={styles.label}>{t("Amount")}</Text>
           <View style={styles.amountRow}>
             <Text style={styles.currencySymbol}>£</Text>
             <TextInput
@@ -110,22 +112,23 @@ export default function NewExpenseScreen() {
             />
           </View>
 
-          <Text style={styles.label}>Merchant</Text>
+          <Text style={styles.label}>{t("Merchant")}</Text>
           <TextInput
             value={merchant}
             onChangeText={setMerchant}
             autoCapitalize="words"
             autoCorrect={false}
-            placeholder="Tesco, Uber, Netflix…"
+            placeholder={t("Tesco, Uber, Netflix…")}
             placeholderTextColor={colors.inkDim}
             style={styles.input}
           />
           <Text style={styles.hint}>
-            Known merchants categorize automatically. Unknowns stay
-            uncategorized on Spark; Pro and Genius use AI to guess.
+            {t(
+              "Known merchants categorize automatically. Unknowns stay uncategorized on Spark; Pro and Genius use AI to guess.",
+            )}
           </Text>
 
-          <Text style={styles.label}>Date</Text>
+          <Text style={styles.label}>{t("Date")}</Text>
           <Pressable onPress={() => setShowPicker(true)} style={styles.dateBtn}>
             <Text style={styles.dateText}>
               {entryDate.toLocaleDateString(undefined, {
@@ -153,7 +156,7 @@ export default function NewExpenseScreen() {
 
           {Platform.OS === "ios" && showPicker ? (
             <Pressable onPress={() => setShowPicker(false)} style={styles.doneRow}>
-              <Text style={styles.doneText}>Done</Text>
+              <Text style={styles.doneText}>{t("Done")}</Text>
             </Pressable>
           ) : null}
 
@@ -169,7 +172,7 @@ export default function NewExpenseScreen() {
             {submitting ? (
               <ActivityIndicator color="white" />
             ) : (
-              <Text style={styles.primaryText}>Log expense</Text>
+              <Text style={styles.primaryText}>{t("Log expense")}</Text>
             )}
           </Pressable>
         </View>

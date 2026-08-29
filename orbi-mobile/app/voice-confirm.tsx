@@ -25,6 +25,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { useT } from "@/i18n";
 import { ApiError, createTask } from "@/services/api";
 import { useUniverseStore } from "@/stores/universeStore";
 import { colors } from "@/theme/colors";
@@ -92,6 +93,7 @@ function deriveLabel(title: string, maxChars = 14): string {
 }
 
 export default function VoiceConfirmScreen() {
+  const t = useT();
   const router = useRouter();
   const { payload } = useLocalSearchParams<{ payload: string }>();
   const addTask = useUniverseStore((s) => s.addTask);
@@ -187,9 +189,9 @@ export default function VoiceConfirmScreen() {
     return (
       <SafeAreaView style={styles.root} edges={["top", "bottom"]}>
         <View style={styles.centered}>
-          <Text style={styles.errorTitle}>Could not read voice payload</Text>
+          <Text style={styles.errorTitle}>{t("Could not read voice payload")}</Text>
           <Pressable onPress={() => router.back()} style={styles.secondary}>
-            <Text style={styles.secondaryText}>Close</Text>
+            <Text style={styles.secondaryText}>{t("Close")}</Text>
           </Pressable>
         </View>
       </SafeAreaView>
@@ -208,10 +210,12 @@ export default function VoiceConfirmScreen() {
       >
         <View style={styles.header}>
           <Pressable onPress={() => router.back()} hitSlop={12}>
-            <Text style={styles.headerCancel}>{addedCount > 0 ? "Done" : "Cancel"}</Text>
+            <Text style={styles.headerCancel}>{addedCount > 0 ? t("Done") : t("Cancel")}</Text>
           </Pressable>
           <Text style={styles.headerTitle}>
-            {isQueue ? `Task ${index + 1} of ${queue.length}` : "Confirm task"}
+            {isQueue
+              ? t("Task {n} of {total}", { n: index + 1, total: queue.length })
+              : t("Confirm task")}
           </Text>
           <View style={{ width: 50 }} />
         </View>
@@ -232,43 +236,44 @@ export default function VoiceConfirmScreen() {
         ) : null}
 
         <ScrollView style={styles.flex} contentContainerStyle={styles.body}>
-          <Text style={styles.label}>You said</Text>
+          <Text style={styles.label}>{t("You said")}</Text>
           <Text style={styles.transcript}>"{payloadObject.transcript}"</Text>
 
-          <Text style={styles.label}>Parsed title</Text>
+          <Text style={styles.label}>{t("Parsed title")}</Text>
           <Text style={styles.parsedTitle}>{current.title}</Text>
 
-          <Text style={styles.label}>Bubble label</Text>
+          <Text style={styles.label}>{t("Bubble label")}</Text>
           <TextInput
             value={labelDraft}
             onChangeText={setLabelDraft}
-            placeholder="Short keyword shown inside the bubble"
+            placeholder={t("Short keyword shown inside the bubble")}
             placeholderTextColor={colors.inkDim}
             maxLength={28}
             style={styles.labelInput}
           />
           <Text style={styles.hint}>
-            What you'll see in the bubble. Edit it now or keep what we picked.
+            {t("What you'll see in the bubble. Edit it now or keep what we picked.")}
           </Text>
 
-          <Text style={styles.label}>Description</Text>
+          <Text style={styles.label}>{t("Description")}</Text>
           <TextInput
             value={descriptionDraft}
             onChangeText={setDescriptionDraft}
-            placeholder="Sub-items, notes, context — empty if none"
+            placeholder={t("Sub-items, notes, context — empty if none")}
             placeholderTextColor={colors.inkDim}
             maxLength={240}
             multiline
             style={styles.descriptionInput}
           />
           <Text style={styles.hint}>
-            We auto-fill this when you mention details like item lists or
-            specifics. Leave blank for simple tasks.
+            {t(
+              "We auto-fill this when you mention details like item lists or specifics. Leave blank for simple tasks.",
+            )}
           </Text>
 
           {current.due_at ? (
             <>
-              <Text style={styles.label}>Due</Text>
+              <Text style={styles.label}>{t("Due")}</Text>
               <Text style={styles.parsedValue}>
                 {new Date(current.due_at).toLocaleString()}
               </Text>
@@ -277,13 +282,15 @@ export default function VoiceConfirmScreen() {
 
           {current.importance != null ? (
             <>
-              <Text style={styles.label}>Importance</Text>
+              <Text style={styles.label}>{t("Importance")}</Text>
               <Text style={styles.parsedValue}>{current.importance} / 10</Text>
             </>
           ) : null}
 
           {confidencePct != null ? (
-            <Text style={styles.confidence}>Parse confidence: {confidencePct}%</Text>
+            <Text style={styles.confidence}>
+              {t("Parse confidence: {n}%", { n: confidencePct })}
+            </Text>
           ) : null}
 
           {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -296,7 +303,7 @@ export default function VoiceConfirmScreen() {
               disabled={submitting}
               style={[styles.skip, submitting && styles.primaryDisabled]}
             >
-              <Text style={styles.skipText}>Skip</Text>
+              <Text style={styles.skipText}>{t("Skip")}</Text>
             </Pressable>
           ) : null}
           <Pressable
@@ -312,7 +319,9 @@ export default function VoiceConfirmScreen() {
               <ActivityIndicator color="white" />
             ) : (
               <Text style={styles.primaryText}>
-                {isQueue && index + 1 < queue.length ? "Add & next" : "Add to universe"}
+                {isQueue && index + 1 < queue.length
+                  ? t("Add & next")
+                  : t("Add to universe")}
               </Text>
             )}
           </Pressable>

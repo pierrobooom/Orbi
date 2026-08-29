@@ -34,6 +34,7 @@ import Animated, {
   type SharedValue,
 } from "react-native-reanimated";
 
+import { useT } from "@/i18n";
 import { colors } from "@/theme/colors";
 import { useUniverseStore } from "@/stores/universeStore";
 import BubbleHitArea from "./BubbleHitArea";
@@ -188,6 +189,7 @@ interface BubbleCanvasProps {
 }
 
 export default function BubbleCanvas({ onBubbleTap, onClusterLongPress, onTaskLongPress, onEditFocusedCluster }: BubbleCanvasProps = {}) {
+  const t = useT();
   const { width, height } = useWindowDimensions();
   // Approximate canvas height — leaves room for the header strip + tab bar.
   // Actual layout will be tightened once those components ship.
@@ -458,7 +460,7 @@ export default function BubbleCanvas({ onBubbleTap, onClusterLongPress, onTaskLo
           accessibilityLabel="Re-center universe"
         >
           <MaterialIcons name="my-location" size={16} color={colors.ink} />
-          <Text style={styles.recenterText}>Re-center</Text>
+          <Text style={styles.recenterText}>{t("Re-center")}</Text>
         </Pressable>
       ) : null}
       {/* Back overlay — only visible in drilled view. Lives OUTSIDE
@@ -468,7 +470,7 @@ export default function BubbleCanvas({ onBubbleTap, onClusterLongPress, onTaskLo
           screen isn't blank apart from the back overlay. */}
       {focusedCluster && bubbles.length === 0 ? (
         <View pointerEvents="none" style={styles.emptyClusterHint}>
-          <Text style={styles.emptyClusterTitle}>No tasks here yet</Text>
+          <Text style={styles.emptyClusterTitle}>{t("No tasks here yet")}</Text>
           <Text style={styles.emptyClusterBody}>
             Add one with the + button. New tasks find their own cluster
             automatically based on what you say.

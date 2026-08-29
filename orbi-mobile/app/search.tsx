@@ -21,6 +21,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { useT } from "@/i18n";
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
 import { ApiError, searchTasks, transcribeAudio } from "@/services/api";
 import { useUniverseStore } from "@/stores/universeStore";
@@ -31,6 +32,7 @@ import { colors } from "@/theme/colors";
 const MIN_RECORDING_MS = 500;
 
 export default function SearchScreen() {
+  const t = useT();
   const router = useRouter();
   const setSearchResults = useUniverseStore((s) => s.setSearchResults);
 
@@ -114,15 +116,15 @@ export default function SearchScreen() {
           >
             <View style={styles.headerCloseGroup}>
               <MaterialIcons name="chevron-left" size={22} color={colors.inkDim} />
-              <Text style={styles.headerCloseText}>Close</Text>
+              <Text style={styles.headerCloseText}>{t("Close")}</Text>
             </View>
           </Pressable>
-          <Text style={styles.headerTitle}>Search</Text>
+          <Text style={styles.headerTitle}>{t("Search")}</Text>
           <View style={styles.headerSide} />
         </View>
 
         <View style={styles.body}>
-          <Text style={styles.label}>What are you looking for?</Text>
+          <Text style={styles.label}>{t("What are you looking for?")}</Text>
           <TextInput
             value={query}
             onChangeText={setQuery}
@@ -138,8 +140,9 @@ export default function SearchScreen() {
           />
 
           <Text style={styles.hint}>
-            Orbi looks across every task you have, regardless of cluster.
-            Hold the mic to dictate.
+            {t(
+              "Orbi looks across every task you have, regardless of cluster. Hold the mic to dictate.",
+            )}
           </Text>
 
           {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -176,7 +179,7 @@ export default function SearchScreen() {
               ) : (
                 <>
                   <MaterialIcons name="search" size={18} color="white" />
-                  <Text style={styles.searchBtnText}>Search</Text>
+                  <Text style={styles.searchBtnText}>{t("Search")}</Text>
                 </>
               )}
             </Pressable>

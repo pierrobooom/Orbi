@@ -16,6 +16,8 @@ import { usePushRegistration } from "@/hooks/usePushRegistration";
 // Importing the authStore here ensures supabase.auth.onAuthStateChange is
 // subscribed before any screen reads from it.
 import { useAuthStore } from "@/stores/authStore";
+import { useLocaleStore, type UiLanguage } from "@/i18n";
+import { getMyPreferences } from "@/services/api";
 import { colors } from "@/theme/colors";
 
 // Custom React Navigation theme so headers / modals match the sketch.
@@ -130,6 +132,15 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   // Kick off Expo push registration after sign-in. Hook is no-op until
   // the session is non-null, and self-guards against duplicate runs.
   usePushRegistration();
+  // Seed UI language from the server-side preference once signed in.
+  // Failure is silent and leaves English — a missing preferences row
+  // is the normal state for a new user, not an error worth surfacing.
+  useEffect(() => {
+    if (!session) return;
+    getMyPreferences()
+      .then((p) => useLocaleStore.getState().setLanguage(p.language as UiLanguage))
+      .catch(() => {});
+  }, [session]);
 
   useEffect(() => {
     if (bootstrapping) return;

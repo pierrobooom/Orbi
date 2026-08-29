@@ -17,6 +17,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { translate, useT } from "@/i18n";
 import { useFinanceStore } from "@/stores/financeStore";
 import { colors } from "@/theme/colors";
 import type { ServerFinanceEntry } from "@/services/api";
@@ -45,8 +46,8 @@ function formatSectionDate(iso: string): string {
   const today = new Date();
   const todayUtc = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()));
   const diffDays = Math.round((todayUtc.getTime() - local.getTime()) / (1000 * 60 * 60 * 24));
-  if (diffDays === 0) return "Today";
-  if (diffDays === 1) return "Yesterday";
+  if (diffDays === 0) return translate("Today");
+  if (diffDays === 1) return translate("Yesterday");
   return local.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
 }
 
@@ -65,6 +66,7 @@ function formatMonth(monthKey: string): string {
 }
 
 export default function MoneyScreen() {
+  const t = useT();
   const router = useRouter();
   const status = useFinanceStore((s) => s.status);
   const month = useFinanceStore((s) => s.month);
@@ -97,7 +99,7 @@ export default function MoneyScreen() {
       <View style={styles.header}>
         <View>
           <Text style={styles.headerMonth}>{formatMonth(month)}</Text>
-          <Text style={styles.headerSubtitle}>Spent this month</Text>
+          <Text style={styles.headerSubtitle}>{t("Spent this month")}</Text>
         </View>
         <Text style={styles.headerTotal}>{formatAmount(totalSpend, currency)}</Text>
       </View>
@@ -108,17 +110,17 @@ export default function MoneyScreen() {
         </View>
       ) : status === "error" ? (
         <View style={styles.centered}>
-          <Text style={styles.errorTitle}>Could not load entries</Text>
+          <Text style={styles.errorTitle}>{t("Could not load entries")}</Text>
           <Text style={styles.errorBody}>{errorMessage ?? "Unknown error"}</Text>
           <Pressable onPress={() => hydrate()} style={styles.retryBtn}>
-            <Text style={styles.retryText}>Retry</Text>
+            <Text style={styles.retryText}>{t("Retry")}</Text>
           </Pressable>
         </View>
       ) : entries.length === 0 ? (
         <View style={styles.centered}>
-          <Text style={styles.emptyTitle}>No expenses yet</Text>
+          <Text style={styles.emptyTitle}>{t("No expenses yet")}</Text>
           <Text style={styles.emptyBody}>
-            Tap the + button to log your first one.
+            {t("Tap the + button to log your first one.")}
           </Text>
         </View>
       ) : (

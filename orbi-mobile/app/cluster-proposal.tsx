@@ -27,10 +27,12 @@ import {
   proposeOrganisation,
   type ProposalAction,
 } from "@/services/api";
+import { translate, useT } from "@/i18n";
 import { useUniverseStore } from "@/stores/universeStore";
 import { colors } from "@/theme/colors";
 
 export default function ClusterProposalScreen() {
+  const t = useT();
   const router = useRouter();
   // Pull from serverClusters (the full list, always present) rather
   // than `clusters` (the canvas state, which is only the focused
@@ -97,14 +99,13 @@ export default function ClusterProposalScreen() {
       // moves immediately. Hydrate also resets the layout positions.
       await hydrate();
       const total = Object.values(result.applied).reduce((a, b) => a + b, 0);
-      Alert.alert(
-        "Universe updated",
+      Alert.alert(translate("Universe updated"),
         `${total} change${total === 1 ? "" : "s"} applied.`,
-        [{ text: "OK", onPress: () => router.back() }],
+        [{ text: translate("OK"), onPress: () => router.back() }],
       );
     } catch (e) {
       const msg = e instanceof ApiError ? e.message : String(e);
-      Alert.alert("Couldn't apply", msg);
+      Alert.alert(translate("Couldn't apply"), msg);
     } finally {
       setApplying(false);
     }
@@ -116,10 +117,10 @@ export default function ClusterProposalScreen() {
         <Pressable onPress={() => router.back()} hitSlop={12} disabled={applying}>
           <View style={styles.headerCloseGroup}>
             <MaterialIcons name="chevron-left" size={22} color={colors.inkDim} />
-            <Text style={styles.headerCloseText}>Close</Text>
+            <Text style={styles.headerCloseText}>{t("Close")}</Text>
           </View>
         </Pressable>
-        <Text style={styles.headerTitle}>Organise clusters</Text>
+        <Text style={styles.headerTitle}>{t("Organise clusters")}</Text>
         <View style={{ width: 90 }} />
       </View>
 
@@ -127,7 +128,7 @@ export default function ClusterProposalScreen() {
         {loading ? (
           <View style={styles.center}>
             <ActivityIndicator color={colors.accent} />
-            <Text style={styles.hint}>Reviewing your universe…</Text>
+            <Text style={styles.hint}>{t("Reviewing your universe…")}</Text>
           </View>
         ) : error ? (
           <View style={styles.center}>
@@ -135,15 +136,17 @@ export default function ClusterProposalScreen() {
           </View>
         ) : actions && actions.length === 0 ? (
           <View style={styles.center}>
-            <Text style={styles.empty}>Your universe is already tidy.</Text>
+            <Text style={styles.empty}>{t("Your universe is already tidy.")}</Text>
             <Text style={styles.hint}>
-              Try again once you've added a few more tasks.
+              {t("Try again once you've added a few more tasks.")}
             </Text>
           </View>
         ) : (
           <>
             <Text style={styles.intro}>
-              Tap to deselect anything you don't want. Approved changes apply when you tap Apply.
+              {t(
+                "Tap to deselect anything you don't want. Approved changes apply when you tap Apply.",
+              )}
             </Text>
             {actions?.map((action, idx) => (
               <ActionRow

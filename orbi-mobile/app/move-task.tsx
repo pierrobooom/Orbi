@@ -25,11 +25,13 @@ import {
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { useT } from "@/i18n";
 import { ApiError, updateTask } from "@/services/api";
 import { useUniverseStore } from "@/stores/universeStore";
 import { colors } from "@/theme/colors";
 
 export default function MoveTaskScreen() {
+  const t = useT();
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const taskId = Array.isArray(id) ? id[0] : id;
@@ -52,9 +54,9 @@ export default function MoveTaskScreen() {
         name: c.name,
         color: c.color,
       })),
-      { id: null, name: "Drift (no cluster)", color: colors.drift },
+      { id: null, name: t("Drift (no cluster)"), color: colors.drift },
     ],
-    [serverClusters],
+    [serverClusters, t],
   );
 
   const move = async (clusterId: string | null) => {
@@ -80,9 +82,9 @@ export default function MoveTaskScreen() {
     return (
       <SafeAreaView style={styles.root} edges={["top", "bottom"]}>
         <View style={styles.centered}>
-          <Text style={styles.errorTitle}>Task not found</Text>
+          <Text style={styles.errorTitle}>{t("Task not found")}</Text>
           <Pressable onPress={() => router.back()} style={styles.secondary}>
-            <Text style={styles.secondaryText}>Close</Text>
+            <Text style={styles.secondaryText}>{t("Close")}</Text>
           </Pressable>
         </View>
       </SafeAreaView>
@@ -95,9 +97,9 @@ export default function MoveTaskScreen() {
     <SafeAreaView style={styles.root} edges={["top", "bottom"]}>
       <View style={styles.header}>
         <Pressable onPress={() => router.back()} hitSlop={12}>
-          <Text style={styles.headerCancel}>Cancel</Text>
+          <Text style={styles.headerCancel}>{t("Cancel")}</Text>
         </Pressable>
-        <Text style={styles.headerTitle}>Move task</Text>
+        <Text style={styles.headerTitle}>{t("Move task")}</Text>
         <View style={{ width: 50 }} />
       </View>
 
@@ -105,7 +107,7 @@ export default function MoveTaskScreen() {
         <Text style={styles.taskTitle} numberOfLines={2}>
           {task.title}
         </Text>
-        <Text style={styles.label}>Move to</Text>
+        <Text style={styles.label}>{t("Move to")}</Text>
 
         {options.map((option) => {
           const isCurrent = option.id === currentId;

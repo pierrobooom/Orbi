@@ -18,6 +18,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { useT } from "@/i18n";
 import { ApiError, createTask } from "@/services/api";
 import { useUniverseStore } from "@/stores/universeStore";
 import { colors } from "@/theme/colors";
@@ -62,6 +63,7 @@ function deriveLabel(title: string, maxChars = 14): string {
 }
 
 export default function NewTaskScreen() {
+  const t = useT();
   const router = useRouter();
   const clusters = useUniverseStore((s) => s.clusters);
   const addTask = useUniverseStore((s) => s.addTask);
@@ -116,9 +118,9 @@ export default function NewTaskScreen() {
       >
         <View style={styles.header}>
           <Pressable onPress={() => router.back()} hitSlop={12}>
-            <Text style={styles.headerCancel}>Cancel</Text>
+            <Text style={styles.headerCancel}>{t("Cancel")}</Text>
           </Pressable>
-          <Text style={styles.headerTitle}>New task</Text>
+          <Text style={styles.headerTitle}>{t("New task")}</Text>
           <View style={{ width: 50 }} />
         </View>
 
@@ -131,37 +133,38 @@ export default function NewTaskScreen() {
             value={title}
             onChangeText={setTitle}
             autoFocus
-            placeholder="What needs doing?"
+            placeholder={t("What needs doing?")}
             placeholderTextColor={colors.inkDim}
             style={styles.titleInput}
             multiline
           />
 
-          <Text style={styles.fieldLabel}>Bubble label</Text>
+          <Text style={styles.fieldLabel}>{t("Bubble label")}</Text>
           <TextInput
             value={effectiveLabel}
             onChangeText={(text) => {
               setLabelTouched(true);
               setLabelDraft(text);
             }}
-            placeholder="Auto-filled from title"
+            placeholder={t("Auto-filled from title")}
             placeholderTextColor={colors.inkDim}
             maxLength={28}
             style={styles.input}
           />
           <Text style={styles.hint}>
-            Short keyword shown inside the bubble. Auto-suggested from the
-            title — feel free to type your own.
+            {t(
+              "Short keyword shown inside the bubble. Auto-suggested from the title — feel free to type your own.",
+            )}
           </Text>
 
-          <Text style={styles.fieldLabel}>Cluster</Text>
+          <Text style={styles.fieldLabel}>{t("Cluster")}</Text>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.chipRow}
           >
             <ClusterChip
-              label="No cluster"
+              label={t("No cluster")}
               selected={clusterId === null}
               onPress={() => setClusterId(null)}
               color={colors.drift}
@@ -177,7 +180,7 @@ export default function NewTaskScreen() {
             ))}
           </ScrollView>
 
-          <Text style={styles.fieldLabel}>Due</Text>
+          <Text style={styles.fieldLabel}>{t("Due")}</Text>
           <View style={styles.dueRow}>
             <Pressable
               onPress={() => setShowPicker(true)}
@@ -193,7 +196,7 @@ export default function NewTaskScreen() {
                 hitSlop={8}
                 style={styles.clearDue}
               >
-                <Text style={styles.clearDueText}>Clear</Text>
+                <Text style={styles.clearDueText}>{t("Clear")}</Text>
               </Pressable>
             ) : null}
           </View>
@@ -216,7 +219,7 @@ export default function NewTaskScreen() {
 
           {Platform.OS === "ios" && showPicker ? (
             <Pressable onPress={() => setShowPicker(false)} style={styles.doneRow}>
-              <Text style={styles.doneText}>Done</Text>
+              <Text style={styles.doneText}>{t("Done")}</Text>
             </Pressable>
           ) : null}
 
@@ -232,7 +235,7 @@ export default function NewTaskScreen() {
             {submitting ? (
               <ActivityIndicator color="white" />
             ) : (
-              <Text style={styles.primaryText}>Add to universe</Text>
+              <Text style={styles.primaryText}>{t("Add to universe")}</Text>
             )}
           </Pressable>
         </View>

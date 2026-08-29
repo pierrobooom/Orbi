@@ -22,6 +22,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { useT } from "@/i18n";
 import { ApiError, deleteFinanceEntry, updateFinanceEntry } from "@/services/api";
 import { useFinanceStore } from "@/stores/financeStore";
 import { colors } from "@/theme/colors";
@@ -45,6 +46,7 @@ function parseDateString(iso: string): Date {
 }
 
 export default function EntryDetailScreen() {
+  const t = useT();
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const entryId = Array.isArray(id) ? id[0] : id;
@@ -73,9 +75,9 @@ export default function EntryDetailScreen() {
     return (
       <SafeAreaView style={styles.root} edges={["top", "bottom"]}>
         <View style={styles.centered}>
-          <Text style={styles.title}>Entry not found</Text>
+          <Text style={styles.title}>{t("Entry not found")}</Text>
           <Pressable onPress={() => router.back()} style={styles.secondary}>
-            <Text style={styles.secondaryText}>Close</Text>
+            <Text style={styles.secondaryText}>{t("Close")}</Text>
           </Pressable>
         </View>
       </SafeAreaView>
@@ -152,9 +154,9 @@ export default function EntryDetailScreen() {
             style={styles.headerSideLeft}
             accessibilityLabel="Close"
           >
-            <Text style={styles.headerCloseText}>Close</Text>
+            <Text style={styles.headerCloseText}>{t("Close")}</Text>
           </Pressable>
-          <Text style={styles.headerTitle}>Entry</Text>
+          <Text style={styles.headerTitle}>{t("Entry")}</Text>
           {mode === "view" ? (
             <Pressable
               onPress={enterEdit}
@@ -162,7 +164,7 @@ export default function EntryDetailScreen() {
               style={styles.headerSideRight}
               accessibilityLabel="Edit entry"
             >
-              <Text style={styles.editLinkText}>Edit</Text>
+              <Text style={styles.editLinkText}>{t("Edit")}</Text>
             </Pressable>
           ) : (
             <View style={styles.headerSideRight} />
@@ -184,11 +186,11 @@ export default function EntryDetailScreen() {
 
               <View style={styles.metaRow}>
                 <View style={styles.metaCell}>
-                  <Text style={styles.metaLabel}>Category</Text>
+                  <Text style={styles.metaLabel}>{t("Category")}</Text>
                   <Text style={styles.metaValue}>{entry.category}</Text>
                 </View>
                 <View style={styles.metaCell}>
-                  <Text style={styles.metaLabel}>Date</Text>
+                  <Text style={styles.metaLabel}>{t("Date")}</Text>
                   <Text style={styles.metaValue}>
                     {parseDateString(entry.entry_date).toLocaleDateString(undefined, {
                       weekday: "short",
@@ -202,14 +204,14 @@ export default function EntryDetailScreen() {
 
               {entry.notes ? (
                 <View style={styles.metaCell}>
-                  <Text style={styles.metaLabel}>Notes</Text>
+                  <Text style={styles.metaLabel}>{t("Notes")}</Text>
                   <Text style={styles.metaValue}>{entry.notes}</Text>
                 </View>
               ) : null}
             </>
           ) : (
             <>
-              <Text style={styles.metaLabel}>Amount</Text>
+              <Text style={styles.metaLabel}>{t("Amount")}</Text>
               <View style={styles.amountRow}>
                 <Text style={styles.currencySymbol}>
                   {entry.currency === "GBP" ? "£" : entry.currency === "EUR" ? "€" : entry.currency === "USD" ? "$" : entry.currency}
@@ -222,7 +224,7 @@ export default function EntryDetailScreen() {
                 />
               </View>
 
-              <Text style={styles.metaLabel}>Merchant</Text>
+              <Text style={styles.metaLabel}>{t("Merchant")}</Text>
               <TextInput
                 value={editMerchant}
                 onChangeText={setEditMerchant}
@@ -230,10 +232,10 @@ export default function EntryDetailScreen() {
                 style={styles.input}
               />
               <Text style={styles.hint}>
-                Changing the merchant re-runs categorisation.
+                {t("Changing the merchant re-runs categorisation.")}
               </Text>
 
-              <Text style={styles.metaLabel}>Date</Text>
+              <Text style={styles.metaLabel}>{t("Date")}</Text>
               {Platform.OS === "ios" ? (
                 <View style={styles.dateRow}>
                   <DateTimePicker
@@ -272,12 +274,12 @@ export default function EntryDetailScreen() {
                 </>
               )}
 
-              <Text style={styles.metaLabel}>Notes</Text>
+              <Text style={styles.metaLabel}>{t("Notes")}</Text>
               <TextInput
                 value={editNotes}
                 onChangeText={setEditNotes}
                 multiline
-                placeholder="Optional context"
+                placeholder={t("Optional context")}
                 placeholderTextColor={colors.inkDim}
                 style={styles.notesInput}
               />
@@ -297,7 +299,7 @@ export default function EntryDetailScreen() {
               {busy === "delete" ? (
                 <ActivityIndicator color={colors.overdue} />
               ) : (
-                <Text style={styles.deleteBtnText}>Delete entry</Text>
+                <Text style={styles.deleteBtnText}>{t("Delete entry")}</Text>
               )}
             </Pressable>
           ) : (
@@ -307,7 +309,7 @@ export default function EntryDetailScreen() {
                 disabled={busy !== null}
                 style={[styles.cancelBtn, busy && styles.btnDisabled]}
               >
-                <Text style={styles.cancelBtnText}>Cancel</Text>
+                <Text style={styles.cancelBtnText}>{t("Cancel")}</Text>
               </Pressable>
               <Pressable
                 onPress={onSave}
@@ -317,7 +319,7 @@ export default function EntryDetailScreen() {
                 {busy === "save" ? (
                   <ActivityIndicator color="white" />
                 ) : (
-                  <Text style={styles.primaryBtnText}>Save changes</Text>
+                  <Text style={styles.primaryBtnText}>{t("Save changes")}</Text>
                 )}
               </Pressable>
             </>

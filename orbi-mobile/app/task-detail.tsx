@@ -34,6 +34,7 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 
+import { translate, useT } from "@/i18n";
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
 import {
   ApiError,
@@ -63,6 +64,7 @@ const IMPORTANCE_LABELS: Record<number, string> = {
 };
 
 export default function TaskDetailScreen() {
+  const t = useT();
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const taskId = Array.isArray(id) ? id[0] : id;
@@ -125,9 +127,9 @@ export default function TaskDetailScreen() {
     return (
       <SafeAreaView style={styles.root} edges={["top", "bottom"]}>
         <View style={styles.centered}>
-          <Text style={styles.title}>Task not found</Text>
+          <Text style={styles.title}>{t("Task not found")}</Text>
           <Pressable onPress={() => router.back()} style={styles.secondary}>
-            <Text style={styles.secondaryText}>Close</Text>
+            <Text style={styles.secondaryText}>{t("Close")}</Text>
           </Pressable>
         </View>
       </SafeAreaView>
@@ -287,12 +289,10 @@ export default function TaskDetailScreen() {
   // explicitly confirm "Yes, delete" before we hit the API.
   const onDelete = () => {
     if (busy) return;
-    Alert.alert(
-      "Are you sure you want to delete this task?",
-      "This will remove the task from your universe.",
+    Alert.alert(translate("Are you sure you want to delete this task?"), translate("This will remove the task from your universe."),
       [
-        { text: "Cancel", style: "cancel" },
-        { text: "Yes, delete", style: "destructive", onPress: confirmDelete },
+        { text: translate("Cancel"), style: "cancel" },
+        { text: translate("Yes, delete"), style: "destructive", onPress: confirmDelete },
       ],
     );
   };
@@ -319,10 +319,10 @@ export default function TaskDetailScreen() {
           >
             <View style={styles.headerCloseGroup}>
               <MaterialIcons name="chevron-left" size={22} color={colors.inkDim} />
-              <Text style={styles.headerCloseText}>Close</Text>
+              <Text style={styles.headerCloseText}>{t("Close")}</Text>
             </View>
           </Pressable>
-          <Text style={styles.headerTitle}>Task</Text>
+          <Text style={styles.headerTitle}>{t("Task")}</Text>
           {mode === "view" ? (
             <Pressable
               onPress={enterEdit}
@@ -330,7 +330,7 @@ export default function TaskDetailScreen() {
               style={styles.headerSideRight}
               accessibilityLabel="Edit task"
             >
-              <Text style={styles.editLinkText}>Edit</Text>
+              <Text style={styles.editLinkText}>{t("Edit")}</Text>
             </Pressable>
           ) : (
             // In edit mode the mic moved to its own circular button
@@ -357,7 +357,7 @@ export default function TaskDetailScreen() {
               ) : null}
 
               <View style={styles.metaCell}>
-                <Text style={styles.metaLabel}>Description</Text>
+                <Text style={styles.metaLabel}>{t("Description")}</Text>
                 <Text style={[styles.metaValue, !task.description && styles.metaPlaceholder]}>
                   {task.description ?? "Tap Edit to add notes about this task."}
                 </Text>
@@ -365,7 +365,7 @@ export default function TaskDetailScreen() {
 
               <View style={styles.metaRow}>
                 <View style={styles.metaCell}>
-                  <Text style={styles.metaLabel}>Cluster</Text>
+                  <Text style={styles.metaLabel}>{t("Cluster")}</Text>
                   <View style={styles.metaValueRow}>
                     {currentCluster ? (
                       <View style={[styles.clusterDot, { backgroundColor: currentCluster.color }]} />
@@ -374,24 +374,24 @@ export default function TaskDetailScreen() {
                   </View>
                 </View>
                 <View style={styles.metaCell}>
-                  <Text style={styles.metaLabel}>Importance</Text>
+                  <Text style={styles.metaLabel}>{t("Importance")}</Text>
                   <Text style={styles.metaValue}>{task.importance} / 10 · {importanceLabel}</Text>
                 </View>
               </View>
 
               <View style={styles.metaCell}>
-                <Text style={styles.metaLabel}>Due</Text>
+                <Text style={styles.metaLabel}>{t("Due")}</Text>
                 <Text style={styles.metaValue}>{dueText}</Text>
               </View>
 
               <View style={styles.metaCell}>
-                <Text style={styles.metaLabel}>Pressure</Text>
+                <Text style={styles.metaLabel}>{t("Pressure")}</Text>
                 <Text style={styles.metaValue}>{task.pressure_score.toFixed(1)} / 10</Text>
               </View>
             </>
           ) : (
             <>
-              <Text style={styles.metaLabel}>Title</Text>
+              <Text style={styles.metaLabel}>{t("Title")}</Text>
               <TextInput
                 value={editTitle}
                 onChangeText={setEditTitle}
@@ -400,34 +400,34 @@ export default function TaskDetailScreen() {
                 placeholderTextColor={colors.inkDim}
               />
 
-              <Text style={styles.metaLabel}>Bubble label</Text>
+              <Text style={styles.metaLabel}>{t("Bubble label")}</Text>
               <TextInput
                 value={editLabel}
                 onChangeText={setEditLabel}
-                placeholder="Short keyword shown in the bubble"
+                placeholder={t("Short keyword shown in the bubble")}
                 placeholderTextColor={colors.inkDim}
                 maxLength={28}
                 style={styles.editLabelInput}
               />
 
-              <Text style={styles.metaLabel}>Description</Text>
+              <Text style={styles.metaLabel}>{t("Description")}</Text>
               <TextInput
                 value={editDescription}
                 onChangeText={setEditDescription}
                 multiline
-                placeholder="Add notes — context, why it matters, who's involved…"
+                placeholder={t("Add notes — context, why it matters, who's involved…")}
                 placeholderTextColor={colors.inkDim}
                 style={styles.editDescriptionInput}
               />
 
-              <Text style={styles.metaLabel}>Cluster</Text>
+              <Text style={styles.metaLabel}>{t("Cluster")}</Text>
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.chipRow}
               >
                 <ClusterChip
-                  label="No cluster"
+                  label={t("No cluster")}
                   selected={editClusterId === null}
                   color={colors.drift}
                   onPress={() => setEditClusterId(null)}
@@ -443,7 +443,7 @@ export default function TaskDetailScreen() {
                 ))}
               </ScrollView>
 
-              <Text style={styles.metaLabel}>Due</Text>
+              <Text style={styles.metaLabel}>{t("Due")}</Text>
               <View style={styles.dueRow}>
                 {Platform.OS === "ios" ? (
                   // Compact mode renders as an inline button that opens
@@ -468,7 +468,7 @@ export default function TaskDetailScreen() {
                 )}
                 {editDueAt ? (
                   <Pressable onPress={() => setEditDueAt(null)} hitSlop={8} style={styles.clearDue}>
-                    <Text style={styles.clearDueText}>Clear</Text>
+                    <Text style={styles.clearDueText}>{t("Clear")}</Text>
                   </Pressable>
                 ) : null}
               </View>
@@ -548,7 +548,7 @@ export default function TaskDetailScreen() {
                 {busy === "complete" ? (
                   <ActivityIndicator color="white" />
                 ) : (
-                  <Text style={styles.holdBtnText}>Hold to mark complete</Text>
+                  <Text style={styles.holdBtnText}>{t("Hold to mark complete")}</Text>
                 )}
               </Pressable>
             </>
@@ -559,7 +559,7 @@ export default function TaskDetailScreen() {
                 disabled={busy !== null}
                 style={[styles.cancelBtn, busy && styles.btnDisabled]}
               >
-                <Text style={styles.cancelBtnText}>Cancel</Text>
+                <Text style={styles.cancelBtnText}>{t("Cancel")}</Text>
               </Pressable>
               <Pressable
                 onPress={onSave}
@@ -569,7 +569,7 @@ export default function TaskDetailScreen() {
                 {busy === "save" ? (
                   <ActivityIndicator color="white" />
                 ) : (
-                  <Text style={styles.primaryBtnText}>Save changes</Text>
+                  <Text style={styles.primaryBtnText}>{t("Save changes")}</Text>
                 )}
               </Pressable>
             </>

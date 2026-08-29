@@ -36,6 +36,7 @@ import {
 } from "@/services/api";
 import { TIER_DISPLAY } from "@/services/tierGate";
 import { useAuthStore } from "@/stores/authStore";
+import { useLocaleStore, useT, type UiLanguage, translate } from "@/i18n";
 import { colors } from "@/theme/colors";
 
 // Backend reachability is shown in a dedicated Status section. Lives
@@ -47,6 +48,7 @@ type HealthStatus =
   | { kind: "error"; message: string };
 
 export default function SettingsScreen() {
+  const t = useT();
   const router = useRouter();
   const session = useAuthStore((s) => s.session);
   const tier = useAuthStore((s) => s.tier);
@@ -95,11 +97,9 @@ export default function SettingsScreen() {
       const result = await Notifications.requestPermissionsAsync();
       setNotifsGranted(result.granted);
       if (!result.granted) {
-        Alert.alert(
-          "Enable in iOS Settings",
-          "Notifications were declined earlier. Enable them in iOS Settings → Expo Go → Notifications.",
+        Alert.alert(translate("Enable in iOS Settings"), translate("Notifications were declined earlier. Enable them in iOS Settings → Expo Go → Notifications."),
           [
-            { text: "Cancel", style: "cancel" },
+            { text: translate("Cancel"), style: "cancel" },
             { text: "Open Settings", onPress: () => Linking.openSettings() },
           ],
         );
@@ -108,16 +108,14 @@ export default function SettingsScreen() {
         // backend has the token immediately.
         const r = await registerPushDevice();
         if (!r.ok) {
-          Alert.alert("Registration failed", r.reason);
+          Alert.alert(translate("Registration failed"), r.reason);
         }
       }
     } else {
       // iOS doesn't let an app revoke its own notification permission.
-      Alert.alert(
-        "Disable in iOS Settings",
-        "iOS handles notification permissions itself. Disable them in Settings → Expo Go → Notifications.",
+      Alert.alert(translate("Disable in iOS Settings"), translate("iOS handles notification permissions itself. Disable them in Settings → Expo Go → Notifications."),
         [
-          { text: "Cancel", style: "cancel" },
+          { text: translate("Cancel"), style: "cancel" },
           { text: "Open Settings", onPress: () => Linking.openSettings() },
         ],
       );
@@ -153,6 +151,10 @@ export default function SettingsScreen() {
       // Only the changed field — the server merges over the stored row.
       const saved = await setMyPreferences({ language: tag });
       setPrefs(saved);
+      // Switch the UI too — the setting reads as "app language", so
+      // leaving the chrome in English after a successful save looks
+      // like the save silently failed.
+      useLocaleStore.getState().setLanguage(saved.language as UiLanguage);
     } catch (e) {
       setPrefs(previous);
       setLanguageError(e instanceof ApiError ? e.message : String(e));
@@ -162,10 +164,10 @@ export default function SettingsScreen() {
   };
 
   const onSignOut = async () => {
-    Alert.alert("Sign out?", "You'll need to sign back in to use Orbi.", [
-      { text: "Cancel", style: "cancel" },
+    Alert.alert(translate("Sign out?"), translate("You'll need to sign back in to use Orbi."), [
+      { text: translate("Cancel"), style: "cancel" },
       {
-        text: "Sign out",
+        text: translate("Sign out"),
         style: "destructive",
         onPress: async () => {
           setBusy("signout");
@@ -181,13 +183,12 @@ export default function SettingsScreen() {
     setBusy("test");
     try {
       const result = await sendTestPush();
-      Alert.alert(
-        "Test push sent",
+      Alert.alert(translate("Test push sent"),
         `Pushed to ${result.sent} device${result.sent === 1 ? "" : "s"}.`,
       );
     } catch (e) {
       const msg = e instanceof ApiError ? e.message : String(e);
-      Alert.alert("Test push failed", msg);
+      Alert.alert(translate("Test push failed"), msg);
     } finally {
       setBusy(null);
     }
@@ -198,9 +199,9 @@ export default function SettingsScreen() {
     const result = await registerPushDevice();
     setBusy(null);
     if (result.ok) {
-      Alert.alert("Device registered", `Token: …${result.token.slice(-12)}`);
+      Alert.alert(translate("Device registered"), `Token: …${result.token.slice(-12)}`);
     } else {
-      Alert.alert("Registration failed", result.reason);
+      Alert.alert(translate("Registration failed"), result.reason);
     }
   };
 
@@ -208,33 +209,33 @@ export default function SettingsScreen() {
     <SafeAreaView style={styles.root} edges={["top", "bottom"]}>
       <View style={styles.header}>
         <Pressable onPress={() => router.back()} hitSlop={12}>
-          <Text style={styles.headerCancel}>Done</Text>
+          <Text style={styles.headerCancel}>{t("Done")}</Text>
         </Pressable>
-        <Text style={styles.headerTitle}>Settings</Text>
+        <Text style={styles.headerTitle}>{t("Settings")}</Text>
         <View style={{ width: 50 }} />
       </View>
 
       <ScrollView contentContainerStyle={styles.body}>
-        <Section title="Profile">
-          <Row label="Email" value={email} />
-          <Row label="Plan" value={TIER_DISPLAY[tier]} />
+        <Section title={t("Profile")}>
+          <Row label={t("Email")} value={email} />
+          <Row label={t("Plan")} value={TIER_DISPLAY[tier]} />
           <Pressable
             onPress={() => router.push("/upgrade" as Href)}
             style={styles.link}
           >
-            <Text style={styles.linkText}>See plans →</Text>
+            <Text style={styles.linkText}>{t("See plans →")}</Text>
           </Pressable>
         </Section>
 
-        <Section title="Universe">
+        <Section title={t("Universe")}>
           <Pressable
             onPress={() => router.push("/cluster-proposal" as Href)}
             style={styles.universeRow}
           >
             <View style={styles.toggleLabelGroup}>
-              <Text style={styles.rowLabel}>Organise clusters</Text>
+              <Text style={styles.rowLabel}>{t("Organise clusters")}</Text>
               <Text style={styles.rowHint}>
-                Ask Orbi to suggest cluster merges, moves, and new groupings.
+                {t("Ask Orbi to suggest cluster merges, moves, and new groupings.")}
               </Text>
             </View>
             <MaterialIcons name="chevron-right" size={22} color={colors.inkDim} />
@@ -244,7 +245,7 @@ export default function SettingsScreen() {
             style={styles.universeRow}
           >
             <View style={styles.toggleLabelGroup}>
-              <Text style={styles.rowLabel}>New cluster</Text>
+              <Text style={styles.rowLabel}>{t("New cluster")}</Text>
               <Text style={styles.rowHint}>
                 Create a cluster manually. Tip: long-press the + button on the
                 canvas for the same thing, and long-press a cluster bubble to
@@ -255,10 +256,10 @@ export default function SettingsScreen() {
           </Pressable>
         </Section>
 
-        <Section title="Notifications">
+        <Section title={t("Notifications")}>
           <View style={styles.toggleRow}>
             <View style={styles.toggleLabelGroup}>
-              <Text style={styles.rowLabel}>Push notifications</Text>
+              <Text style={styles.rowLabel}>{t("Push notifications")}</Text>
               <Text style={styles.rowHint}>
                 {notifsGranted === null
                   ? "Checking permission…"
@@ -276,9 +277,9 @@ export default function SettingsScreen() {
           </View>
         </Section>
 
-        <Section title="Language">
+        <Section title={t("Language")}>
           <Text style={styles.languageHint}>
-            Used for speech recognition and for the language Orbi replies in.
+            {t("Used for speech recognition and for the language Orbi replies in.")}
           </Text>
           {SUPPORTED_LANGUAGES.map((option) => {
             const active = prefs?.language === option.tag;
@@ -303,14 +304,14 @@ export default function SettingsScreen() {
             );
           })}
           {prefs === null ? (
-            <Text style={styles.languageHint}>Loading…</Text>
+            <Text style={styles.languageHint}>{t("Loading…")}</Text>
           ) : null}
           {languageError ? (
             <Text style={styles.languageError}>{languageError}</Text>
           ) : null}
         </Section>
 
-        <Section title="Status">
+        <Section title={t("Status")}>
           <View style={styles.statusRow}>
             <View style={styles.statusDotWrap}>
               <View
@@ -344,7 +345,7 @@ export default function SettingsScreen() {
               <MaterialIcons name="dns" size={16} color={colors.inkDim} />
             </View>
             <View style={styles.toggleLabelGroup}>
-              <Text style={styles.rowLabel}>API endpoint</Text>
+              <Text style={styles.rowLabel}>{t("API endpoint")}</Text>
               <Text style={styles.rowHint} numberOfLines={1}>
                 {API_BASE_URL}
               </Text>
@@ -352,7 +353,7 @@ export default function SettingsScreen() {
           </View>
         </Section>
 
-        <Section title="Dev tools">
+        <Section title={t("Dev tools")}>
           <Pressable
             onPress={onRegisterDevice}
             disabled={busy !== null}
@@ -361,7 +362,7 @@ export default function SettingsScreen() {
             {busy === "register" ? (
               <ActivityIndicator color={colors.ink} />
             ) : (
-              <Text style={styles.toolBtnText}>Register push device</Text>
+              <Text style={styles.toolBtnText}>{t("Register push device")}</Text>
             )}
           </Pressable>
           <Pressable
@@ -372,10 +373,10 @@ export default function SettingsScreen() {
             {busy === "test" ? (
               <ActivityIndicator color={colors.ink} />
             ) : (
-              <Text style={styles.toolBtnText}>Send test push</Text>
+              <Text style={styles.toolBtnText}>{t("Send test push")}</Text>
             )}
           </Pressable>
-          <Text style={styles.rowHint}>Removed before launch.</Text>
+          <Text style={styles.rowHint}>{t("Removed before launch.")}</Text>
         </Section>
 
         <Pressable
@@ -386,7 +387,7 @@ export default function SettingsScreen() {
           {busy === "signout" ? (
             <ActivityIndicator color={colors.overdue} />
           ) : (
-            <Text style={styles.signOutText}>Sign out</Text>
+            <Text style={styles.signOutText}>{t("Sign out")}</Text>
           )}
         </Pressable>
       </ScrollView>

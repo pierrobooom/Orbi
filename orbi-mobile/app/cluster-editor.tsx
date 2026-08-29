@@ -35,6 +35,7 @@ import {
   deleteCluster,
   updateCluster,
 } from "@/services/api";
+import { translate, useT } from "@/i18n";
 import { useUniverseStore } from "@/stores/universeStore";
 import { colors } from "@/theme/colors";
 
@@ -58,6 +59,7 @@ const COLOR_PALETTE: { color: string; label: string }[] = [
 const DRIFT_ID = "synthetic-drift";
 
 export default function ClusterEditorScreen() {
+  const t = useT();
   const router = useRouter();
   const params = useLocalSearchParams<{ id?: string }>();
   const id = (params.id ?? "new").toString();
@@ -134,13 +136,11 @@ export default function ClusterEditorScreen() {
 
   const onDeletePress = () => {
     if (isNew || isDrift) return;
-    Alert.alert(
-      "Delete cluster?",
-      "Tasks inside this cluster will move to Drift.",
+    Alert.alert(translate("Delete cluster?"), translate("Tasks inside this cluster will move to Drift."),
       [
-        { text: "Cancel", style: "cancel" },
+        { text: translate("Cancel"), style: "cancel" },
         {
-          text: "Delete",
+          text: translate("Delete"),
           style: "destructive",
           onPress: async () => {
             setError(null);
@@ -177,11 +177,11 @@ export default function ClusterEditorScreen() {
           >
             <View style={styles.headerCloseGroup}>
               <MaterialIcons name="chevron-left" size={22} color={colors.inkDim} />
-              <Text style={styles.headerCloseText}>Cancel</Text>
+              <Text style={styles.headerCloseText}>{t("Cancel")}</Text>
             </View>
           </Pressable>
           <Text style={styles.headerTitle}>
-            {isNew ? "New cluster" : "Edit cluster"}
+            {isNew ? t("New cluster") : t("Edit cluster")}
           </Text>
           <Pressable
             onPress={onSave}
@@ -194,7 +194,7 @@ export default function ClusterEditorScreen() {
               <ActivityIndicator color={colors.accent} />
             ) : (
               <Text style={[styles.saveText, !canSave && styles.saveDisabled]}>
-                Save
+                {t("Save")}
               </Text>
             )}
           </Pressable>
@@ -203,21 +203,20 @@ export default function ClusterEditorScreen() {
         <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
           {isDrift ? (
             <View style={styles.driftCard}>
-              <Text style={styles.driftTitle}>Drift is the catch-all</Text>
+              <Text style={styles.driftTitle}>{t("Drift is the catch-all")}</Text>
               <Text style={styles.driftBody}>
-                Drift collects tasks that haven't been assigned to a cluster yet.
-                It can't be renamed, recolored, or deleted. Move tasks out of
-                Drift by editing each one, or use Organise clusters to let Orbi
-                suggest a new home for them.
+                {t(
+                  "Drift collects tasks that haven't been assigned to a cluster yet. It can't be renamed, recolored, or deleted. Move tasks out of Drift by editing each one, or use Organise clusters to let Orbi suggest a new home for them.",
+                )}
               </Text>
             </View>
           ) : (
             <>
-              <Text style={styles.label}>Name</Text>
+              <Text style={styles.label}>{t("Name")}</Text>
               <TextInput
                 value={name}
                 onChangeText={setName}
-                placeholder="Work, Health, Reading…"
+                placeholder={t("Work, Health, Reading…")}
                 placeholderTextColor={colors.inkDim}
                 maxLength={40}
                 style={styles.input}
@@ -225,9 +224,9 @@ export default function ClusterEditorScreen() {
                 autoCapitalize="words"
               />
 
-              <Text style={[styles.label, styles.labelSpaced]}>Color</Text>
+              <Text style={[styles.label, styles.labelSpaced]}>{t("Color")}</Text>
               <Text style={styles.colorHint}>
-                Dimmed colors are already used by another cluster.
+                {t("Dimmed colors are already used by another cluster.")}
               </Text>
               <View style={styles.swatchRow}>
                 {COLOR_PALETTE.map((opt) => {
@@ -266,7 +265,7 @@ export default function ClusterEditorScreen() {
                   <Text style={styles.previewName}>
                     {name.trim() || "Untitled cluster"}
                   </Text>
-                  <Text style={styles.previewHint}>Preview</Text>
+                  <Text style={styles.previewHint}>{t("Preview")}</Text>
                 </View>
               </View>
 
@@ -283,7 +282,7 @@ export default function ClusterEditorScreen() {
                   ) : (
                     <>
                       <MaterialIcons name="delete-outline" size={18} color={colors.overdue} />
-                      <Text style={styles.deleteText}>Delete cluster</Text>
+                      <Text style={styles.deleteText}>{t("Delete cluster")}</Text>
                     </>
                   )}
                 </Pressable>

@@ -5,12 +5,14 @@
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 
+import { useT } from "@/i18n";
 import { colors } from "@/theme/colors";
 
 export default function EmptyState() {
+  const t = useT();
   return (
     <View style={styles.root}>
-      <Text style={styles.title}>Your universe is empty</Text>
+      <Text style={styles.title}>{t("Your universe is empty")}</Text>
       <Text style={styles.body}>
         Tap the + button to add your first task.{"\n"}
         Bubbles grow with urgency and cluster by life domain.

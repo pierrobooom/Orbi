@@ -17,11 +17,13 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { useT } from "@/i18n";
 import { patchMyProfile } from "@/services/api";
 import { supabase } from "@/services/supabase";
 import { colors } from "@/theme/colors";
 
 export default function SignUpScreen() {
+  const t = useT();
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -83,25 +85,25 @@ export default function SignUpScreen() {
         style={styles.flex}
       >
         <View style={styles.body}>
-          <Text style={styles.title}>Create your universe</Text>
-          <Text style={styles.subtitle}>Free plan, no card required</Text>
+          <Text style={styles.title}>{t("Create your universe")}</Text>
+          <Text style={styles.subtitle}>{t("Free plan, no card required")}</Text>
 
           <View style={styles.field}>
-            <Text style={styles.label}>Full name</Text>
+            <Text style={styles.label}>{t("Full name")}</Text>
             <TextInput
               value={fullName}
               onChangeText={setFullName}
               autoCapitalize="words"
               autoCorrect={false}
               textContentType="name"
-              placeholder="Jane Doe"
+              placeholder={t("Jane Doe")}
               placeholderTextColor={colors.inkDim}
               style={styles.input}
             />
           </View>
 
           <View style={styles.field}>
-            <Text style={styles.label}>Email</Text>
+            <Text style={styles.label}>{t("Email")}</Text>
             <TextInput
               value={email}
               onChangeText={setEmail}
@@ -109,14 +111,14 @@ export default function SignUpScreen() {
               autoCorrect={false}
               keyboardType="email-address"
               textContentType="emailAddress"
-              placeholder="you@example.com"
+              placeholder={t("you@example.com")}
               placeholderTextColor={colors.inkDim}
               style={styles.input}
             />
           </View>
 
           <View style={styles.field}>
-            <Text style={styles.label}>Password</Text>
+            <Text style={styles.label}>{t("Password")}</Text>
             <TextInput
               value={password}
               onChangeText={setPassword}
@@ -124,7 +126,7 @@ export default function SignUpScreen() {
               autoCapitalize="none"
               autoCorrect={false}
               textContentType="newPassword"
-              placeholder="At least 6 characters"
+              placeholder={t("At least 6 characters")}
               placeholderTextColor={colors.inkDim}
               style={styles.input}
             />
@@ -141,14 +143,14 @@ export default function SignUpScreen() {
             {submitting ? (
               <ActivityIndicator color="white" />
             ) : (
-              <Text style={styles.primaryText}>Create account</Text>
+              <Text style={styles.primaryText}>{t("Create account")}</Text>
             )}
           </Pressable>
 
           <View style={styles.footer}>
-            <Text style={styles.footerText}>Already have an account?</Text>
+            <Text style={styles.footerText}>{t("Already have an account?")}</Text>
             <Link href={"/(auth)/sign-in" as Href} replace style={styles.footerLink}>
-              Sign in
+              {t("Sign in")}
             </Link>
           </View>
         </View>
