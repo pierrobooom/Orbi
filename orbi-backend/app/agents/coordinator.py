@@ -15,7 +15,9 @@ from app.services.ai_router import get_ai_response, load_prompt
 
 logger = logging.getLogger(__name__)
 
-_SYSTEM_PROMPT = load_prompt("coordinator")
+# v2 emits data.tasks as an array so one utterance can produce several
+# tasks ("book the dentist, call mum, buy milk").
+_SYSTEM_PROMPT = load_prompt("coordinator", version=2)
 
 
 async def classify_intent(
@@ -67,14 +69,16 @@ async def classify_intent(
     system = _SYSTEM_PROMPT + "\n\n" + "\n".join(context_lines)
 
     # Bumped from 300 — the embedded task-extraction `data` field added
-    # in coordinator_v1.md needs room to land its fields.
+    # in coordinator_v1.md needs room to land its fields. Bumped again for
+    # v2's multi-task array: three tasks plus the GPT-OSS reasoning pass
+    # overflowed 600 and came back as truncated, unparseable JSON.
     raw = await get_ai_response(
         prompt=user_message,
         user_id=user_id,
         user_tier=user_tier,
         system_prompt=system,
         intent="daily_chat",
-        max_tokens=600,
+        max_tokens=1400,
     )
 
     try:

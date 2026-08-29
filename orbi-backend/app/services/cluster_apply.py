@@ -26,8 +26,8 @@ import logging
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
-from app.db import clusters as clusters_db
-from app.services.cluster_kind import classify_kind, tasks as tasks_db
+from app.db import clusters as clusters_db, tasks as tasks_db
+from app.services.cluster_kind import classify_kind
 
 logger = logging.getLogger(__name__)
 

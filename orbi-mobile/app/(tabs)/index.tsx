@@ -46,6 +46,17 @@ const TIER_LABEL: Record<SubscriptionTier, string> = {
 // accidental tap-and-release on the mic button.
 const MIN_RECORDING_MS = 500;
 
+/** One task as returned by the coordinator inside `data.tasks`. */
+interface ParsedVoiceTask {
+  title?: string;
+  label?: string | null;
+  description?: string | null;
+  due_at?: string | null;
+  parent_cluster_id?: string | null;
+  importance?: number;
+  confidence?: number;
+}
+
 export default function UniverseScreen() {
   const router = useRouter();
   const tier = useAuthStore((s) => s.tier);
@@ -144,33 +155,36 @@ export default function UniverseScreen() {
         return;
       }
       const chat = await chatMessage(transcript, "voice");
-      // The chat coordinator returns parsed task fields in `data` when
-      // the message intent classifies as task creation. If it didn't —
-      // e.g. user said "hello" — surface the chat reply as an error so
-      // they understand why nothing was created.
-      const parsed = chat.data as
-        | {
-            title?: string;
-            label?: string | null;
-            description?: string | null;
-            due_at?: string | null;
-            parent_cluster_id?: string | null;
-            importance?: number;
-            confidence?: number;
-          }
+      // The coordinator returns parsed tasks in `data.tasks` when the
+      // intent classifies as task creation. One utterance can produce
+      // several ("book the dentist, call mum, buy milk"), so this is
+      // always an array. If it's empty — e.g. the user said "hello" —
+      // surface the chat reply so they understand why nothing was made.
+      //
+      // The bare-object shape is coordinator v1's and is still accepted;
+      // a stale server would otherwise silently drop every capture.
+      const raw = chat.data as
+        | { tasks?: ParsedVoiceTask[]; title?: string }
         | null;
-      if (!parsed || !parsed.title) {
+      const parsedTasks: ParsedVoiceTask[] = Array.isArray(raw?.tasks)
+        ? raw!.tasks!.filter((t) => t && t.title)
+        : raw && raw.title
+          ? [raw as ParsedVoiceTask]
+          : [];
+      if (parsedTasks.length === 0) {
         setVoiceError(chat.reply || "Couldn't parse that as a task.");
         return;
       }
       const payload = {
-        title: parsed.title,
-        label: parsed.label ?? null,
-        description: parsed.description ?? null,
-        due_at: parsed.due_at ?? null,
-        parent_cluster_id: parsed.parent_cluster_id ?? null,
-        importance: parsed.importance,
-        confidence: parsed.confidence,
+        tasks: parsedTasks.map((t) => ({
+          title: t.title,
+          label: t.label ?? null,
+          description: t.description ?? null,
+          due_at: t.due_at ?? null,
+          parent_cluster_id: t.parent_cluster_id ?? null,
+          importance: t.importance,
+          confidence: t.confidence,
+        })),
         transcript,
       };
       router.push({

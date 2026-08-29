@@ -110,69 +110,117 @@ async def chat(
         # create_task intents — this halves the LLM round-trips on the
         # voice-create flow. Fall back to a dedicated task_parser call
         # only if the embedded data is missing or malformed.
+        # Three shapes have to be accepted here:
+        #   1. coordinator v2  -> {"tasks": [ {...}, {...} ]}
+        #   2. coordinator v1  -> {...} (a bare task object)
+        #   3. no usable data  -> fall back to a dedicated task_parser call
+        # v1's shape is still handled because an older cached prompt, or a
+        # model that ignores the array instruction, shouldn't drop the task
+        # on the floor.
         embedded = classification.get("data")
-        if isinstance(embedded, dict) and embedded.get("title"):
-            raw_parsed = embedded
+        raw_task_list: list[dict] = []
+        parser_path = "fallback"
+        if isinstance(embedded, dict) and isinstance(embedded.get("tasks"), list):
+            raw_task_list = [
+                t for t in embedded["tasks"]
+                if isinstance(t, dict) and t.get("title")
+            ]
+            parser_path = "embedded_multi"
+        elif isinstance(embedded, dict) and embedded.get("title"):
+            raw_task_list = [embedded]
             parser_path = "embedded"
-        else:
-            raw_parsed = await task_parser.parse_task(
+        if not raw_task_list:
+            fallback = await task_parser.parse_task(
                 user_input=body.message,
                 user_id=user_id,
                 user_tier=user_tier,
             )
+            if isinstance(fallback, dict) and fallback.get("title"):
+                raw_task_list = [fallback]
             parser_path = "fallback"
 
-        # Defensive cleanup: strip verbose title prefixes, null out
-        # implausible due_at (Llama 8B occasionally hallucinates 2024),
-        # clamp importance, etc. Shared between both parser paths so
-        # behaviour is identical. user_timezone lets the sanitizer
-        # interpret naive local times correctly — the prompt instructs
-        # the LLM to emit local time without any zone marker.
-        parsed = sanitize_parsed_task(
-            raw_parsed,
-            now=now,
-            user_timezone=body.user_timezone,
-        )
+        # A model that returns an empty array on a create_task intent
+        # leaves nothing to confirm — treat that as a failed parse rather
+        # than handing the client an empty queue.
+        if not raw_task_list:
+            return ChatResponse(
+                reply="I couldn't make out a task in that — try again?",
+                session_id=session_id,
+                intent=intent,
+                agent_used=agent_name,
+                data=None,
+            )
 
-        # Authoritative clock-time override: if the user's transcript
-        # contained an explicit time ("at 20", "8 PM", "10:30"), use
-        # that hour/minute regardless of what the LLM produced. The
-        # LLM still owns the DATE (it's good at "tomorrow", "Friday")
-        # but the HOUR comes from a regex on the transcript so we
-        # don't trust Llama 8B's clock math.
-        parsed["due_at"] = override_due_at_clock(
-            parsed.get("due_at"),
-            body.message,
-            body.user_timezone,
-        )
+        # Clusters are fetched once for the whole batch rather than per
+        # task — the list is identical for every task in one utterance.
+        try:
+            user_clusters = await clusters_db.fetch_clusters_for_user(user_id)
+        except Exception as exc:  # noqa: BLE001 — non-fatal enrichment
+            logger.warning("Cluster lookup failed during task parse: %s", exc)
+            user_clusters = []
 
-        # Resolve domain_hint -> parent_cluster_id by looking up the
-        # user's clusters. Without this the mobile always lands voice
-        # tasks in Drift because the embedded data only carries the
-        # free-text hint, not an id.
-        if not parsed.get("parent_cluster_id"):
-            try:
-                clusters = await clusters_db.fetch_clusters_for_user(user_id)
-                cluster_id = match_cluster_id(parsed.get("domain_hint"), clusters)
+        parsed_tasks: list[dict] = []
+        for raw_parsed in raw_task_list:
+
+            # Defensive cleanup: strip verbose title prefixes, null out
+            # implausible due_at, clamp importance, etc. Shared between
+            # both parser paths so behaviour is identical. user_timezone
+            # lets the sanitizer interpret naive local times correctly —
+            # the prompt instructs the LLM to emit local time with no
+            # zone marker.
+            parsed = sanitize_parsed_task(
+                raw_parsed,
+                now=now,
+                user_timezone=body.user_timezone,
+            )
+
+            # Authoritative clock-time override: if the transcript
+            # contained an explicit time ("at 20", "8 PM", "10:30"), use
+            # that hour/minute regardless of what the LLM produced. The
+            # LLM still owns the DATE (it is good at "tomorrow",
+            # "Friday") but the HOUR comes from a regex on the
+            # transcript.
+            #
+            # Only applied when the utterance produced a SINGLE task.
+            # With several tasks there is no way to tell which one "at 8"
+            # belonged to, and stamping every task with the same hour is
+            # worse than trusting the per-task due_at the model emitted.
+            if len(raw_task_list) == 1:
+                parsed["due_at"] = override_due_at_clock(
+                    parsed.get("due_at"),
+                    body.message,
+                    body.user_timezone,
+                )
+
+            # Resolve domain_hint -> parent_cluster_id. Without this the
+            # mobile always lands voice tasks in Drift, because the
+            # embedded data only carries the free-text hint, not an id.
+            if not parsed.get("parent_cluster_id"):
+                cluster_id = match_cluster_id(parsed.get("domain_hint"), user_clusters)
                 if cluster_id:
                     parsed["parent_cluster_id"] = cluster_id
-            except Exception as exc:  # noqa: BLE001 — non-fatal enrichment
-                logger.warning("Cluster lookup failed during task parse: %s", exc)
+
+            parsed_tasks.append(parsed)
 
         # Log so future bad parses are debuggable without re-running.
         # Using warning level because uvicorn's default logger config
         # propagates WARNING but not INFO for app-defined loggers.
         logger.warning(
-            "Task parse | path=%s tz=%s transcript=%r raw=%r sanitized=%r",
+            "Task parse | path=%s count=%d tz=%s transcript=%r sanitized=%r",
             parser_path,
+            len(parsed_tasks),
             body.user_timezone or "<none>",
             body.message,
-            raw_parsed,
-            parsed,
+            parsed_tasks,
         )
 
-        data = parsed
-        reply = f"Got it — I've captured \"{parsed['title']}\"."
+        # `tasks` is always a list, even for one task, so the client has a
+        # single shape to render. The client walks it as a confirm queue.
+        data = {"tasks": parsed_tasks}
+        if len(parsed_tasks) == 1:
+            reply = f"Got it — I've captured \"{parsed_tasks[0]['title']}\"."
+        else:
+            reply = f"Got it — {len(parsed_tasks)} tasks to confirm."
         if parsed.get("due_at"):
             reply += f" Due: {parsed['due_at']}."
         if parsed.get("confidence", 1.0) < 0.5:

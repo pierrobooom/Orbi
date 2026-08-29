@@ -1,12 +1,17 @@
-// Voice capture confirmation modal.
+// Voice capture confirmation.
 //
-// Receives the chat-agent's parsed task structure plus the original
-// transcript as a JSON-stringified search param. Renders the parsed
-// fields for the user to confirm, then POSTs to /api/v1/tasks and
-// prepends the result into the universe store.
+// One utterance can produce several tasks ("book the dentist, call mum,
+// buy milk"), so this screen is a QUEUE, not a single form: it walks the
+// parsed tasks one at a time and each is independently added or skipped.
+// With a single task it looks and behaves exactly as it did before —
+// the stepper chrome only appears when there's more than one.
+//
+// Tasks are created as you go rather than batched at the end. If the
+// user bails halfway, what they already confirmed is safely saved, and
+// nothing they haven't seen gets written.
 
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -24,7 +29,7 @@ import { ApiError, createTask } from "@/services/api";
 import { useUniverseStore } from "@/stores/universeStore";
 import { colors } from "@/theme/colors";
 
-interface ParsedPayload {
+interface ParsedTask {
   title: string;
   label?: string | null;
   description?: string | null;
@@ -32,7 +37,20 @@ interface ParsedPayload {
   parent_cluster_id?: string | null;
   importance?: number;
   confidence?: number;
+}
+
+interface ParsedPayload {
+  tasks?: ParsedTask[];
   transcript: string;
+  // Legacy single-task shape (pre multi-task). Kept so an in-flight
+  // navigation from an older bundle still renders.
+  title?: string;
+  label?: string | null;
+  description?: string | null;
+  due_at?: string | null;
+  parent_cluster_id?: string | null;
+  importance?: number;
+  confidence?: number;
 }
 
 // Mirror of services/universeLayout deriveLabel — used only when the
@@ -80,9 +98,9 @@ export default function VoiceConfirmScreen() {
 
   // useLocalSearchParams is typed as string | string[] — collapse arrays
   // (shouldn't happen in our usage but TS wants the guard) and JSON
-  // parse. If the payload is malformed, fall back to an empty stub so
-  // the screen renders something instead of crashing.
-  const parsed: ParsedPayload | null = useMemo(() => {
+  // parse. If the payload is malformed, fall back to null so the screen
+  // renders an error instead of crashing.
+  const payloadObject: ParsedPayload | null = useMemo(() => {
     const raw = Array.isArray(payload) ? payload[0] : payload;
     if (!raw) return null;
     try {
@@ -92,53 +110,80 @@ export default function VoiceConfirmScreen() {
     }
   }, [payload]);
 
+  const queue: ParsedTask[] = useMemo(() => {
+    if (!payloadObject) return [];
+    if (Array.isArray(payloadObject.tasks)) {
+      return payloadObject.tasks.filter((t) => t && t.title);
+    }
+    if (payloadObject.title) {
+      return [payloadObject as ParsedTask];
+    }
+    return [];
+  }, [payloadObject]);
+
+  const [index, setIndex] = useState(0);
   const [labelDraft, setLabelDraft] = useState("");
   const [descriptionDraft, setDescriptionDraft] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [addedCount, setAddedCount] = useState(0);
 
-  // Seed the label and description inputs from what the LLM gave us.
-  // Label falls back to a local derivation off the title; description
-  // stays empty if the LLM didn't fill it.
+  const current: ParsedTask | undefined = queue[index];
+
+  // Re-seed the editable fields every time the queue advances. Without
+  // this the second task would inherit the first task's edited label.
   useEffect(() => {
-    if (!parsed) return;
-    const initialLabel =
-      parsed.label && parsed.label.trim().length > 0
-        ? parsed.label.trim()
-        : deriveLabel(parsed.title);
-    setLabelDraft(initialLabel);
+    if (!current) return;
+    setLabelDraft(
+      current.label && current.label.trim().length > 0
+        ? current.label.trim()
+        : deriveLabel(current.title),
+    );
     setDescriptionDraft(
-      parsed.description && parsed.description.trim().length > 0
-        ? parsed.description.trim()
+      current.description && current.description.trim().length > 0
+        ? current.description.trim()
         : "",
     );
-  }, [parsed]);
+    setError(null);
+  }, [current]);
+
+  const advance = useCallback(() => {
+    if (index + 1 < queue.length) {
+      setIndex((i) => i + 1);
+    } else {
+      router.back();
+    }
+  }, [index, queue.length, router]);
 
   const onConfirm = async () => {
-    if (!parsed) return;
+    if (!current) return;
     setError(null);
     setSubmitting(true);
     try {
       const trimmedLabel = labelDraft.trim();
       const trimmedDescription = descriptionDraft.trim();
       const created = await createTask({
-        title: parsed.title,
+        title: current.title,
         label: trimmedLabel.length > 0 ? trimmedLabel : null,
         description: trimmedDescription.length > 0 ? trimmedDescription : null,
-        parent_cluster_id: parsed.parent_cluster_id ?? null,
-        due_at: parsed.due_at ?? null,
-        importance: parsed.importance,
+        parent_cluster_id: current.parent_cluster_id ?? null,
+        due_at: current.due_at ?? null,
+        importance: current.importance,
       });
       addTask(created);
-      router.back();
+      setAddedCount((n) => n + 1);
+      setSubmitting(false);
+      advance();
     } catch (e) {
+      // Stay on this task so the user can retry — advancing would lose
+      // whatever they typed and silently drop the task.
       const msg = e instanceof ApiError ? e.message : String(e);
       setError(msg);
       setSubmitting(false);
     }
   };
 
-  if (!parsed) {
+  if (!payloadObject || queue.length === 0 || !current) {
     return (
       <SafeAreaView style={styles.root} edges={["top", "bottom"]}>
         <View style={styles.centered}>
@@ -151,8 +196,9 @@ export default function VoiceConfirmScreen() {
     );
   }
 
+  const isQueue = queue.length > 1;
   const confidencePct =
-    parsed.confidence != null ? Math.round(parsed.confidence * 100) : null;
+    current.confidence != null ? Math.round(current.confidence * 100) : null;
 
   return (
     <SafeAreaView style={styles.root} edges={["top", "bottom"]}>
@@ -162,18 +208,35 @@ export default function VoiceConfirmScreen() {
       >
         <View style={styles.header}>
           <Pressable onPress={() => router.back()} hitSlop={12}>
-            <Text style={styles.headerCancel}>Cancel</Text>
+            <Text style={styles.headerCancel}>{addedCount > 0 ? "Done" : "Cancel"}</Text>
           </Pressable>
-          <Text style={styles.headerTitle}>Confirm task</Text>
+          <Text style={styles.headerTitle}>
+            {isQueue ? `Task ${index + 1} of ${queue.length}` : "Confirm task"}
+          </Text>
           <View style={{ width: 50 }} />
         </View>
 
+        {isQueue ? (
+          <View style={styles.progressRow}>
+            {queue.map((t, i) => (
+              <View
+                key={`${t.title}-${i}`}
+                style={[
+                  styles.progressDot,
+                  i === index && styles.progressDotActive,
+                  i < index && styles.progressDotDone,
+                ]}
+              />
+            ))}
+          </View>
+        ) : null}
+
         <ScrollView style={styles.flex} contentContainerStyle={styles.body}>
           <Text style={styles.label}>You said</Text>
-          <Text style={styles.transcript}>"{parsed.transcript}"</Text>
+          <Text style={styles.transcript}>"{payloadObject.transcript}"</Text>
 
           <Text style={styles.label}>Parsed title</Text>
-          <Text style={styles.parsedTitle}>{parsed.title}</Text>
+          <Text style={styles.parsedTitle}>{current.title}</Text>
 
           <Text style={styles.label}>Bubble label</Text>
           <TextInput
@@ -203,19 +266,19 @@ export default function VoiceConfirmScreen() {
             specifics. Leave blank for simple tasks.
           </Text>
 
-          {parsed.due_at ? (
+          {current.due_at ? (
             <>
               <Text style={styles.label}>Due</Text>
               <Text style={styles.parsedValue}>
-                {new Date(parsed.due_at).toLocaleString()}
+                {new Date(current.due_at).toLocaleString()}
               </Text>
             </>
           ) : null}
 
-          {parsed.importance != null ? (
+          {current.importance != null ? (
             <>
               <Text style={styles.label}>Importance</Text>
-              <Text style={styles.parsedValue}>{parsed.importance} / 10</Text>
+              <Text style={styles.parsedValue}>{current.importance} / 10</Text>
             </>
           ) : null}
 
@@ -227,15 +290,30 @@ export default function VoiceConfirmScreen() {
         </ScrollView>
 
         <View style={styles.footer}>
+          {isQueue ? (
+            <Pressable
+              onPress={advance}
+              disabled={submitting}
+              style={[styles.skip, submitting && styles.primaryDisabled]}
+            >
+              <Text style={styles.skipText}>Skip</Text>
+            </Pressable>
+          ) : null}
           <Pressable
             onPress={onConfirm}
             disabled={submitting}
-            style={[styles.primary, submitting && styles.primaryDisabled]}
+            style={[
+              styles.primary,
+              isQueue && styles.primaryInRow,
+              submitting && styles.primaryDisabled,
+            ]}
           >
             {submitting ? (
               <ActivityIndicator color="white" />
             ) : (
-              <Text style={styles.primaryText}>Add to universe</Text>
+              <Text style={styles.primaryText}>
+                {isQueue && index + 1 < queue.length ? "Add & next" : "Add to universe"}
+              </Text>
             )}
           </Pressable>
         </View>
@@ -258,6 +336,20 @@ const styles = StyleSheet.create({
   },
   headerTitle: { color: colors.ink, fontSize: 15, fontWeight: "600" },
   headerCancel: { color: colors.inkDim, fontSize: 14, width: 50 },
+  progressRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 6,
+    paddingTop: 12,
+  },
+  progressDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.line,
+  },
+  progressDotActive: { backgroundColor: colors.accent, width: 18 },
+  progressDotDone: { backgroundColor: colors.inkDim },
   body: { padding: 24, paddingBottom: 60 },
   label: {
     color: colors.inkDim,
@@ -307,13 +399,29 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   secondaryText: { color: colors.ink, fontSize: 13, fontWeight: "600" },
-  footer: { paddingHorizontal: 24, paddingVertical: 16 },
+  footer: {
+    flexDirection: "row",
+    gap: 10,
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+  },
+  skip: {
+    paddingHorizontal: 22,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.line,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  skipText: { color: colors.inkDim, fontSize: 15, fontWeight: "600" },
   primary: {
     backgroundColor: colors.accent,
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: "center",
+    flex: 1,
   },
+  primaryInRow: { flex: 1 },
   primaryDisabled: { opacity: 0.5 },
   primaryText: { color: "white", fontSize: 15, fontWeight: "700" },
 });
