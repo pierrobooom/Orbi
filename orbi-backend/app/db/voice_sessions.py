@@ -45,10 +45,11 @@ async def fetch_voice_session(
         .select("*")
         .eq("id", str(voice_session_id))
         .eq("user_id", str(user_id))
-        .single()
+        .limit(1)
         .execute()
     )
-    return response.data
+    rows = response.data or []
+    return rows[0] if rows else None
 
 
 async def update_voice_session(

@@ -4,8 +4,8 @@ Routers contain no business logic. Each handler extracts inputs, delegates to
 a service or db function, and formats the response.
 """
 
-from datetime import datetime, timezone
-from typing import Literal
+from datetime import datetime, time, timezone
+from typing import Literal, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -104,9 +104,29 @@ async def get_my_preferences(user_id: UUID = Depends(get_current_user)):
     return row
 
 
+class UserPreferenceInput(BaseModel):
+    """PUT body for preferences.
+
+    Deliberately has no user_id: the server always takes it from the auth
+    token, so requiring it in the body bought nothing and cost a 422 for
+    any client that didn't have a preferences row to copy one from — the
+    exact situation of a user saving preferences for the first time.
+
+    Every field is optional so a client can send just the one setting it
+    is changing; unset fields fall back to the stored row, then to the
+    same defaults as the DB columns.
+    """
+
+    quiet_hours_start: Optional[time] = None
+    quiet_hours_end: Optional[time] = None
+    proactivity_level: Optional[int] = Field(default=None, ge=1, le=5)
+    preferred_reminder_channel: Optional[str] = None
+    language: Optional[str] = None
+
+
 @router.put("/me/preferences", response_model=UserPreference)
 async def set_my_preferences(
-    body: UserPreference,
+    body: UserPreferenceInput,
     user_id: UUID = Depends(get_current_user),
 ):
     """Create or replace the authenticated user's preferences.
@@ -114,7 +134,18 @@ async def set_my_preferences(
     user_id is always taken from the auth token — the body's user_id field
     is overridden to prevent users from setting preferences for others.
     """
-    payload = body.model_dump(mode="json")
+    # Merge over whatever is stored so a partial update doesn't wipe the
+    # fields the client didn't send.
+    existing = await users_db.fetch_preferences(user_id) or {}
+    defaults = {
+        "quiet_hours_start": "22:00:00",
+        "quiet_hours_end": "08:00:00",
+        "proactivity_level": 3,
+        "preferred_reminder_channel": "push",
+        "language": "en-GB",
+    }
+    incoming = body.model_dump(mode="json", exclude_none=True)
+    payload = {**defaults, **{k: v for k, v in existing.items() if v is not None}, **incoming}
     payload["user_id"] = str(user_id)
     # Coerce rather than reject: an unsupported tag from a stale client
     # falls back to English instead of 500ing on the DB check constraint.

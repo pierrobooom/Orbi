@@ -43,10 +43,11 @@ async def fetch_memory_by_id(memory_id: UUID, user_id: UUID) -> dict | None:
         .select("*")
         .eq("id", str(memory_id))
         .eq("user_id", str(user_id))
-        .single()
+        .limit(1)
         .execute()
     )
-    return response.data
+    rows = response.data or []
+    return rows[0] if rows else None
 
 
 async def insert_memory(payload: dict) -> dict:

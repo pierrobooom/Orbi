@@ -30,10 +30,11 @@ async def fetch_task_by_id(task_id: UUID, owner_id: UUID) -> dict | None:
         .select("*")
         .eq("id", str(task_id))
         .eq("owner_id", str(owner_id))
-        .single()
+        .limit(1)
         .execute()
     )
-    return response.data
+    rows = response.data or []
+    return rows[0] if rows else None
 
 
 async def insert_task(payload: dict) -> dict:

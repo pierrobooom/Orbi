@@ -608,8 +608,12 @@ export async function getMyPreferences(): Promise<UserPreferences> {
   return (await res.json()) as UserPreferences;
 }
 
+/** Partial update. The server merges over the stored row and takes
+ * user_id from the auth token, so send only what's changing. */
+export type UserPreferencesPatch = Partial<Omit<UserPreferences, "user_id">>;
+
 export async function setMyPreferences(
-  prefs: UserPreferences,
+  prefs: UserPreferencesPatch,
 ): Promise<UserPreferences> {
   const res = await authFetch(`${V1}/users/me/preferences`, {
     method: "PUT",

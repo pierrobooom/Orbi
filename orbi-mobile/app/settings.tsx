@@ -150,7 +150,8 @@ export default function SettingsScreen() {
     // Optimistic — the row highlights immediately and reverts on failure.
     setPrefs({ ...prefs, language: tag });
     try {
-      const saved = await setMyPreferences({ ...prefs, language: tag });
+      // Only the changed field — the server merges over the stored row.
+      const saved = await setMyPreferences({ language: tag });
       setPrefs(saved);
     } catch (e) {
       setPrefs(previous);
