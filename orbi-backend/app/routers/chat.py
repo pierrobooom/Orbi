@@ -23,7 +23,11 @@ from app.db import (
 )
 from app.models.conversation import ConversationSource
 from app.services.auth import get_current_user_with_tier
-from app.services.task_sanitizer import match_cluster_id, sanitize_parsed_task
+from app.services.cluster_matcher import (
+    build_task_query_text,
+    match_cluster_semantic,
+)
+from app.services.task_sanitizer import sanitize_parsed_task
 from app.services.time_extractor import override_due_at_clock
 
 router = APIRouter(prefix="/chat", tags=["chat"])
@@ -192,11 +196,26 @@ async def chat(
                     body.user_timezone,
                 )
 
-            # Resolve domain_hint -> parent_cluster_id. Without this the
-            # mobile always lands voice tasks in Drift, because the
-            # embedded data only carries the free-text hint, not an id.
+            # Resolve the cluster. Without this the mobile always lands
+            # voice tasks in Drift, because the embedded data only
+            # carries a free-text domain hint, not an id.
+            #
+            # Semantic match on the task's full text rather than a
+            # substring test on the hint alone — see cluster_matcher for
+            # why the substring version put "Create website" (hint
+            # "work") into a cluster called "Car Stuff". Falls back to
+            # the substring matcher when embeddings are unavailable.
             if not parsed.get("parent_cluster_id"):
-                cluster_id = match_cluster_id(parsed.get("domain_hint"), user_clusters)
+                cluster_id = await match_cluster_semantic(
+                    build_task_query_text(
+                        parsed.get("title"),
+                        parsed.get("label"),
+                        parsed.get("description"),
+                        parsed.get("domain_hint"),
+                    ),
+                    parsed.get("domain_hint"),
+                    user_clusters,
+                )
                 if cluster_id:
                     parsed["parent_cluster_id"] = cluster_id
 
