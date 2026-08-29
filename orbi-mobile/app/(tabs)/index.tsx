@@ -353,6 +353,9 @@ export default function UniverseScreen() {
           <EmptyState />
         ) : (
           <BubbleCanvas
+            onTaskLongPress={(taskId) =>
+              router.push({ pathname: "/move-task", params: { id: taskId } })
+            }
             onClusterLongPress={onClusterLongPress}
             onEditFocusedCluster={(clusterId) =>
               router.push({ pathname: "/cluster-editor", params: { id: clusterId } })

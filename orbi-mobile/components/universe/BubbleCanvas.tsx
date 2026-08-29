@@ -176,6 +176,10 @@ interface BubbleCanvasProps {
   // view). The universe screen wires this up to open the cluster
   // editor. Long-press on a task bubble is intentionally ignored.
   onClusterLongPress?: (clusterId: string) => void;
+  // Long-press on a TASK bubble (drilled view). Used for "move to
+  // cluster" — the two-level universe never shows a task and a
+  // destination cluster together, so drag-and-drop isn't available.
+  onTaskLongPress?: (taskId: string) => void;
   // Called when the user taps the pencil in the drilled-view back
   // overlay. Lets the parent open the cluster editor for the
   // currently focused cluster without the canvas needing to know
@@ -183,7 +187,7 @@ interface BubbleCanvasProps {
   onEditFocusedCluster?: (clusterId: string) => void;
 }
 
-export default function BubbleCanvas({ onBubbleTap, onClusterLongPress, onEditFocusedCluster }: BubbleCanvasProps = {}) {
+export default function BubbleCanvas({ onBubbleTap, onClusterLongPress, onTaskLongPress, onEditFocusedCluster }: BubbleCanvasProps = {}) {
   const { width, height } = useWindowDimensions();
   // Approximate canvas height — leaves room for the header strip + tab bar.
   // Actual layout will be tightened once those components ship.
@@ -404,10 +408,12 @@ export default function BubbleCanvas({ onBubbleTap, onClusterLongPress, onEditFo
            }
          }}
          onBubbleLongPress={(bubble) => {
-           // Long-press only opens the cluster editor when we're at
-           // the top-level cluster view. Task bubbles ignore it.
-           if (bubble.kind === "cluster" && onClusterLongPress) {
-             onClusterLongPress(bubble.id);
+           // Cluster bubbles (top view) open the cluster editor; task
+           // bubbles (drilled view) open the move-to-cluster sheet.
+           if (bubble.kind === "cluster") {
+             if (onClusterLongPress) onClusterLongPress(bubble.id);
+           } else if (onTaskLongPress) {
+             onTaskLongPress(bubble.id);
            }
          }}
        />

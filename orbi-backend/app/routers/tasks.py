@@ -128,15 +128,20 @@ async def update_task(
             detail=_error("Task not found.", "TASK_NOT_FOUND"),
         )
 
-    # Merge incoming changes onto the existing record to get a full TaskBubble
-    # that the scoring function can operate on
-    merged = TaskBubble(**{**existing, **body.model_dump(exclude_none=True)})
+    # exclude_unset, NOT exclude_none. PATCH semantics distinguish "field
+    # absent" (leave alone) from "field explicitly null" (clear it), and
+    # exclude_none collapses both into "leave alone" — which made it
+    # impossible to clear a due date, drop a description, or move a task
+    # out of its cluster into Drift. The write silently no-opped and the
+    # client showed a success.
+    changes = body.model_dump(exclude_unset=True)
+    merged = TaskBubble(**{**existing, **changes})
     merged_dict = merged.model_dump(mode="json")
     merged_dict["updated_at"] = datetime.now(timezone.utc).isoformat()
     merged_dict["pressure_score"] = calculate_pressure_score(merged)
 
     # Only send changed fields + updated_at + pressure_score to the DB
-    update_payload = body.model_dump(exclude_none=True, mode="json")
+    update_payload = body.model_dump(exclude_unset=True, mode="json")
     update_payload["updated_at"] = merged_dict["updated_at"]
     update_payload["pressure_score"] = merged_dict["pressure_score"]
 
@@ -149,8 +154,7 @@ async def update_task(
 
     # Re-embed only when one of the searchable fields actually changed
     # — saves an OpenAI call on status/due_at/importance edits.
-    incoming = body.model_dump(exclude_none=True)
-    if any(k in incoming for k in ("title", "label", "description")):
+    if any(k in changes for k in ("title", "label", "description")):
         background_tasks.add_task(regenerate_task_embedding, task_id, user_id)
 
     return row
