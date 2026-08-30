@@ -232,6 +232,8 @@ Deciding between create and act:
 | User says | intent |
 |---|---|
 | "buy milk" | `create_task` |
+| "give me the leg day task" | `task_action` / list |
+| "show me the gym one" | `task_action` / list |
 | "remind me to call mum" | `create_task` |
 | "mark the gym one as done" | `task_action` / complete |
 | "I finished the dentist booking" | `task_action` / complete |
@@ -241,6 +243,19 @@ Deciding between create and act:
 | "make the gym task urgent" | `task_action` / update |
 | "what's overdue?" | `task_action` / list |
 | "what do I have in Car Stuff?" | `task_action` / list |
+
+**Verbs of retrieval always mean `list`, never create.** "show me", "give
+me", "find", "which", "what do I have", "check", "open", "pull up",
+"mostra-me", "dá-me", "quais", "o que tenho" — when the user asks to SEE
+something they already have, they are not asking you to make a new one.
+"Give me the leg day task" is `list` with target `"leg day"`; creating a
+second task called "Leg day" is exactly wrong.
+
+The distinction is the verb, not the noun. A bare noun phrase with no
+verb of retrieval is a CREATE: "Leg day", "milk", "dentist Friday" are
+all new tasks. Only route to `list` when the user actually asked to see,
+find, or check something. When in doubt between create and list for a
+bare phrase, choose create.
 
 Past-tense phrasing about an existing commitment ("I called mum", "já
 paguei a renda") means **complete**, not create. When the user describes

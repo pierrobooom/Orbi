@@ -59,6 +59,17 @@ class ChatResponse(BaseModel):
 
 _TASK_ACTIONS = frozenset({"complete", "delete", "update", "list"})
 
+# Values that mean "the model left this empty" rather than being content.
+_NULLISH = frozenset({"", "null", "none", "undefined", "n/a", "nil"})
+
+
+def _clean_field(value: object) -> str | None:
+    """Trim a model-supplied string, mapping null-ish spellings to None."""
+    if not isinstance(value, str):
+        return None
+    cleaned = value.strip()
+    return None if cleaned.lower() in _NULLISH else cleaned
+
 # Only these can be changed by voice on an existing task. Cluster moves
 # are deliberately excluded — that's the auto-organiser's job, and the
 # move sheet's.
@@ -238,8 +249,13 @@ async def chat(
         # carries no action field; anything unrecognised is also safest
         # read as a list, which changes nothing.
         action = raw_action if raw_action in _TASK_ACTIONS else "list"
-        target = str(payload.get("target") or "").strip()
-        task_filter = str(payload.get("filter") or "").strip().lower() or None
+        target = _clean_field(payload.get("target")) or ""
+        # Models emit the literal string "null" for an absent field often
+        # enough that treating it as a real value is a live bug: it would
+        # be matched against cluster names and then embedded as a search
+        # query, turning "no filter" into a nonsense one.
+        task_filter = _clean_field(payload.get("filter"))
+        task_filter = task_filter.lower() if task_filter else None
 
         try:
             user_tasks = await tasks_db.fetch_tasks_for_user(user_id)
@@ -254,22 +270,28 @@ async def chat(
             except Exception:  # noqa: BLE001 — cluster names are a bonus
                 user_clusters = []
             matches = _filter_tasks(active, task_filter, target, user_clusters)
-            # Listing UNIONS lexical and semantic rather than stopping at
-            # the first hit. "Show me gym tasks" should return "Leg day"
-            # alongside "Enlist in gym near home" — the lexical pass finds
-            # only the one with the literal word, which is not what the
-            # user asked for. Resolution (complete/delete) deliberately
-            # does the opposite and short-circuits on lexical, because
-            # there the goal is ONE task, not the related set.
+            # Whether to widen the result depends on which field the
+            # model filled in, and the prompt already distinguishes them:
+            # `filter` is a category ("all the gym related stuff"),
+            # `target` identifies a particular task ("only the leg day
+            # one"). So a filter query UNIONS lexical and semantic —
+            # "gym" should surface "Leg day" as well as "Enlist in gym
+            # near home" — while a target query stays narrow and only
+            # falls back to semantic when the literal match found
+            # nothing. Widening a "show me only X" request is just as
+            # wrong as returning one result for "show me everything
+            # about X".
             needle = task_filter or target
+            is_topic = bool(task_filter) and task_filter not in {"overdue", "today"}
             if needle and task_filter not in {"overdue", "today"}:
-                related = await search_tasks_semantic(
-                    target=needle, user_id=user_id, active_tasks=active
-                )
-                seen = {str(t["id"]) for t in matches}
-                matches = matches + [
-                    t for t in related if str(t["id"]) not in seen
-                ]
+                if is_topic or not matches:
+                    related = await search_tasks_semantic(
+                        target=needle, user_id=user_id, active_tasks=active
+                    )
+                    seen = {str(t["id"]) for t in matches}
+                    matches = matches + [
+                        t for t in related if str(t["id"]) not in seen
+                    ]
             data = {
                 "action": "list",
                 "filter": task_filter,
