@@ -242,4 +242,5 @@ export const ptPT: Record<string, string> = {
   "Nothing matches that.": "Nada corresponde a isso.",
   "Couldn't find that task.": "Não encontrei essa tarefa.",
   "More than one task matches. Check this is the right one.": "Mais do que uma tarefa corresponde. Confirma se é a certa.",
+  "Reopen task": "Reabrir tarefa",
 };

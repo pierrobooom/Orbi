@@ -28,7 +28,7 @@ from app.services.cluster_matcher import (
     build_task_query_text,
     match_cluster_semantic,
 )
-from app.services.task_resolver import resolve_task
+from app.services.task_resolver import resolve_task, search_tasks_semantic
 from app.services.task_sanitizer import sanitize_parsed_task
 from app.services.time_extractor import override_due_at_clock
 
@@ -90,7 +90,12 @@ def _clean_patch(
     return {k: cleaned[k] for k in candidate if k in cleaned}
 
 
-def _filter_tasks(tasks: list[dict], task_filter: str | None, target: str) -> list[dict]:
+def _filter_tasks(
+    tasks: list[dict],
+    task_filter: str | None,
+    target: str,
+    clusters: list[dict] | None = None,
+) -> list[dict]:
     """Apply a spoken filter ("overdue", "today", a cluster name)."""
     now = datetime.now(timezone.utc)
     if task_filter == "overdue":
@@ -118,11 +123,30 @@ def _filter_tasks(tasks: list[dict], task_filter: str | None, target: str) -> li
             if parsed.date() == now.date():
                 out.append(task)
         return out
-    # Anything else is treated as free text over titles — a cluster name
-    # or a topic word both behave the same way here.
     needle = (task_filter or target or "").lower().strip()
     if not needle:
         return tasks
+
+    # Cluster name first. The model returns the cluster the user named
+    # ("car stuff"), and matching that against TITLES finds nothing —
+    # tasks in Car Stuff are called "Book MOT", not "car stuff". This is
+    # the cheap, exact answer for "what's in <cluster>".
+    if clusters:
+        cluster_ids = {
+            str(c["id"])
+            for c in clusters
+            if needle in str(c.get("name") or "").lower()
+            or str(c.get("name") or "").lower() in needle
+        }
+        if cluster_ids:
+            in_cluster = [
+                t for t in tasks if str(t.get("parent_cluster_id") or "") in cluster_ids
+            ]
+            if in_cluster:
+                return in_cluster
+
+    # Otherwise treat it as free text over titles. The caller falls back
+    # to semantic search when this finds nothing.
     return [t for t in tasks if needle in str(t.get("title") or "").lower()]
 
 
@@ -225,7 +249,27 @@ async def chat(
         active = [t for t in user_tasks if t.get("status") == "active"]
 
         if action == "list":
-            matches = _filter_tasks(active, task_filter, target)
+            try:
+                user_clusters = await clusters_db.fetch_clusters_for_user(user_id)
+            except Exception:  # noqa: BLE001 — cluster names are a bonus
+                user_clusters = []
+            matches = _filter_tasks(active, task_filter, target, user_clusters)
+            # Listing UNIONS lexical and semantic rather than stopping at
+            # the first hit. "Show me gym tasks" should return "Leg day"
+            # alongside "Enlist in gym near home" — the lexical pass finds
+            # only the one with the literal word, which is not what the
+            # user asked for. Resolution (complete/delete) deliberately
+            # does the opposite and short-circuits on lexical, because
+            # there the goal is ONE task, not the related set.
+            needle = task_filter or target
+            if needle and task_filter not in {"overdue", "today"}:
+                related = await search_tasks_semantic(
+                    target=needle, user_id=user_id, active_tasks=active
+                )
+                seen = {str(t["id"]) for t in matches}
+                matches = matches + [
+                    t for t in related if str(t["id"]) not in seen
+                ]
             data = {
                 "action": "list",
                 "filter": task_filter,
@@ -274,9 +318,18 @@ async def chat(
                 }
                 reply = f'{action.title()}: "{match.get("title")}"?'
 
+        # Transcript included deliberately: without it a misrouted command
+        # is indistinguishable from a correctly-routed one in the log, and
+        # "action=list target=''" tells you nothing about what was said.
         logger.warning(
-            "Task action | action=%s target=%r resolved=%s tz=%s",
-            action, target, data.get("resolved", "n/a"), body.user_timezone or "<none>",
+            "Task action | action=%s target=%r filter=%s resolved=%s count=%s "
+            "transcript=%r",
+            action,
+            target,
+            task_filter,
+            data.get("resolved", "n/a"),
+            data.get("count", "n/a"),
+            body.message,
         )
 
     elif agent_name == "task_parser":

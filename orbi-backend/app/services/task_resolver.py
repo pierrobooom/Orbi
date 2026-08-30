@@ -139,3 +139,48 @@ async def resolve_task(
         "ambiguous": ambiguous,
         "reason": "semantic",
     }
+
+# Listing is more forgiving than acting: showing a loosely-related task
+# costs the user a glance, whereas completing one destroys work. Hence a
+# lower bar than _MIN_SIMILARITY.
+_LIST_MIN_SIMILARITY = 0.28
+
+
+async def search_tasks_semantic(
+    *,
+    target: str,
+    user_id: UUID,
+    active_tasks: list[dict],
+    limit: int = 25,
+) -> list[dict]:
+    """Tasks semantically related to a spoken phrase, best first.
+
+    Used by the "show me everything about X" voice command, where a
+    substring scan over titles is the wrong tool — "everything related to
+    the car" should surface "Book MOT" and "Buy new tyres" even though
+    neither contains the word "car".
+
+    Returns [] on any failure, which the caller reports as "nothing
+    matches" — the same outcome as a genuine empty result.
+    """
+    if not target or not active_tasks:
+        return []
+    try:
+        vector = await generate_embedding(target)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("List search embedding failed: %s", exc)
+        return []
+    if vector is None:
+        return []
+    try:
+        hits = await tasks_db.search_tasks_by_embedding(
+            owner_id=user_id,
+            query_embedding=vector,
+            match_count=limit,
+            match_threshold=_LIST_MIN_SIMILARITY,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("List search failed: %s", exc)
+        return []
+    by_id = {str(t["id"]): t for t in active_tasks}
+    return [by_id[str(h["id"])] for h in hits if str(h["id"]) in by_id]

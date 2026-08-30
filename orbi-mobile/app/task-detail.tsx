@@ -93,6 +93,7 @@ export default function TaskDetailScreen() {
   }, [task, serverClusters]);
 
   const [mode, setMode] = useState<"view" | "edit">("view");
+  const isCompleted = task?.status === "completed";
   const [busy, setBusy] = useState<"complete" | "delete" | "save" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -182,6 +183,25 @@ export default function TaskDetailScreen() {
     try {
       await updateTask(task.id, { status: "completed" });
       removeTask(task.id);
+      router.back();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : String(e));
+      setBusy(null);
+    }
+  };
+
+  // A completed task offers Reopen instead of Complete. Previously the
+  // hold-to-complete button was shown regardless of status, so completing
+  // an already-completed task from the Done view simply made it vanish
+  // from that view — a no-op that looked like data loss.
+  const onReopen = async () => {
+    setError(null);
+    setBusy("complete");
+    try {
+      // The API clears completed_at on the way out of 'completed', so a
+      // reopened task doesn't keep a stale completion date.
+      const updated = await updateTask(task.id, { status: "active" });
+      replaceTask(updated);
       router.back();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : String(e));
@@ -535,23 +555,37 @@ export default function TaskDetailScreen() {
                   <MaterialIcons name="delete-outline" size={26} color={colors.overdue} />
                 )}
               </Pressable>
-              <Pressable
-                onPressIn={onHoldStart}
-                onPressOut={onHoldEnd}
-                disabled={busy !== null}
-                style={[styles.holdBtn, busy && styles.btnDisabled]}
-                accessibilityLabel="Hold for 2 seconds to mark complete"
-              >
-                {/* Fill bar that animates left-to-right as the user
-                    holds. Sits behind the label text so the label
-                    stays readable throughout. */}
-                <Animated.View style={[styles.holdBtnFill, holdFillStyle]} />
-                {busy === "complete" ? (
-                  <ActivityIndicator color="white" />
-                ) : (
-                  <Text style={styles.holdBtnText}>{t("Hold to mark complete")}</Text>
-                )}
-              </Pressable>
+              {isCompleted ? (
+                <Pressable
+                  onPress={onReopen}
+                  disabled={busy !== null}
+                  style={[styles.holdBtn, busy && styles.btnDisabled]}
+                >
+                  {busy === "complete" ? (
+                    <ActivityIndicator color="white" />
+                  ) : (
+                    <Text style={styles.holdBtnText}>{t("Reopen task")}</Text>
+                  )}
+                </Pressable>
+              ) : (
+                <Pressable
+                  onPressIn={onHoldStart}
+                  onPressOut={onHoldEnd}
+                  disabled={busy !== null}
+                  style={[styles.holdBtn, busy && styles.btnDisabled]}
+                  accessibilityLabel="Hold for 2 seconds to mark complete"
+                >
+                  {/* Fill bar that animates left-to-right as the user
+                      holds. Sits behind the label text so the label
+                      stays readable throughout. */}
+                  <Animated.View style={[styles.holdBtnFill, holdFillStyle]} />
+                  {busy === "complete" ? (
+                    <ActivityIndicator color="white" />
+                  ) : (
+                    <Text style={styles.holdBtnText}>{t("Hold to mark complete")}</Text>
+                  )}
+                </Pressable>
+              )}
             </>
           ) : (
             <>
