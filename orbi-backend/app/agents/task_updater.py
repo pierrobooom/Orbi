@@ -18,7 +18,10 @@ from uuid import UUID
 from app.agents._utils import strip_json_fences
 from app.services.ai_router import get_ai_response, load_prompt
 from app.services.task_sanitizer import _parse_due_at
-from app.services.time_extractor import override_due_at_clock
+from app.services.time_extractor import (
+    override_due_at_clock,
+    override_due_at_weekday,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -138,6 +141,14 @@ async def parse_voice_update(
     # gets to own the date so "move it to Friday at 8 PM" combines
     # its date arithmetic with our regex'd hour.
     if "due_at" in patch and isinstance(patch.get("due_at"), str):
+        # "move it to Friday" is the most common voice edit there is, and
+        # the model is as unreliable at weekday arithmetic here as it is
+        # on the create path. Weekday fixes the DATE, clock fixes the TIME.
+        patch["due_at"] = override_due_at_weekday(
+            patch["due_at"],
+            user_message,
+            user_timezone,
+        )
         overridden = override_due_at_clock(
             patch["due_at"],
             user_message,

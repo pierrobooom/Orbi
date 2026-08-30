@@ -14,6 +14,7 @@ from typing import Optional
 from app.agents.cluster_manager import propose_organisation
 from app.db import clusters as clusters_db, tasks as tasks_db
 from app.models.task import Cluster
+from app.services.usage_tracker import ObjectCapExceeded, check_cluster_cap
 from app.services.auth import get_current_user, get_current_user_with_tier
 from app.services.cluster_apply import apply_organisation
 from app.services.cluster_kind import coerce_kind
@@ -55,9 +56,22 @@ async def list_clusters(user_id: UUID = Depends(get_current_user)):
 @router.post("", response_model=Cluster, status_code=status.HTTP_201_CREATED)
 async def create_cluster(
     body: ClusterCreate,
-    user_id: UUID = Depends(get_current_user),
+    auth: dict = Depends(get_current_user_with_tier),
 ):
     """Create a new cluster."""
+    user_id = auth["user_id"]
+
+    # Same reasoning as the bubble cap: the client's check is for UX, this
+    # one is the actual limit.
+    try:
+        existing = await clusters_db.fetch_clusters_for_user(user_id)
+        check_cluster_cap(auth["tier"], len(existing))
+    except ObjectCapExceeded as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=_error(str(exc), "CLUSTER_CAP_REACHED"),
+        )
+
     now = datetime.now(timezone.utc)
     payload = {
         "id": str(uuid4()),

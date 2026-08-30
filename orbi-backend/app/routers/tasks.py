@@ -16,6 +16,7 @@ from app.agents.task_updater import parse_voice_update
 from app.db import tasks as tasks_db, users as users_db
 from app.models.task import TaskBubble, TaskBubbleCreate, TaskBubbleUpdate, TaskStatus
 from app.services.ai_router import AIRateLimited
+from app.services.usage_tracker import ObjectCapExceeded, check_bubble_cap
 from app.services.auth import get_current_user, get_current_user_with_tier
 from app.services.embeddings import generate_embedding
 from app.services.scoring import calculate_pressure_score
@@ -47,7 +48,7 @@ async def list_tasks(user_id: UUID = Depends(get_current_user)):
 async def create_task(
     body: TaskBubbleCreate,
     background_tasks: BackgroundTasks,
-    user_id: UUID = Depends(get_current_user),
+    auth: dict = Depends(get_current_user_with_tier),
 ):
     """Create a new TaskBubble.
 
@@ -56,6 +57,25 @@ async def create_task(
     The semantic-search embedding is generated AFTER the response is
     returned via FastAPI's BackgroundTasks so the create stays fast.
     """
+    user_id = auth["user_id"]
+
+    # Tier cap, enforced server-side. The client checks this too for a
+    # responsive UI, but the client is exactly the layer a determined user
+    # controls — the API is reachable with any valid JWT.
+    #
+    # Counting active tasks (not all rows) is deliberate: completing a task
+    # should free capacity, otherwise the cap becomes a lifetime quota and
+    # a long-running Spark account silently dies.
+    try:
+        existing = await tasks_db.fetch_tasks_for_user(user_id)
+        active_count = sum(1 for t in existing if t.get("status") == "active")
+        check_bubble_cap(auth["tier"], active_count)
+    except ObjectCapExceeded as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=_error(str(exc), "BUBBLE_CAP_REACHED"),
+        )
+
     now = datetime.now(timezone.utc)
     task_id = uuid4()
 

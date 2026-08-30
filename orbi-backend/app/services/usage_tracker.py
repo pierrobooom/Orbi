@@ -99,6 +99,62 @@ _MONTHLY_CAPS: dict[str, dict[str, int]] = {
     "premium": {"claude_call": 100},
 }
 
+# Object caps from CLAUDE.md. Unlike the metered caps above these are
+# not per-period — they bound how much a user can accumulate at once.
+# None means unlimited.
+#
+# These were previously enforced ONLY in the mobile client
+# (services/tierGate.ts), which is not enforcement at all: the API is
+# reachable directly with any valid JWT, and the client is the one place
+# a determined user controls.
+_BUBBLE_CAPS: dict[str, int | None] = {
+    "free": 50,      # Spark
+    "pro": 500,      # Pro
+    "premium": None,  # Genius — unlimited
+}
+
+_CLUSTER_CAPS: dict[str, int | None] = {
+    "free": 3,
+    "pro": 15,
+    "premium": None,
+}
+
+
+class ObjectCapExceeded(Exception):
+    """Raised when a create would exceed the tier's object allowance."""
+
+    def __init__(self, message: str, cap: int, tier: str):
+        super().__init__(message)
+        self.cap = cap
+        self.tier = tier
+
+
+def check_bubble_cap(user_tier: str, current_count: int) -> None:
+    """Raise ObjectCapExceeded when another task would break the tier cap."""
+    cap = _BUBBLE_CAPS.get(user_tier, _BUBBLE_CAPS["free"])
+    if cap is None or current_count < cap:
+        return
+    raise ObjectCapExceeded(
+        f"{_TIER_DISPLAY.get(user_tier, user_tier)} is limited to {cap} bubbles. "
+        f"Complete or delete one, or upgrade for more.",
+        cap=cap,
+        tier=user_tier,
+    )
+
+
+def check_cluster_cap(user_tier: str, current_count: int) -> None:
+    """Raise ObjectCapExceeded when another cluster would break the cap."""
+    cap = _CLUSTER_CAPS.get(user_tier, _CLUSTER_CAPS["free"])
+    if cap is None or current_count < cap:
+        return
+    raise ObjectCapExceeded(
+        f"{_TIER_DISPLAY.get(user_tier, user_tier)} is limited to {cap} clusters. "
+        f"Delete one, or upgrade for more.",
+        cap=cap,
+        tier=user_tier,
+    )
+
+
 _DAILY_KINDS = {"ai_turn", "stt_seconds", "tts_seconds"}
 _MONTHLY_KINDS = {"claude_call"}
 

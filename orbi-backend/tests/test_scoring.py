@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
@@ -155,3 +155,61 @@ class TestCalculatePressureScore:
         score_explicit = calculate_pressure_score(task, dependency_count=0)
         score_default = calculate_pressure_score(task)
         assert score_explicit == score_default
+
+
+# ---------------------------------------------------------------------------
+# Weekday resolution (time_extractor)
+# ---------------------------------------------------------------------------
+# Regression coverage for the bug where "Friday morning" spoken on a
+# Saturday came back as the following Sunday: the model is unreliable at
+# calendar arithmetic, and the sanitiser only rejects implausible dates,
+# so a wrong weekday reached the user's reminder untouched.
+
+from app.services.time_extractor import (  # noqa: E402
+    extract_weekday,
+    resolve_weekday_date,
+)
+
+
+class TestWeekdayExtraction:
+    def test_english_weekday(self):
+        assert extract_weekday("Book the dentist for Friday morning") == (4, False)
+
+    def test_english_next_marker(self):
+        assert extract_weekday("next Friday at 3pm") == (4, True)
+
+    def test_portuguese_weekday(self):
+        assert extract_weekday("marca para sexta de manha") == (4, False)
+
+    def test_portuguese_accented_and_feira(self):
+        assert extract_weekday("na terça-feira") == (1, False)
+
+    def test_portuguese_next_marker(self):
+        assert extract_weekday("na próxima sexta") == (4, True)
+
+    def test_no_weekday_returns_none(self):
+        assert extract_weekday("buy milk tomorrow") is None
+
+    def test_empty_transcript(self):
+        assert extract_weekday("") is None
+
+
+class TestResolveWeekdayDate:
+    def test_forward_within_week(self):
+        # Saturday 2026-08-29 -> Friday is 2026-09-04, not the next day.
+        saturday = datetime(2026, 8, 29, 9, 0, tzinfo=timezone.utc)
+        assert resolve_weekday_date(saturday, 4).date() == date(2026, 9, 4)
+
+    def test_same_weekday_means_today(self):
+        saturday = datetime(2026, 8, 29, 9, 0, tzinfo=timezone.utc)
+        assert resolve_weekday_date(saturday, 5).date() == date(2026, 8, 29)
+
+    def test_explicit_next_skips_a_week(self):
+        saturday = datetime(2026, 8, 29, 9, 0, tzinfo=timezone.utc)
+        got = resolve_weekday_date(saturday, 4, explicit_next=True)
+        assert got.date() == date(2026, 9, 11)
+
+    def test_time_of_day_is_preserved(self):
+        saturday = datetime(2026, 8, 29, 18, 30, tzinfo=timezone.utc)
+        got = resolve_weekday_date(saturday, 0)
+        assert (got.hour, got.minute) == (18, 30)

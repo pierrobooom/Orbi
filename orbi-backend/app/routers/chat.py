@@ -29,9 +29,13 @@ from app.services.cluster_matcher import (
     build_task_query_text,
     match_cluster_semantic,
 )
+from app.services.privacy import safe_transcript
 from app.services.task_resolver import resolve_task, search_tasks_semantic
 from app.services.task_sanitizer import sanitize_parsed_task
-from app.services.time_extractor import override_due_at_clock
+from app.services.time_extractor import (
+    override_due_at_clock,
+    override_due_at_weekday,
+)
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -354,13 +358,13 @@ async def chat(
         # "action=list target=''" tells you nothing about what was said.
         logger.warning(
             "Task action | action=%s target=%r filter=%s resolved=%s count=%s "
-            "transcript=%r",
+            "transcript=%s",
             action,
             target,
             task_filter,
             data.get("resolved", "n/a"),
             data.get("count", "n/a"),
-            body.message,
+            safe_transcript(body.message),
         )
 
     elif agent_name == "task_parser":
@@ -445,6 +449,14 @@ async def chat(
             # belonged to, and stamping every task with the same hour is
             # worse than trusting the per-task due_at the model emitted.
             if len(raw_task_list) == 1:
+                # Weekday first, then clock: the weekday pass owns the
+                # DATE and the clock pass owns the TIME, so running them
+                # in this order means neither undoes the other.
+                parsed["due_at"] = override_due_at_weekday(
+                    parsed.get("due_at"),
+                    body.message,
+                    body.user_timezone,
+                )
                 parsed["due_at"] = override_due_at_clock(
                     parsed.get("due_at"),
                     body.message,
@@ -481,11 +493,11 @@ async def chat(
         # Using warning level because uvicorn's default logger config
         # propagates WARNING but not INFO for app-defined loggers.
         logger.warning(
-            "Task parse | path=%s count=%d tz=%s transcript=%r sanitized=%r",
+            "Task parse | path=%s count=%d tz=%s transcript=%s sanitized=%r",
             parser_path,
             len(parsed_tasks),
             body.user_timezone or "<none>",
-            body.message,
+            safe_transcript(body.message),
             parsed_tasks,
         )
 
