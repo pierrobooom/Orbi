@@ -740,59 +740,29 @@ Home:           IKEA, B\&Q, Screwfix, Dyson, Currys
 
 \## Current Build Phase
 
-
-
-Phase 4 — Mobile Frontend
-
-Target window: May 16 – Jun 12, 2026
-
-
-
-Building next:
-
-\- React Native + Expo project scaffold (sibling folder: orbi-mobile/)
-
-\- Bubble universe canvas via React Native Skia
-
-\- Voice recording UI + whisper.cpp on-device integration
-
-\- Calls into /chat, /voice/\*, /tasks, /finance/entries, /memory
-
-\- Zustand stores for tasks, clusters, finance
-
-\- Expo Router navigation
-
-\- Push notification registration
-
-\- Subscription tier gating in the UI (Spark / Pro / Genius)
-
-\- Hard usage caps and TTS-on-demand UX baked into ai\_router.py before mobile work
-
-
+Phase 4 — Mobile Frontend. Feature-complete; hardening and cost work in progress.
+Last updated: Aug 30, 2026. The original Jun 12 window and Jun 26 test-release
+date were not met — treat the dates below as history, not as a plan.
 
 Completed phases:
+\- Phase 1 (Foundation & Data Core) — Apr 3 – Apr 17
+\- Phase 2 (Intelligence Core) — Apr 18 – May 1
+\- Phase 3 (Voice & Conversation Layer) — May 2 – May 15
+\- Phase 4 (Mobile Frontend) — May 16 onward; shipped auth, bubble universe,
+  two-level zoom + pan, voice capture, multi-task confirm queue, voice commands
+  on existing tasks, semantic search + cluster matching, Money tab, tier gating,
+  push registration, European Portuguese (pipeline + UI), overdue/Done task views
 
-\- Phase 1 (Foundation & Data Core) — Done Apr 17
+Open before a test release:
+\- Groq Developer tier — the free tier's 200k tokens/day cannot serve one Pro user
+\- Price ElevenLabs + Deepgram per tier; they, not Groq, are the margin risk
+\- Reminder firing — reminder_planner is imported by nothing, there is no
+  notification_plans table and no scheduler, so nothing ever fires
+\- Chat / Memory tab — backend complete, no mobile surface
+\- Weekday parsing — "Friday" resolves to the wrong date in EN and PT
+\- Gate transcript logging behind ENVIRONMENT (violates the security rules above)
+\- Server-side bubble cap — the client is currently the only enforcement
 
-\- Phase 2 (Intelligence Core) — Done Apr 26
-
-\- Phase 3 (Voice & Conversation Layer) — Done Apr 27
-
-
-
-\### Full Roadmap
-
-\- Phase 1: Foundation \& Data Core         → Apr 3  – Apr 17
-
-\- Phase 2: Intelligence Core              → Apr 18 – May 1
-
-\- Phase 3: Voice \& Conversation Layer     → May 2  – May 15
-
-\- Phase 4: Mobile Frontend                → May 16 – Jun 12
-
-\- Phase 5: Polish \& Testing Version       → Jun 13 – Jun 26
-
-\- Target test version live: June 26, 2026
 
 
 
