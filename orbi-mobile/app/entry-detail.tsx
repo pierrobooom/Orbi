@@ -11,6 +11,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -172,6 +173,7 @@ export default function EntryDetailScreen() {
         </View>
 
         <ScrollView
+          keyboardDismissMode="on-drag"
           style={styles.flex}
           contentContainerStyle={styles.body}
           keyboardShouldPersistTaps="handled"
@@ -221,7 +223,10 @@ export default function EntryDetailScreen() {
                   onChangeText={setEditAmount}
                   keyboardType="decimal-pad"
                   style={styles.amountInput}
-                />
+                
+            returnKeyType="done"
+            onSubmitEditing={() => Keyboard.dismiss()}
+          />
               </View>
 
               <Text style={styles.metaLabel}>{t("Merchant")}</Text>
@@ -230,7 +235,10 @@ export default function EntryDetailScreen() {
                 onChangeText={setEditMerchant}
                 autoCapitalize="words"
                 style={styles.input}
-              />
+              
+            returnKeyType="done"
+            onSubmitEditing={() => Keyboard.dismiss()}
+          />
               <Text style={styles.hint}>
                 {t("Changing the merchant re-runs categorisation.")}
               </Text>

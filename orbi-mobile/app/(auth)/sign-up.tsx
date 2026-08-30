@@ -7,6 +7,7 @@ import { Link, type Href } from "expo-router";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -99,7 +100,10 @@ export default function SignUpScreen() {
               placeholder={t("Jane Doe")}
               placeholderTextColor={colors.inkDim}
               style={styles.input}
-            />
+            
+            returnKeyType="done"
+            onSubmitEditing={() => Keyboard.dismiss()}
+          />
           </View>
 
           <View style={styles.field}>
@@ -114,7 +118,10 @@ export default function SignUpScreen() {
               placeholder={t("you@example.com")}
               placeholderTextColor={colors.inkDim}
               style={styles.input}
-            />
+            
+            returnKeyType="done"
+            onSubmitEditing={() => Keyboard.dismiss()}
+          />
           </View>
 
           <View style={styles.field}>
@@ -129,7 +136,10 @@ export default function SignUpScreen() {
               placeholder={t("At least 6 characters")}
               placeholderTextColor={colors.inkDim}
               style={styles.input}
-            />
+            
+            returnKeyType="done"
+            onSubmitEditing={() => Keyboard.dismiss()}
+          />
           </View>
 
           {error ? <Text style={styles.error}>{error}</Text> : null}

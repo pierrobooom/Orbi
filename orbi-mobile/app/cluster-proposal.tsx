@@ -124,7 +124,9 @@ export default function ClusterProposalScreen() {
         <View style={{ width: 90 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.body}>
+      <ScrollView
+          keyboardDismissMode="on-drag"
+          keyboardShouldPersistTaps="handled" contentContainerStyle={styles.body}>
         {loading ? (
           <View style={styles.center}>
             <ActivityIndicator color={colors.accent} />

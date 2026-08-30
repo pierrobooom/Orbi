@@ -97,13 +97,15 @@ export default function MoveTaskScreen() {
     <SafeAreaView style={styles.root} edges={["top", "bottom"]}>
       <View style={styles.header}>
         <Pressable onPress={() => router.back()} hitSlop={12}>
-          <Text style={styles.headerCancel}>{t("Cancel")}</Text>
+          <Text style={styles.headerCancel} numberOfLines={1}>{t("Cancel")}</Text>
         </Pressable>
         <Text style={styles.headerTitle}>{t("Move task")}</Text>
-        <View style={{ width: 50 }} />
+        <View style={{ minWidth: 64 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.body}>
+      <ScrollView
+          keyboardDismissMode="on-drag"
+          keyboardShouldPersistTaps="handled" contentContainerStyle={styles.body}>
         <Text style={styles.taskTitle} numberOfLines={2}>
           {task.title}
         </Text>
@@ -150,7 +152,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   headerTitle: { color: colors.ink, fontSize: 15, fontWeight: "600" },
-  headerCancel: { color: colors.inkDim, fontSize: 14, width: 50 },
+  headerCancel: { color: colors.inkDim, fontSize: 14, minWidth: 64 },
   body: { padding: 24 },
   taskTitle: { color: colors.ink, fontSize: 19, fontWeight: "700" },
   label: {

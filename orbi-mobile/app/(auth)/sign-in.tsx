@@ -5,6 +5,7 @@ import { Link, type Href } from "expo-router";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -65,7 +66,10 @@ export default function SignInScreen() {
               placeholder={t("you@example.com")}
               placeholderTextColor={colors.inkDim}
               style={styles.input}
-            />
+            
+            returnKeyType="done"
+            onSubmitEditing={() => Keyboard.dismiss()}
+          />
           </View>
 
           <View style={styles.field}>
@@ -80,7 +84,10 @@ export default function SignInScreen() {
               placeholder="••••••••"
               placeholderTextColor={colors.inkDim}
               style={styles.input}
-            />
+            
+            returnKeyType="done"
+            onSubmitEditing={() => Keyboard.dismiss()}
+          />
           </View>
 
           {error ? <Text style={styles.error}>{error}</Text> : null}

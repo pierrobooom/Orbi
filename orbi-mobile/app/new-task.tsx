@@ -118,13 +118,14 @@ export default function NewTaskScreen() {
       >
         <View style={styles.header}>
           <Pressable onPress={() => router.back()} hitSlop={12}>
-            <Text style={styles.headerCancel}>{t("Cancel")}</Text>
+            <Text style={styles.headerCancel} numberOfLines={1}>{t("Cancel")}</Text>
           </Pressable>
           <Text style={styles.headerTitle}>{t("New task")}</Text>
-          <View style={{ width: 50 }} />
+          <View style={{ minWidth: 64 }} />
         </View>
 
         <ScrollView
+          keyboardDismissMode="on-drag"
           style={styles.flex}
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
@@ -159,6 +160,8 @@ export default function NewTaskScreen() {
 
           <Text style={styles.fieldLabel}>{t("Cluster")}</Text>
           <ScrollView
+          keyboardDismissMode="on-drag"
+          keyboardShouldPersistTaps="handled"
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.chipRow}
@@ -281,7 +284,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   headerTitle: { color: colors.ink, fontSize: 15, fontWeight: "600" },
-  headerCancel: { color: colors.inkDim, fontSize: 14, width: 50 },
+  headerCancel: { color: colors.inkDim, fontSize: 14, minWidth: 64 },
   scrollContent: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 40 },
   titleInput: {
     color: colors.ink,

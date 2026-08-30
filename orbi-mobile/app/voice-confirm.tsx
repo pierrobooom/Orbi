@@ -16,6 +16,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -216,7 +217,10 @@ export default function VoiceConfirmScreen() {
   // there's no id to address before the task exists.
   const onMicPressOut = async () => {
     const result = await voice.stop();
-    if (!result || !current) return;
+    if (!result || !current) {
+      if (voice.tooShort) setError(t("Keep the mic pressed to record."));
+      return;
+    }
     setVoiceBusy(true);
     try {
       const { transcript } = await transcribeAudio(result.uri, result.mimeType);
@@ -298,14 +302,14 @@ export default function VoiceConfirmScreen() {
       >
         <View style={styles.header}>
           <Pressable onPress={() => router.back()} hitSlop={12}>
-            <Text style={styles.headerCancel}>{addedCount > 0 ? t("Done") : t("Cancel")}</Text>
+            <Text style={styles.headerCancel} numberOfLines={1}>{addedCount > 0 ? t("Done") : t("Cancel")}</Text>
           </Pressable>
           <Text style={styles.headerTitle}>
             {isQueue
               ? t("Task {n} of {total}", { n: index + 1, total: queue.length })
               : t("Confirm task")}
           </Text>
-          <View style={{ width: 50 }} />
+          <View style={{ minWidth: 64 }} />
         </View>
 
         {isQueue ? (
@@ -323,7 +327,9 @@ export default function VoiceConfirmScreen() {
           </View>
         ) : null}
 
-        <ScrollView style={styles.flex} contentContainerStyle={styles.body}>
+        <ScrollView
+          keyboardDismissMode="on-drag"
+          keyboardShouldPersistTaps="handled" style={styles.flex} contentContainerStyle={styles.body}>
           <Text style={styles.label}>{t("You said")}</Text>
           <Text style={styles.transcript}>"{payloadObject.transcript}"</Text>
 
@@ -338,6 +344,9 @@ export default function VoiceConfirmScreen() {
             placeholderTextColor={colors.inkDim}
             maxLength={28}
             style={styles.labelInput}
+          
+            returnKeyType="done"
+            onSubmitEditing={() => Keyboard.dismiss()}
           />
           <Text style={styles.hint}>
             {t("What you'll see in the bubble. Edit it now or keep what we picked.")}
@@ -503,7 +512,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   headerTitle: { color: colors.ink, fontSize: 15, fontWeight: "600" },
-  headerCancel: { color: colors.inkDim, fontSize: 14, width: 50 },
+  headerCancel: { color: colors.inkDim, fontSize: 14, minWidth: 64 },
   progressRow: {
     flexDirection: "row",
     justifyContent: "center",

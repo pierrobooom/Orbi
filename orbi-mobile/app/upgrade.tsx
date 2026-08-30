@@ -117,13 +117,15 @@ export default function UpgradeScreen() {
     <SafeAreaView style={styles.root} edges={["top", "bottom"]}>
       <View style={styles.header}>
         <Pressable onPress={() => router.back()} hitSlop={12}>
-          <Text style={styles.headerCancel}>{t("Close")}</Text>
+          <Text style={styles.headerCancel} numberOfLines={1}>{t("Close")}</Text>
         </Pressable>
         <Text style={styles.headerTitle}>{t("Your plan")}</Text>
-        <View style={{ width: 60 }} />
+        <View style={{ minWidth: 64 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.scroll}>
+      <ScrollView
+          keyboardDismissMode="on-drag"
+          keyboardShouldPersistTaps="handled" contentContainerStyle={styles.scroll}>
         <Text style={styles.intro}>
           {t("Orbi has three tiers. Pick the one that fits your universe.")}
         </Text>
@@ -214,7 +216,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   headerTitle: { color: colors.ink, fontSize: 15, fontWeight: "600" },
-  headerCancel: { color: colors.inkDim, fontSize: 14, width: 60 },
+  headerCancel: { color: colors.inkDim, fontSize: 14, minWidth: 64 },
   scroll: { padding: 20, paddingBottom: 60 },
   intro: { color: colors.inkDim, fontSize: 14, marginBottom: 18 },
   card: {

@@ -18,6 +18,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -200,7 +201,8 @@ export default function ClusterEditorScreen() {
           </Pressable>
         </View>
 
-        <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+        <ScrollView
+          keyboardDismissMode="on-drag" contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
           {isDrift ? (
             <View style={styles.driftCard}>
               <Text style={styles.driftTitle}>{t("Drift is the catch-all")}</Text>
@@ -222,7 +224,10 @@ export default function ClusterEditorScreen() {
                 style={styles.input}
                 autoFocus={isNew}
                 autoCapitalize="words"
-              />
+              
+            returnKeyType="done"
+            onSubmitEditing={() => Keyboard.dismiss()}
+          />
 
               <Text style={[styles.label, styles.labelSpaced]}>{t("Color")}</Text>
               <Text style={styles.colorHint}>

@@ -27,10 +27,6 @@ import { ApiError, searchTasks, transcribeAudio } from "@/services/api";
 import { useUniverseStore } from "@/stores/universeStore";
 import { colors } from "@/theme/colors";
 
-// Min hold duration before we treat a mic press as a real query — same
-// guard as the task-detail dictation mic.
-const MIN_RECORDING_MS = 500;
-
 export default function SearchScreen() {
   const t = useT();
   const router = useRouter();
@@ -74,13 +70,10 @@ export default function SearchScreen() {
   };
 
   const onMicPressOut = async () => {
-    const startedAt = voiceStartedAt.current;
     voiceStartedAt.current = null;
     const result = await voice.stop();
-    if (!result) return;
-    const duration = startedAt ? Date.now() - startedAt : 0;
-    if (duration < MIN_RECORDING_MS) {
-      setError("Hold the mic for at least half a second.");
+    if (!result) {
+      if (voice.tooShort) setError(t("Keep the mic pressed to record."));
       return;
     }
     setBusy("voice");

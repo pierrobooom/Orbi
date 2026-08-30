@@ -12,6 +12,7 @@ import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -87,13 +88,14 @@ export default function NewExpenseScreen() {
       >
         <View style={styles.header}>
           <Pressable onPress={() => router.back()} hitSlop={12}>
-            <Text style={styles.headerCancel}>{t("Cancel")}</Text>
+            <Text style={styles.headerCancel} numberOfLines={1}>{t("Cancel")}</Text>
           </Pressable>
           <Text style={styles.headerTitle}>{t("New expense")}</Text>
-          <View style={{ width: 50 }} />
+          <View style={{ minWidth: 64 }} />
         </View>
 
         <ScrollView
+          keyboardDismissMode="on-drag"
           style={styles.flex}
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
@@ -109,7 +111,10 @@ export default function NewExpenseScreen() {
               placeholderTextColor={colors.inkDim}
               style={styles.amountInput}
               autoFocus
-            />
+            
+            returnKeyType="done"
+            onSubmitEditing={() => Keyboard.dismiss()}
+          />
           </View>
 
           <Text style={styles.label}>{t("Merchant")}</Text>
@@ -121,6 +126,9 @@ export default function NewExpenseScreen() {
             placeholder={t("Tesco, Uber, Netflix…")}
             placeholderTextColor={colors.inkDim}
             style={styles.input}
+          
+            returnKeyType="done"
+            onSubmitEditing={() => Keyboard.dismiss()}
           />
           <Text style={styles.hint}>
             {t(
@@ -194,7 +202,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   headerTitle: { color: colors.ink, fontSize: 15, fontWeight: "600" },
-  headerCancel: { color: colors.inkDim, fontSize: 14, width: 50 },
+  headerCancel: { color: colors.inkDim, fontSize: 14, minWidth: 64 },
   scrollContent: { paddingHorizontal: 24, paddingTop: 20, paddingBottom: 40 },
   label: {
     color: colors.inkDim,

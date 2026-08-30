@@ -21,6 +21,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   ActivityIndicator,
   FlatList,
+  Keyboard,
   Pressable,
   RefreshControl,
   SectionList,
@@ -289,7 +290,9 @@ export default function TasksScreen() {
           autoCapitalize="none"
           autoCorrect={false}
           returnKeyType="search"
-        />
+        
+            onSubmitEditing={() => Keyboard.dismiss()}
+          />
         {semanticBusy ? <ActivityIndicator size="small" color={colors.inkDim} /> : null}
         {query.length > 0 && !semanticBusy ? (
           <Pressable onPress={() => setQuery("")} hitSlop={10}>
@@ -327,6 +330,7 @@ export default function TasksScreen() {
         </View>
       ) : sortMode === "cluster" ? (
         <SectionList
+          keyboardDismissMode="on-drag"
           sections={sections}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => renderRow(item)}
@@ -351,6 +355,7 @@ export default function TasksScreen() {
         />
       ) : (
         <FlatList
+          keyboardDismissMode="on-drag"
           data={sorted}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => renderRow(item)}

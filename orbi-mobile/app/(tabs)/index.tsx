@@ -43,10 +43,6 @@ const TIER_LABEL: Record<SubscriptionTier, string> = {
   premium: "GENIUS",
 };
 
-// Anything shorter than this isn't a real utterance — likely an
-// accidental tap-and-release on the mic button.
-const MIN_RECORDING_MS = 500;
-
 /** One task as returned by the coordinator inside `data.tasks`. */
 interface ParsedVoiceTask {
   title?: string;
@@ -139,13 +135,12 @@ export default function UniverseScreen() {
   };
 
   const onMicPressOut = async () => {
-    const startedAt = recordingStartedAt.current;
     recordingStartedAt.current = null;
     const result = await voice.stop();
-    if (!result) return;
-    const duration = startedAt ? Date.now() - startedAt : 0;
-    if (duration < MIN_RECORDING_MS) {
-      setVoiceError("Hold the mic for at least half a second.");
+    // stop() returns null for a mis-tap and flags `tooShort` itself, so
+    // the duration check lives in one place instead of four.
+    if (!result) {
+      if (voice.tooShort) setVoiceError(t("Keep the mic pressed to record."));
       return;
     }
 

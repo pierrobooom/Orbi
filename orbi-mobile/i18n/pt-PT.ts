@@ -220,4 +220,5 @@ export const ptPT: Record<string, string> = {
   "Hold to fix this by voice": "Mantém premido para corrigir por voz",
   "Could not start recording.": "Não foi possível iniciar a gravação.",
   "Couldn't hear that. Try again.": "Não percebi. Tenta de novo.",
+  "Keep the mic pressed to record.": "Mantém o micro premido para gravar.",
 };

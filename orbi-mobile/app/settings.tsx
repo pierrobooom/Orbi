@@ -209,13 +209,15 @@ export default function SettingsScreen() {
     <SafeAreaView style={styles.root} edges={["top", "bottom"]}>
       <View style={styles.header}>
         <Pressable onPress={() => router.back()} hitSlop={12}>
-          <Text style={styles.headerCancel}>{t("Done")}</Text>
+          <Text style={styles.headerCancel} numberOfLines={1}>{t("Done")}</Text>
         </Pressable>
         <Text style={styles.headerTitle}>{t("Settings")}</Text>
-        <View style={{ width: 50 }} />
+        <View style={{ minWidth: 64 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.body}>
+      <ScrollView
+          keyboardDismissMode="on-drag"
+          keyboardShouldPersistTaps="handled" contentContainerStyle={styles.body}>
         <Section title={t("Profile")}>
           <Row label={t("Email")} value={email} />
           <Row label={t("Plan")} value={TIER_DISPLAY[tier]} />
@@ -427,7 +429,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   headerTitle: { color: colors.ink, fontSize: 15, fontWeight: "600" },
-  headerCancel: { color: colors.accent, fontSize: 14, fontWeight: "600", width: 50 },
+  headerCancel: { color: colors.accent, fontSize: 14, fontWeight: "600", minWidth: 64 },
   body: { padding: 20, paddingBottom: 60 },
   section: { marginBottom: 22 },
   languageRow: {

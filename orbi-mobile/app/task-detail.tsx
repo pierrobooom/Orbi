@@ -16,6 +16,7 @@ import React, { useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -45,10 +46,6 @@ import {
 } from "@/services/api";
 import { useUniverseStore } from "@/stores/universeStore";
 import { colors } from "@/theme/colors";
-
-// Anything shorter than this isn't a real utterance — matches the
-// guard used in the Universe screen's voice flow.
-const MIN_RECORDING_MS = 500;
 
 // Mark-complete hold duration. Keeps the user from accidentally
 // completing a task with a stray tap.
@@ -227,10 +224,8 @@ export default function TaskDetailScreen() {
     const startedAt = voiceStartedAt.current;
     voiceStartedAt.current = null;
     const result = await voice.stop();
-    if (!result) return;
-    const duration = startedAt ? Date.now() - startedAt : 0;
-    if (duration < MIN_RECORDING_MS) {
-      setVoiceError("Hold the mic for at least half a second.");
+    if (!result) {
+      if (voice.tooShort) setVoiceError(t("Keep the mic pressed to record."));
       return;
     }
     if (!task) return;
@@ -342,6 +337,7 @@ export default function TaskDetailScreen() {
         </View>
 
         <ScrollView
+          keyboardDismissMode="on-drag"
           style={styles.flex}
           contentContainerStyle={styles.body}
           keyboardShouldPersistTaps="handled"
@@ -408,7 +404,10 @@ export default function TaskDetailScreen() {
                 placeholderTextColor={colors.inkDim}
                 maxLength={28}
                 style={styles.editLabelInput}
-              />
+              
+            returnKeyType="done"
+            onSubmitEditing={() => Keyboard.dismiss()}
+          />
 
               <Text style={styles.metaLabel}>{t("Description")}</Text>
               <TextInput
@@ -422,6 +421,8 @@ export default function TaskDetailScreen() {
 
               <Text style={styles.metaLabel}>{t("Cluster")}</Text>
               <ScrollView
+          keyboardDismissMode="on-drag"
+          keyboardShouldPersistTaps="handled"
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.chipRow}

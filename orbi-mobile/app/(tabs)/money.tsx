@@ -125,6 +125,8 @@ export default function MoneyScreen() {
         </View>
       ) : (
         <SectionList
+          keyboardDismissMode="on-drag"
+          keyboardShouldPersistTaps="handled"
           sections={sections}
           keyExtractor={(item) => item.id}
           stickySectionHeadersEnabled={false}
