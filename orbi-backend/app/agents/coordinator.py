@@ -20,6 +20,10 @@ logger = logging.getLogger(__name__)
 # tasks ("book the dentist, call mum, buy milk"). v3 adds the task_action
 # intent, so the same mic can complete, delete, reschedule, and list
 # tasks that already exist.
+# v4 exists and is ~18%% smaller, but is NOT yet verified against the
+# routing suite — the Groq free tier's 200k/day cap was exhausted before
+# it could be tested. Switch to 4 only after re-running the routing
+# tests; an unverified prompt is a worse trade than 575 tokens.
 _SYSTEM_PROMPT = load_prompt("coordinator", version=3)
 
 # Conversation history is the only unbounded input to this prompt.
