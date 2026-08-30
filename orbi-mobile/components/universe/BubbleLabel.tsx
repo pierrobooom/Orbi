@@ -25,6 +25,11 @@ interface PhysicsState {
   ty: number;
   r: number;
   wiggle: number;
+  orbitR: number;
+  phaseX: number;
+  phaseY: number;
+  freqX: number;
+  freqY: number;
 }
 
 interface Props {

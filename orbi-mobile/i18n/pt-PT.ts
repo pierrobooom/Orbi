@@ -113,7 +113,7 @@ export const ptPT: Record<string, string> = {
   // --- move task --------------------------------------------------------
   "Move task": "Mover tarefa",
   "Move to": "Mover para",
-  "Drift (no cluster)": "Deriva (sem grupo)",
+  "Adrift (no cluster)": "À Deriva (sem grupo)",
 
   // --- clusters ---------------------------------------------------------
   "Name": "Nome",
@@ -123,12 +123,12 @@ export const ptPT: Record<string, string> = {
   "New cluster": "Novo grupo",
   "Delete cluster": "Apagar grupo",
   "Delete cluster?": "Apagar grupo?",
-  "Tasks inside this cluster will move to Drift.":
-    "As tarefas deste grupo passam para a Deriva.",
+  "Tasks inside this cluster will move to Adrift.":
+    "As tarefas deste grupo passam para À Deriva.",
   "Dimmed colors are already used by another cluster.":
     "As cores esbatidas já estão a ser usadas por outro grupo.",
-  "Drift": "Deriva",
-  "Drift is the catch-all": "A Deriva é o grupo de recolha",
+  "Adrift": "À Deriva",
+  "Adrift is the catch-all": "À Deriva é o grupo de recolha",
   "Work, Health, Reading…": "Trabalho, Saúde, Leitura…",
   "Organise clusters": "Organizar grupos",
   "Reviewing your universe…": "A analisar o teu universo…",
@@ -208,8 +208,8 @@ export const ptPT: Record<string, string> = {
     "Toca para desmarcar o que não queres. As alterações aprovadas aplicam-se quando tocares em Aplicar.",
   "Orbi looks across every task you have, regardless of cluster. Hold the mic to dictate.":
     "O Orbi procura em todas as tuas tarefas, independentemente do grupo. Mantém o micro premido para ditar.",
-  "Drift collects tasks that haven't been assigned to a cluster yet. It can't be renamed, recolored, or deleted. Move tasks out of Drift by editing each one, or use Organise clusters to let Orbi suggest a new home for them.":
-    "A Deriva recolhe as tarefas que ainda não foram atribuídas a um grupo. Não pode ser renomeada, recolorida nem apagada. Move as tarefas para fora da Deriva editando cada uma, ou usa Organizar grupos para o Orbi sugerir um novo destino.",
+  "Adrift collects tasks that haven't been assigned to a cluster yet. It can't be renamed, recolored, or deleted. Move tasks out of Adrift by editing each one, or use Organise clusters to let Orbi suggest a new home for them.":
+    "À Deriva recolhe as tarefas que ainda não foram atribuídas a um grupo. Não pode ser renomeada, recolorida nem apagada. Move as tarefas para fora de À Deriva editando cada uma, ou usa Organizar grupos para o Orbi sugerir um novo destino.",
   "Known merchants categorize automatically. Unknowns stay uncategorized on Spark; Pro and Genius use AI to guess.":
     "Comerciantes conhecidos são categorizados automaticamente. Os desconhecidos ficam sem categoria no Spark; o Pro e o Genius usam IA para adivinhar.",
   "Short keyword shown inside the bubble. Auto-suggested from the title — feel free to type your own.":
@@ -221,4 +221,25 @@ export const ptPT: Record<string, string> = {
   "Could not start recording.": "Não foi possível iniciar a gravação.",
   "Couldn't hear that. Try again.": "Não percebi. Tenta de novo.",
   "Keep the mic pressed to record.": "Mantém o micro premido para gravar.",
+
+  // --- task filters ---
+  "Overdue": "Atrasadas",
+  "Show done": "Ver concluídas",
+  "{n} done": "{n} concluídas",
+  "{n} overdue": "{n} atrasadas",
+  "Nothing completed yet": "Ainda nada concluído",
+  "Nothing overdue": "Nada atrasado",
+  "Nothing is past its due date. Good.": "Nada passou do prazo. Boa.",
+  "Tasks you complete show up here for {n} days.": "As tarefas que concluíres aparecem aqui durante {n} dias.",
+
+  // --- voice actions on existing tasks ---
+  "Confirm": "Confirmar",
+  "Change": "Alteração",
+  "Or did you mean": "Ou querias dizer",
+  "Mark as done": "Marcar como concluída",
+  "Apply change": "Aplicar alteração",
+  "Nothing to change.": "Nada a alterar.",
+  "Nothing matches that.": "Nada corresponde a isso.",
+  "Couldn't find that task.": "Não encontrei essa tarefa.",
+  "More than one task matches. Check this is the right one.": "Mais do que uma tarefa corresponde. Confirma se é a certa.",
 };

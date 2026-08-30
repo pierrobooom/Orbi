@@ -58,6 +58,7 @@ export default function UniverseScreen() {
   const t = useT();
   const router = useRouter();
   const tier = useAuthStore((s) => s.tier);
+  const setSearchResults = useUniverseStore((s) => s.setSearchResults);
   const universeStatus = useUniverseStore((s) => s.status);
   const bubblesCount = useUniverseStore((s) => s.bubbles.length);
   const activeClusterId = useUniverseStore((s) => s.activeClusterId);
@@ -161,8 +162,56 @@ export default function UniverseScreen() {
       // The bare-object shape is coordinator v1's and is still accepted;
       // a stale server would otherwise silently drop every capture.
       const raw = chat.data as
-        | { tasks?: ParsedVoiceTask[]; title?: string }
+        | {
+            tasks?: ParsedVoiceTask[];
+            title?: string;
+            // task_action shape — a command against tasks that already
+            // exist rather than a new capture.
+            action?: "complete" | "delete" | "update" | "list";
+            resolved?: boolean;
+            ambiguous?: boolean;
+            target?: string;
+            task?: { id: string; title: string };
+            alternatives?: { id: string; title: string }[];
+            patch?: Record<string, unknown>;
+            task_ids?: string[];
+          }
         | null;
+
+      // A command about existing tasks. Nothing has been changed
+      // server-side — route to confirmation, or straight to the universe
+      // for a plain "what's overdue".
+      if (raw?.action) {
+        if (raw.action === "list") {
+          const ids = raw.task_ids ?? [];
+          if (ids.length === 0) {
+            setVoiceError(chat.reply || t("Nothing matches that."));
+          } else {
+            // Reuse the search view — it already knows how to pull a set
+            // of tasks into a focused cluster at canvas centre.
+            setSearchResults(transcript, ids);
+          }
+          return;
+        }
+        if (!raw.resolved || !raw.task) {
+          setVoiceError(chat.reply || t("Couldn't find that task."));
+          return;
+        }
+        router.push({
+          pathname: "/voice-action",
+          params: {
+            payload: JSON.stringify({
+              action: raw.action,
+              transcript,
+              task: raw.task,
+              ambiguous: raw.ambiguous ?? false,
+              alternatives: raw.alternatives ?? [],
+              patch: raw.patch ?? {},
+            }),
+          },
+        });
+        return;
+      }
       const parsedTasks: ParsedVoiceTask[] = Array.isArray(raw?.tasks)
         ? raw!.tasks!.filter((t) => t && t.title)
         : raw && raw.title

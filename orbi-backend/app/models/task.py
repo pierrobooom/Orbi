@@ -29,6 +29,10 @@ class TaskBubble(BaseModel):
     label: Optional[str] = None
     description: Optional[str] = None
     status: TaskStatus
+    # Set when status transitions into 'completed', cleared on the way
+    # out. Distinct from updated_at, which moves on any edit — see
+    # migration 0010.
+    completed_at: Optional[datetime] = None
     due_at: Optional[datetime] = None
     importance: int = Field(ge=1, le=10)
     urgency_score: float

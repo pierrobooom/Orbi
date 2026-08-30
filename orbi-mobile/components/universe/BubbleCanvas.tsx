@@ -1,14 +1,27 @@
 // Bubble universe canvas — state 1 from orbi_mobile_sketch.html.
 //
 // Each bubble has a shared physics state. A useFrameCallback worklet runs
-// on the UI thread every frame and applies three forces:
-//   1. cluster spring   — pull toward the bubble's cluster center
-//   2. Brownian wiggle  — small random drift, amplitude scaled by pressure
-//   3. damping          — prevents runaway oscillation
+// on the UI thread every frame and applies:
+//   1. orbit      — the anchor point itself traces a slow, bounded loop
+//   2. spring     — pull toward that moving anchor
+//   3. damping    — prevents runaway oscillation
+//   4. collisions — pairwise separation so bubbles never overlap
 //
-// Forces 1+2 are how clusters stay coherent while never being fully still.
-// Higher pressure_score = bigger wiggle, so urgent bubbles read as restless
-// even before you notice their size or color.
+// Motion used to be Brownian: a per-frame random impulse fighting a stiff
+// spring under 0.95 damping. Random walk cancels itself out, so the net
+// result was bubbles that visibly twitched but never went anywhere — the
+// universe read as static.
+//
+// Now each bubble orbits its anchor on a Lissajous path: two sine waves at
+// slightly different very-low frequencies, with a random phase and period
+// per bubble. That gives motion which is
+//   - smooth (a continuous curve, not a jitter),
+//   - slow (14-26 second periods),
+//   - non-repeating to the eye (x and y periods never divide evenly), and
+//   - permanently bounded — the anchor is fixed and the orbit radius is
+//     small, so a bubble can drift from its home but can never wander off.
+// The spring follows the moving target with a slight lag, which is what
+// makes the drift feel like it has weight rather than being a rigid path.
 
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -55,6 +68,14 @@ interface PhysicsState {
   ty: number;
   r: number;
   wiggle: number;
+  // Orbit around (tx, ty). Fixed per bubble for its lifetime, so the
+  // path is stable across frames and the bubble always has a home to
+  // return to.
+  orbitR: number;
+  phaseX: number;
+  phaseY: number;
+  freqX: number;
+  freqY: number;
 }
 
 function pressureToRadius(p: number): number {
@@ -158,12 +179,20 @@ function buildInitialStates(
       // r is the collision radius — include the overdue boost so the
       // physics hitbox matches what the user sees.
       r: radiusFor(b),
-      // Brownian amplitude. Cluster bubbles drift more slowly than
-      // tasks (lower per-frame wiggle) so the top-level view feels
-      // calm and inspectable.
-      wiggle: b.kind === "cluster"
-        ? 0.08
-        : 0.14 + (b.pressureScore / 10) * 0.3,
+      // A whisper of Brownian on top of the orbit — just enough that
+      // two bubbles sharing a similar path don't look mechanically
+      // synchronised. An order of magnitude below the old value.
+      wiggle: b.kind === "cluster" ? 0.012 : 0.018,
+      // Cluster bubbles are big and carry the top-level layout, so they
+      // drift less in absolute terms than the task bubbles inside them.
+      orbitR: b.kind === "cluster" ? 9 : 13,
+      // Random phase so nothing starts in step.
+      phaseX: Math.random() * Math.PI * 2,
+      phaseY: Math.random() * Math.PI * 2,
+      // Periods of roughly 14-26s, with x and y deliberately unequal so
+      // the path is a slow open curve rather than a circle or a line.
+      freqX: (Math.PI * 2) / (14000 + Math.random() * 12000),
+      freqY: (Math.PI * 2) / (16000 + Math.random() * 12000),
     };
   });
 }
@@ -582,6 +611,9 @@ function BubbleField({
       const id = bubbles[i].id;
       const prevIdx = prevIds.indexOf(id);
       if (prevIdx >= 0 && prev[prevIdx]) {
+        // Keep the live position AND the existing orbit, so a bubble
+        // that survives a resync doesn't jump to a new phase — it just
+        // continues its path around the (possibly moved) anchor.
         return {
           x: prev[prevIdx].x,
           y: prev[prevIdx].y,
@@ -591,6 +623,11 @@ function BubbleField({
           ty: init.ty,
           r: init.r,
           wiggle: init.wiggle,
+          orbitR: prev[prevIdx].orbitR,
+          phaseX: prev[prevIdx].phaseX,
+          phaseY: prev[prevIdx].phaseY,
+          freqX: prev[prevIdx].freqX,
+          freqY: prev[prevIdx].freqY,
         };
       }
       return init;
@@ -609,14 +646,23 @@ function BubbleField({
     const step = Math.min(dt / 16, 2);
     const next = physics.value.slice();
 
-    // Spring + wiggle + damping + integrate
-    const springK = 0.0016;
-    const damping = 0.95;
+    // Orbit + spring + damping + integrate.
+    //
+    // springK is up from 0.0016: the target now moves, and too soft a
+    // spring lags so far behind that the orbit never shows. Damping is
+    // down from 0.95 to let the bubble actually travel — at 0.95 the
+    // velocity was bled off almost as fast as the spring added it.
+    const springK = 0.0042;
+    const damping = 0.90;
     const wiggleScale = 0.10;
+    const now = tickMs.value;
     for (let i = 0; i < next.length; i++) {
       const b = next[i];
-      const dx = b.tx - b.x;
-      const dy = b.ty - b.y;
+      // The anchor traces the orbit; the bubble springs toward it.
+      const ax = b.tx + Math.sin(now * b.freqX + b.phaseX) * b.orbitR;
+      const ay = b.ty + Math.cos(now * b.freqY + b.phaseY) * b.orbitR;
+      const dx = ax - b.x;
+      const dy = ay - b.y;
       b.vx += dx * springK * step;
       b.vy += dy * springK * step;
       b.vx += (Math.random() - 0.5) * b.wiggle * wiggleScale * step;

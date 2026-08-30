@@ -1,5 +1,16 @@
 // Tasks tab — every active task, with sorting and filtering.
 //
+// Two view toggles sit alongside the sort chips:
+//   Overdue — only tasks past their due date. Composes with sorting, so
+//     "overdue, grouped by cluster" is one tap each.
+//   Done — the last 7 days of completed tasks, struck through.
+//
+// The Done view exists because completing and deleting a task looked
+// identical: both simply removed it from every surface, so finishing
+// something left no trace. Completed tasks were already being fetched
+// (the API returns everything non-archived) and thrown away by a
+// status === "active" filter here.
+//
 // Sorting: pressure (default), due date, or cluster. Cluster mode switches
 // the FlatList for a SectionList so each cluster gets a header.
 //
@@ -51,6 +62,10 @@ const SORT_LABELS: Record<SortMode, string> = {
 const SEMANTIC_DEBOUNCE_MS = 400;
 // Below this the query is too vague to spend an embedding call on.
 const SEMANTIC_MIN_CHARS = 3;
+
+// How far back the Done view looks. A week is the horizon that makes
+// "what did I get through?" answerable without becoming an archive.
+const DONE_WINDOW_DAYS = 7;
 
 interface ClusterMeta {
   name: string;
@@ -104,6 +119,8 @@ export default function TasksScreen() {
   const [query, setQuery] = useState("");
   const [semanticIds, setSemanticIds] = useState<string[]>([]);
   const [semanticBusy, setSemanticBusy] = useState(false);
+  const [overdueOnly, setOverdueOnly] = useState(false);
+  const [showDone, setShowDone] = useState(false);
 
   const clusterLookup = useMemo(() => {
     const map = new Map<string, ClusterMeta>();
@@ -115,6 +132,35 @@ export default function TasksScreen() {
     () => serverTasks.filter((t) => t.status === "active"),
     [serverTasks],
   );
+
+  // Completed within the window, newest first. Falls back to updated_at
+  // for rows completed before migration 0010 added completed_at, which
+  // is the same guess the backfill made.
+  const doneTasks = useMemo(() => {
+    const cutoff = Date.now() - DONE_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+    return serverTasks
+      .filter((task) => {
+        if (task.status !== "completed") return false;
+        const stamp = task.completed_at ?? task.updated_at;
+        if (!stamp) return false;
+        return new Date(stamp).getTime() >= cutoff;
+      })
+      .sort((a, b) => {
+        const av = new Date(a.completed_at ?? a.updated_at ?? 0).getTime();
+        const bv = new Date(b.completed_at ?? b.updated_at ?? 0).getTime();
+        return bv - av;
+      });
+  }, [serverTasks]);
+
+  // The pool every filter and sort below operates on.
+  const pool = useMemo(() => {
+    if (showDone) return doneTasks;
+    if (!overdueOnly) return activeTasks;
+    const now = Date.now();
+    return activeTasks.filter(
+      (task) => task.due_at != null && new Date(task.due_at).getTime() < now,
+    );
+  }, [showDone, doneTasks, overdueOnly, activeTasks]);
 
   // --- semantic layer ----------------------------------------------------
   // Tracks the query each response belongs to so a slow request for an
@@ -149,11 +195,11 @@ export default function TasksScreen() {
   const { items, semanticOnlyIds } = useMemo(() => {
     const needle = query.trim().toLowerCase();
     if (!needle) {
-      return { items: activeTasks.slice(), semanticOnlyIds: new Set<string>() };
+      return { items: pool.slice(), semanticOnlyIds: new Set<string>() };
     }
     const localHits: ServerTask[] = [];
     const localIds = new Set<string>();
-    for (const t of activeTasks) {
+    for (const t of pool) {
       const cluster = t.parent_cluster_id
         ? clusterLookup.get(t.parent_cluster_id)
         : undefined;
@@ -166,22 +212,28 @@ export default function TasksScreen() {
     const semanticHits: ServerTask[] = [];
     for (const id of semanticIds) {
       if (localIds.has(id)) continue;
-      const task = activeTasks.find((t) => t.id === id);
+      // Semantic hits are matched against the current pool, so a search
+      // while "Done" is on can't resurrect an active task.
+      const task = pool.find((t) => t.id === id);
       if (task) {
         semanticHits.push(task);
         semanticOnly.add(task.id);
       }
     }
     return { items: [...localHits, ...semanticHits], semanticOnlyIds: semanticOnly };
-  }, [activeTasks, clusterLookup, query, semanticIds]);
+  }, [pool, clusterLookup, query, semanticIds]);
 
   const sorted = useMemo(() => {
     const copy = items.slice();
+    // Done tasks arrive newest-first and have no meaningful pressure or
+    // due ordering left — preserve that unless the user asked to group
+    // them by cluster.
+    if (showDone && sortMode !== "cluster") return copy;
     // In cluster mode the sections handle grouping; within a section
     // pressure order is the most useful secondary ordering.
     if (sortMode === "due") return copy.sort(byDue);
     return copy.sort(byPressure);
-  }, [items, sortMode]);
+  }, [items, sortMode, showDone]);
 
   const sections = useMemo(() => {
     if (sortMode !== "cluster") return [];
@@ -193,7 +245,7 @@ export default function TasksScreen() {
       const meta =
         (task.parent_cluster_id
           ? clusterLookup.get(task.parent_cluster_id)
-          : undefined) ?? { name: t("Drift"), color: colors.drift };
+          : undefined) ?? { name: t("Adrift"), color: colors.drift };
       if (!groups.has(key)) groups.set(key, { meta, data: [] });
       groups.get(key)!.data.push(task);
     }
@@ -236,6 +288,7 @@ export default function TasksScreen() {
         }
         related={semanticOnlyIds.has(item.id)}
         showCluster={sortMode !== "cluster"}
+        done={item.status === "completed"}
         onPress={() => openTask(item.id)}
       />
     ),
@@ -274,8 +327,12 @@ export default function TasksScreen() {
         <Text style={styles.headerTitle}>{t("Tasks")}</Text>
         <Text style={styles.headerCount}>
           {filtering
-            ? t("{n} of {total}", { n: sorted.length, total: activeTasks.length })
-            : t("{n} active", { n: activeTasks.length })}
+            ? t("{n} of {total}", { n: sorted.length, total: pool.length })
+            : showDone
+              ? t("{n} done", { n: pool.length })
+              : overdueOnly
+                ? t("{n} overdue", { n: pool.length })
+                : t("{n} active", { n: activeTasks.length })}
         </Text>
       </View>
 
@@ -301,6 +358,42 @@ export default function TasksScreen() {
         ) : null}
       </View>
 
+      <View style={styles.filterRow}>
+        <Pressable
+          onPress={() => {
+            setOverdueOnly((v) => !v);
+            // Overdue is meaningless for finished work.
+            if (!overdueOnly) setShowDone(false);
+          }}
+          style={[styles.filterChip, overdueOnly && styles.filterChipActive]}
+        >
+          <MaterialIcons
+            name="schedule"
+            size={13}
+            color={overdueOnly ? "white" : colors.overdue}
+          />
+          <Text style={[styles.filterChipText, overdueOnly && styles.filterChipTextActive]}>
+            {t("Overdue")}
+          </Text>
+        </Pressable>
+        <Pressable
+          onPress={() => {
+            setShowDone((v) => !v);
+            if (!showDone) setOverdueOnly(false);
+          }}
+          style={[styles.filterChip, showDone && styles.filterChipActive]}
+        >
+          <MaterialIcons
+            name={showDone ? "check-box" : "check-box-outline-blank"}
+            size={13}
+            color={showDone ? "white" : colors.inkDim}
+          />
+          <Text style={[styles.filterChipText, showDone && styles.filterChipTextActive]}>
+            {t("Show done")}
+          </Text>
+        </Pressable>
+      </View>
+
       <View style={styles.sortRow}>
         {(Object.keys(SORT_LABELS) as SortMode[]).map((mode) => {
           const active = mode === sortMode;
@@ -320,12 +413,24 @@ export default function TasksScreen() {
       {sorted.length === 0 ? (
         <View style={styles.centered}>
           <Text style={styles.emptyTitle}>
-            {filtering ? t("No matches") : t("No active tasks")}
+            {filtering
+              ? t("No matches")
+              : showDone
+                ? t("Nothing completed yet")
+                : overdueOnly
+                  ? t("Nothing overdue")
+                  : t("No active tasks")}
           </Text>
           <Text style={styles.emptyBody}>
             {filtering
               ? t('Nothing matches "{q}".', { q: query.trim() })
-              : t("Hold the mic or tap + on the Universe to add one.")}
+              : showDone
+                ? t("Tasks you complete show up here for {n} days.", {
+                    n: DONE_WINDOW_DAYS,
+                  })
+                : overdueOnly
+                  ? t("Nothing is past its due date. Good.")
+                  : t("Hold the mic or tap + on the Universe to add one.")}
           </Text>
         </View>
       ) : sortMode === "cluster" ? (
@@ -380,13 +485,16 @@ interface TaskRowProps {
   cluster: ClusterMeta | undefined;
   related: boolean;
   showCluster: boolean;
+  done: boolean;
   onPress: () => void;
 }
 
-function TaskRow({ task, cluster, related, showCluster, onPress }: TaskRowProps) {
+function TaskRow({ task, cluster, related, showCluster, done, onPress }: TaskRowProps) {
   const t = useT();
   const due = task.due_at ? new Date(task.due_at) : null;
-  const isOverdue = due !== null && due < new Date();
+  // A finished task can't be overdue, whatever its due date says.
+  const isOverdue = !done && due !== null && due < new Date();
+  const completed = task.completed_at ?? task.updated_at ?? null;
 
   return (
     <Pressable onPress={onPress} style={styles.row} android_ripple={{ color: colors.line }}>
@@ -397,7 +505,10 @@ function TaskRow({ task, cluster, related, showCluster, onPress }: TaskRowProps)
         ]}
       />
       <View style={styles.rowBody}>
-        <Text style={styles.rowTitle} numberOfLines={2}>
+        <Text
+          style={[styles.rowTitle, done && styles.rowTitleDone]}
+          numberOfLines={2}
+        >
           {task.title}
         </Text>
         <View style={styles.rowMeta}>
@@ -407,7 +518,15 @@ function TaskRow({ task, cluster, related, showCluster, onPress }: TaskRowProps)
               <Text style={styles.metaText}>{cluster.name}</Text>
             </View>
           ) : null}
-          {due ? (
+          {done && completed ? (
+            <Text style={styles.dueText}>
+              {new Date(completed).toLocaleDateString(undefined, {
+                weekday: "short",
+                month: "short",
+                day: "numeric",
+              })}
+            </Text>
+          ) : due ? (
             <Text style={[styles.dueText, isOverdue && styles.dueOverdue]}>
               {due.toLocaleString(undefined, {
                 month: "short",
@@ -426,7 +545,11 @@ function TaskRow({ task, cluster, related, showCluster, onPress }: TaskRowProps)
           ) : null}
         </View>
       </View>
-      <Text style={styles.pressureScore}>{task.pressure_score.toFixed(1)}</Text>
+      {done ? (
+        <MaterialIcons name="check" size={16} color={colors.inkDim} />
+      ) : (
+        <Text style={styles.pressureScore}>{task.pressure_score.toFixed(1)}</Text>
+      )}
     </Pressable>
   );
 }
@@ -456,11 +579,30 @@ const styles = StyleSheet.create({
     borderColor: colors.line,
   },
   searchInput: { flex: 1, color: colors.ink, fontSize: 14, padding: 0 },
-  sortRow: {
+  filterRow: {
     flexDirection: "row",
     gap: 8,
     paddingHorizontal: 22,
     paddingTop: 12,
+  },
+  filterChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.line,
+  },
+  filterChipActive: { backgroundColor: colors.accent, borderColor: colors.accent },
+  filterChipText: { color: colors.inkDim, fontSize: 12, fontWeight: "600" },
+  filterChipTextActive: { color: "white" },
+  sortRow: {
+    flexDirection: "row",
+    gap: 8,
+    paddingHorizontal: 22,
+    paddingTop: 10,
     paddingBottom: 12,
     borderBottomColor: colors.line,
     borderBottomWidth: 1,
@@ -508,6 +650,12 @@ const styles = StyleSheet.create({
   pressureBar: { width: 3, height: 36, borderRadius: 2, marginHorizontal: 22 },
   rowBody: { flex: 1 },
   rowTitle: { color: colors.ink, fontSize: 15, fontWeight: "500", marginBottom: 4 },
+  // Thin strike plus dimmed text — "finished", not "cancelled".
+  rowTitleDone: {
+    color: colors.inkDim,
+    textDecorationLine: "line-through",
+    textDecorationStyle: "solid",
+  },
   rowMeta: { flexDirection: "row", alignItems: "center", gap: 10 },
   metaPill: { flexDirection: "row", alignItems: "center", gap: 5 },
   clusterDot: { width: 8, height: 8, borderRadius: 4 },

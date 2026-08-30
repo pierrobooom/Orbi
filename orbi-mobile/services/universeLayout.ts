@@ -231,7 +231,7 @@ export function layoutUniverse(
     const driftPos = spreadPosition(KIND_POSITIONS.drift, driftIndex);
     canvasClusters.push({
       id: DRIFT_ID,
-      name: "Drift",
+      name: "Adrift",
       kind: "drift",
       color: KIND_COLORS.drift,
       centerX: driftPos.x,

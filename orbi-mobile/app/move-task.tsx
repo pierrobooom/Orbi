@@ -54,7 +54,7 @@ export default function MoveTaskScreen() {
         name: c.name,
         color: c.color,
       })),
-      { id: null, name: t("Drift (no cluster)"), color: colors.drift },
+      { id: null, name: t("Adrift (no cluster)"), color: colors.drift },
     ],
     [serverClusters, t],
   );

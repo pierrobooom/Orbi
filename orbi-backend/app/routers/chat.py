@@ -28,6 +28,7 @@ from app.services.cluster_matcher import (
     build_task_query_text,
     match_cluster_semantic,
 )
+from app.services.task_resolver import resolve_task
 from app.services.task_sanitizer import sanitize_parsed_task
 from app.services.time_extractor import override_due_at_clock
 
@@ -54,6 +55,75 @@ class ChatResponse(BaseModel):
     intent: str
     agent_used: Optional[str] = None
     data: Optional[dict] = None
+
+
+_TASK_ACTIONS = frozenset({"complete", "delete", "update", "list"})
+
+# Only these can be changed by voice on an existing task. Cluster moves
+# are deliberately excluded — that's the auto-organiser's job, and the
+# move sheet's.
+_VOICE_PATCH_FIELDS = frozenset({"title", "label", "description", "due_at", "importance"})
+
+
+def _clean_patch(
+    raw: object,
+    *,
+    now: datetime,
+    user_timezone: str | None,
+    language: str | None,
+) -> dict:
+    """Sanitise an LLM-proposed patch down to fields we allow by voice."""
+    if not isinstance(raw, dict):
+        return {}
+    candidate = {k: v for k, v in raw.items() if k in _VOICE_PATCH_FIELDS and v is not None}
+    if not candidate:
+        return {}
+    # Reuse the create-path sanitiser for date/importance handling, then
+    # keep only what the user actually asked to change — sanitize fills
+    # in defaults we don't want leaking into a partial update.
+    cleaned = sanitize_parsed_task(
+        {"title": candidate.get("title", ""), **candidate},
+        now=now,
+        user_timezone=user_timezone,
+        language=language,
+    )
+    return {k: cleaned[k] for k in candidate if k in cleaned}
+
+
+def _filter_tasks(tasks: list[dict], task_filter: str | None, target: str) -> list[dict]:
+    """Apply a spoken filter ("overdue", "today", a cluster name)."""
+    now = datetime.now(timezone.utc)
+    if task_filter == "overdue":
+        out = []
+        for task in tasks:
+            due = task.get("due_at")
+            if not due:
+                continue
+            try:
+                if datetime.fromisoformat(str(due).replace("Z", "+00:00")) < now:
+                    out.append(task)
+            except ValueError:
+                continue
+        return out
+    if task_filter == "today":
+        out = []
+        for task in tasks:
+            due = task.get("due_at")
+            if not due:
+                continue
+            try:
+                parsed = datetime.fromisoformat(str(due).replace("Z", "+00:00"))
+            except ValueError:
+                continue
+            if parsed.date() == now.date():
+                out.append(task)
+        return out
+    # Anything else is treated as free text over titles — a cluster name
+    # or a topic word both behave the same way here.
+    needle = (task_filter or target or "").lower().strip()
+    if not needle:
+        return tasks
+    return [t for t in tasks if needle in str(t.get("title") or "").lower()]
 
 
 def _error(message: str, error_code: str) -> dict:
@@ -127,6 +197,87 @@ async def chat(
     # Route to the appropriate agent
     if intent == "general_chat" or agent_name is None:
         reply = classification.get("response_to_user", "How can I help you?")
+
+    elif agent_name == "task_action" or intent == "query_tasks":
+        # Voice commands against tasks that already exist: complete,
+        # delete, reschedule, list.
+        #
+        # NOTHING is mutated here. The server resolves which task the
+        # user meant and hands back a proposal; the client confirms
+        # before anything is written. A misheard "delete the dentist
+        # one" must never be able to destroy a task on its own, and the
+        # same rule already governs /tasks/{id}/voice-update.
+        payload = classification.get("data")
+        payload = payload if isinstance(payload, dict) else {}
+        raw_action = str(payload.get("action") or "").strip().lower()
+        # query_tasks is the pre-v3 spelling of task_action/list and
+        # carries no action field; anything unrecognised is also safest
+        # read as a list, which changes nothing.
+        action = raw_action if raw_action in _TASK_ACTIONS else "list"
+        target = str(payload.get("target") or "").strip()
+        task_filter = str(payload.get("filter") or "").strip().lower() or None
+
+        try:
+            user_tasks = await tasks_db.fetch_tasks_for_user(user_id)
+        except Exception as exc:  # noqa: BLE001 — never 500 a voice command
+            logger.warning("task_action could not load tasks: %s", exc)
+            user_tasks = []
+        active = [t for t in user_tasks if t.get("status") == "active"]
+
+        if action == "list":
+            matches = _filter_tasks(active, task_filter, target)
+            data = {
+                "action": "list",
+                "filter": task_filter,
+                "task_ids": [str(t["id"]) for t in matches],
+                "count": len(matches),
+            }
+            reply = (
+                f"{len(matches)} task(s)." if matches else "Nothing matches that."
+            )
+        else:
+            resolution = await resolve_task(
+                target=target, user_id=user_id, active_tasks=active
+            )
+            match = resolution["task"]
+            if match is None:
+                data = {"action": action, "resolved": False, "target": target}
+                reply = f'I couldn\'t find a task matching "{target}".'
+            else:
+                data = {
+                    "action": action,
+                    "resolved": True,
+                    "ambiguous": resolution["ambiguous"],
+                    "target": target,
+                    "task": {
+                        "id": str(match["id"]),
+                        "title": match.get("title"),
+                        "label": match.get("label"),
+                        "due_at": match.get("due_at"),
+                        "importance": match.get("importance"),
+                        "parent_cluster_id": (
+                            str(match["parent_cluster_id"])
+                            if match.get("parent_cluster_id")
+                            else None
+                        ),
+                    },
+                    "alternatives": [
+                        {"id": str(a["id"]), "title": a.get("title")}
+                        for a in resolution["alternatives"]
+                    ],
+                    "patch": _clean_patch(
+                        payload.get("patch"),
+                        now=now,
+                        user_timezone=body.user_timezone,
+                        language=language,
+                    ),
+                }
+                reply = f'{action.title()}: "{match.get("title")}"?'
+
+        logger.warning(
+            "Task action | action=%s target=%r resolved=%s tz=%s",
+            action, target, data.get("resolved", "n/a"), body.user_timezone or "<none>",
+        )
 
     elif agent_name == "task_parser":
         # Coordinator v1 now embeds task extraction in `data` for

@@ -20,6 +20,9 @@ import Animated, {
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
+// Structural mirror of BubbleCanvas's PhysicsState. Only x/y/r are read
+// here, but the shape has to match exactly or the SharedValue types stop
+// being assignable across the module boundary.
 interface PhysicsState {
   x: number;
   y: number;
@@ -29,6 +32,11 @@ interface PhysicsState {
   ty: number;
   r: number;
   wiggle: number;
+  orbitR: number;
+  phaseX: number;
+  phaseY: number;
+  freqX: number;
+  freqY: number;
 }
 
 interface Props {

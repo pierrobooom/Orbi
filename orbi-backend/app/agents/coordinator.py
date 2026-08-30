@@ -16,8 +16,10 @@ from app.services.ai_router import get_ai_response, load_prompt
 logger = logging.getLogger(__name__)
 
 # v2 emits data.tasks as an array so one utterance can produce several
-# tasks ("book the dentist, call mum, buy milk").
-_SYSTEM_PROMPT = load_prompt("coordinator", version=2)
+# tasks ("book the dentist, call mum, buy milk"). v3 adds the task_action
+# intent, so the same mic can complete, delete, reschedule, and list
+# tasks that already exist.
+_SYSTEM_PROMPT = load_prompt("coordinator", version=3)
 
 
 async def classify_intent(

@@ -358,6 +358,10 @@ export interface ServerTask {
   label: string | null;
   description: string | null;
   status: ServerTaskStatus;
+  // Set when the task was marked complete (migration 0010). Optional so
+  // rows completed before that column existed still type-check; the
+  // Done view falls back to updated_at for those.
+  completed_at?: string | null;
   due_at: string | null;
   importance: number;
   urgency_score: number;

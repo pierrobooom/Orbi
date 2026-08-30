@@ -205,10 +205,10 @@ export default function ClusterEditorScreen() {
           keyboardDismissMode="on-drag" contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
           {isDrift ? (
             <View style={styles.driftCard}>
-              <Text style={styles.driftTitle}>{t("Drift is the catch-all")}</Text>
+              <Text style={styles.driftTitle}>{t("Adrift is the catch-all")}</Text>
               <Text style={styles.driftBody}>
                 {t(
-                  "Drift collects tasks that haven't been assigned to a cluster yet. It can't be renamed, recolored, or deleted. Move tasks out of Drift by editing each one, or use Organise clusters to let Orbi suggest a new home for them.",
+                  "Adrift collects tasks that haven't been assigned to a cluster yet. It can't be renamed, recolored, or deleted. Move tasks out of Adrift by editing each one, or use Organise clusters to let Orbi suggest a new home for them.",
                 )}
               </Text>
             </View>

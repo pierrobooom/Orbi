@@ -148,6 +148,19 @@ async def update_task(
     update_payload["updated_at"] = merged_dict["updated_at"]
     update_payload["pressure_score"] = merged_dict["pressure_score"]
 
+    # Stamp completion on the transition, not on every write. Setting it
+    # whenever status == 'completed' would push the date forward every
+    # time a finished task was edited, which is exactly the bug that made
+    # updated_at unusable as a completion time.
+    if "status" in changes:
+        was_completed = existing.get("status") == "completed"
+        now_completed = changes["status"] == "completed"
+        if now_completed and not was_completed:
+            update_payload["completed_at"] = merged_dict["updated_at"]
+        elif was_completed and not now_completed:
+            # Re-opened — drop the old date rather than leave it lying.
+            update_payload["completed_at"] = None
+
     row = await tasks_db.update_task(task_id, user_id, update_payload)
     if row is None:
         raise HTTPException(
