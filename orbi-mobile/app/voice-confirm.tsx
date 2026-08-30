@@ -10,6 +10,8 @@
 // user bails halfway, what they already confirmed is safely saved, and
 // nothing they haven't seen gets written.
 
+import MaterialIcons from "@expo/vector-icons/MaterialIcons";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -26,7 +28,13 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useT } from "@/i18n";
-import { ApiError, createTask } from "@/services/api";
+import {
+  ApiError,
+  createTask,
+  draftVoiceUpdate,
+  transcribeAudio,
+} from "@/services/api";
+import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
 import { useUniverseStore } from "@/stores/universeStore";
 import { colors } from "@/theme/colors";
 
@@ -130,24 +138,62 @@ export default function VoiceConfirmScreen() {
   const [error, setError] = useState<string | null>(null);
   const [addedCount, setAddedCount] = useState(0);
 
-  const current: ParsedTask | undefined = queue[index];
+  // Per-task edits made on this screen. Kept keyed by queue index rather
+  // than mutating `queue` (which is derived from the route param via
+  // useMemo, so writing to it would be lost on any re-render).
+  const [edits, setEdits] = useState<Record<number, Partial<ParsedTask>>>({});
+  const [showPicker, setShowPicker] = useState(false);
+  const [voiceBusy, setVoiceBusy] = useState(false);
+  const [voiceReply, setVoiceReply] = useState<string | null>(null);
+  const voice = useVoiceRecorder();
+
+  const base: ParsedTask | undefined = queue[index];
+  // The task as it stands now: what the parser produced, plus anything
+  // the user has since changed by voice or with the date picker.
+  const current: ParsedTask | undefined = base
+    ? { ...base, ...(edits[index] ?? {}) }
+    : undefined;
+
+  const applyEdit = useCallback(
+    (patch: Partial<ParsedTask>) => {
+      setEdits((prev) => ({ ...prev, [index]: { ...(prev[index] ?? {}), ...patch } }));
+    },
+    [index],
+  );
 
   // Re-seed the editable fields every time the queue advances. Without
   // this the second task would inherit the first task's edited label.
+  // Keyed on `index`, not on `current` — `current` is a fresh object on
+  // every edit, which would re-seed (and so discard) the user's typing
+  // the instant a voice edit landed.
   useEffect(() => {
-    if (!current) return;
+    const task = queue[index];
+    if (!task) return;
     setLabelDraft(
-      current.label && current.label.trim().length > 0
-        ? current.label.trim()
-        : deriveLabel(current.title),
+      task.label && task.label.trim().length > 0
+        ? task.label.trim()
+        : deriveLabel(task.title),
     );
     setDescriptionDraft(
-      current.description && current.description.trim().length > 0
-        ? current.description.trim()
+      task.description && task.description.trim().length > 0
+        ? task.description.trim()
         : "",
     );
     setError(null);
-  }, [current]);
+    setVoiceReply(null);
+    setShowPicker(false);
+  }, [index, queue]);
+
+  // A voice edit can rewrite the label or description the user is
+  // looking at, so mirror those into the inputs when they change.
+  const editedLabel = edits[index]?.label;
+  const editedDescription = edits[index]?.description;
+  useEffect(() => {
+    if (typeof editedLabel === "string") setLabelDraft(editedLabel);
+  }, [editedLabel]);
+  useEffect(() => {
+    if (typeof editedDescription === "string") setDescriptionDraft(editedDescription);
+  }, [editedDescription]);
 
   const advance = useCallback(() => {
     if (index + 1 < queue.length) {
@@ -156,6 +202,48 @@ export default function VoiceConfirmScreen() {
       router.back();
     }
   }, [index, queue.length, router]);
+
+  const onMicPressIn = async () => {
+    setVoiceReply(null);
+    setError(null);
+    const ok = await voice.start();
+    if (!ok) setError(voice.permissionError ?? t("Could not start recording."));
+  };
+
+  // Hold-to-talk correction: "make it Tuesday at 9", "call it MOT
+  // booking". Same agent the saved-task voice edit uses, so behaviour is
+  // identical either side of saving — it just works on the draft, since
+  // there's no id to address before the task exists.
+  const onMicPressOut = async () => {
+    const result = await voice.stop();
+    if (!result || !current) return;
+    setVoiceBusy(true);
+    try {
+      const { transcript } = await transcribeAudio(result.uri, result.mimeType);
+      if (!transcript || transcript.trim().length === 0) {
+        setError(t("Couldn't hear that. Try again."));
+        return;
+      }
+      const { patch, reply } = await draftVoiceUpdate(
+        {
+          title: current.title,
+          label: labelDraft.trim() || null,
+          description: descriptionDraft.trim() || null,
+          due_at: current.due_at ?? null,
+          importance: current.importance ?? null,
+        },
+        transcript,
+      );
+      if (patch && Object.keys(patch).length > 0) {
+        applyEdit(patch as Partial<ParsedTask>);
+      }
+      setVoiceReply(reply || null);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setVoiceBusy(false);
+    }
+  };
 
   const onConfirm = async () => {
     if (!current) return;
@@ -271,13 +359,50 @@ export default function VoiceConfirmScreen() {
             )}
           </Text>
 
-          {current.due_at ? (
-            <>
-              <Text style={styles.label}>{t("Due")}</Text>
-              <Text style={styles.parsedValue}>
-                {new Date(current.due_at).toLocaleString()}
+          {/* Editable, and always shown. Previously this row only
+              appeared when the parser found a date, so the most common
+              case — no date mentioned — offered no way to add one
+              without saving first and reopening the task. */}
+          <Text style={styles.label}>{t("Due")}</Text>
+          <View style={styles.dueRow}>
+            <Pressable onPress={() => setShowPicker(true)} style={styles.dueButton}>
+              <Text style={styles.dueText}>
+                {current.due_at
+                  ? new Date(current.due_at).toLocaleString()
+                  : t("No due date")}
               </Text>
-            </>
+            </Pressable>
+            {current.due_at ? (
+              <Pressable
+                onPress={() => applyEdit({ due_at: null })}
+                hitSlop={8}
+                style={styles.clearDue}
+              >
+                <Text style={styles.clearDueText}>{t("Clear")}</Text>
+              </Pressable>
+            ) : null}
+          </View>
+
+          {showPicker ? (
+            <DateTimePicker
+              value={current.due_at ? new Date(current.due_at) : new Date()}
+              mode="datetime"
+              display={Platform.OS === "ios" ? "spinner" : "default"}
+              themeVariant="dark"
+              onChange={(event, date) => {
+                if (Platform.OS === "android") setShowPicker(false);
+                if (event.type === "set" && date) {
+                  applyEdit({ due_at: date.toISOString() });
+                }
+                if (event.type === "dismissed") setShowPicker(false);
+              }}
+            />
+          ) : null}
+
+          {Platform.OS === "ios" && showPicker ? (
+            <Pressable onPress={() => setShowPicker(false)} style={styles.doneRow}>
+              <Text style={styles.doneText}>{t("Done")}</Text>
+            </Pressable>
           ) : null}
 
           {current.importance != null ? (
@@ -295,6 +420,40 @@ export default function VoiceConfirmScreen() {
 
           {error ? <Text style={styles.error}>{error}</Text> : null}
         </ScrollView>
+
+        {/* Hold-to-talk correction, above the footer so it reads as
+            "adjust this" rather than a primary action. */}
+        <View style={styles.micRow}>
+          <Pressable
+            onPressIn={onMicPressIn}
+            onPressOut={onMicPressOut}
+            disabled={voiceBusy || submitting}
+            style={[
+              styles.micButton,
+              voice.isRecording && styles.micButtonActive,
+              (voiceBusy || submitting) && styles.primaryDisabled,
+            ]}
+          >
+            {voiceBusy ? (
+              <ActivityIndicator size="small" color={colors.accent} />
+            ) : (
+              <MaterialIcons
+                name="mic"
+                size={20}
+                color={voice.isRecording ? "white" : colors.inkDim}
+              />
+            )}
+          </Pressable>
+          <Text style={styles.micHint}>
+            {voice.isRecording
+              ? t("Listening…")
+              : voiceBusy
+                ? t("Parsing…")
+                : voiceReply
+                  ? voiceReply
+                  : t("Hold to fix this by voice")}
+          </Text>
+        </View>
 
         <View style={styles.footer}>
           {isQueue ? (
@@ -396,6 +555,41 @@ const styles = StyleSheet.create({
     textAlignVertical: "top",
   },
   hint: { color: colors.inkDim, fontSize: 11, marginTop: 6, lineHeight: 15 },
+  dueRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  dueButton: {
+    flex: 1,
+    backgroundColor: colors.panel,
+    borderColor: colors.line,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  dueText: { color: colors.ink, fontSize: 14 },
+  clearDue: { paddingHorizontal: 4 },
+  clearDueText: { color: colors.inkDim, fontSize: 13, fontWeight: "600" },
+  doneRow: { alignItems: "flex-end", paddingTop: 6 },
+  doneText: { color: colors.accent, fontSize: 14, fontWeight: "700" },
+  micRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    borderTopColor: colors.line,
+    borderTopWidth: 1,
+  },
+  micButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    borderWidth: 1,
+    borderColor: colors.line,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  micButtonActive: { backgroundColor: colors.accent, borderColor: colors.accent },
+  micHint: { color: colors.inkDim, fontSize: 12, flex: 1, lineHeight: 16 },
   confidence: { color: colors.inkDim, fontSize: 12, marginTop: 22 },
   error: { color: colors.overdue, fontSize: 13, marginTop: 16 },
   centered: { flex: 1, justifyContent: "center", alignItems: "center", padding: 24 },

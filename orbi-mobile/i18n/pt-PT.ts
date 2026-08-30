@@ -214,4 +214,10 @@ export const ptPT: Record<string, string> = {
     "Comerciantes conhecidos são categorizados automaticamente. Os desconhecidos ficam sem categoria no Spark; o Pro e o Genius usam IA para adivinhar.",
   "Short keyword shown inside the bubble. Auto-suggested from the title — feel free to type your own.":
     "Palavra curta mostrada dentro da bolha. Sugerida a partir do título — escreve a tua se preferires.",
+
+  // --- voice confirm editing ---
+  "No due date": "Sem prazo",
+  "Hold to fix this by voice": "Mantém premido para corrigir por voz",
+  "Could not start recording.": "Não foi possível iniciar a gravação.",
+  "Couldn't hear that. Try again.": "Não percebi. Tenta de novo.",
 };

@@ -4,6 +4,7 @@ Routers contain no business logic. Each handler extracts inputs, delegates to
 a service or db function, and formats the response.
 """
 
+import logging
 from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID, uuid4
@@ -12,13 +13,15 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from pydantic import BaseModel
 
 from app.agents.task_updater import parse_voice_update
-from app.db import tasks as tasks_db
+from app.db import tasks as tasks_db, users as users_db
 from app.models.task import TaskBubble, TaskBubbleCreate, TaskBubbleUpdate, TaskStatus
 from app.services.auth import get_current_user, get_current_user_with_tier
 from app.services.embeddings import generate_embedding
 from app.services.scoring import calculate_pressure_score
 from app.services.task_embedding import regenerate_task_embedding
 from app.services.task_sanitizer import derive_label_from_title
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
@@ -227,6 +230,73 @@ async def voice_update_task(
         user_id=user_id,
         user_tier=user_tier,
         user_timezone=body.user_timezone,
+    )
+    return VoiceUpdateResponse(patch=result["patch"], reply=result["reply"])
+
+
+class DraftTask(BaseModel):
+    """A task the user is still confirming — no DB row exists yet."""
+
+    title: str
+    label: Optional[str] = None
+    description: Optional[str] = None
+    due_at: Optional[str] = None
+    importance: Optional[int] = None
+
+
+class DraftVoiceUpdateRequest(BaseModel):
+    draft: DraftTask
+    transcript: str
+    user_timezone: Optional[str] = None
+    language: Optional[str] = None
+
+
+@router.post("/draft-voice-update", response_model=VoiceUpdateResponse)
+async def draft_voice_update(
+    body: DraftVoiceUpdateRequest,
+    auth: dict = Depends(get_current_user_with_tier),
+):
+    """Apply a spoken correction to a task that has not been created yet.
+
+    The sibling /{task_id}/voice-update only exists for saved tasks: it
+    loads the row, and its whole point is producing a patch against
+    stored state. But the most natural moment to fix a misheard capture
+    is BEFORE saving it — the user is looking at the parse and can see
+    exactly what's wrong. There is no id to address at that point, so
+    the client sends the draft itself.
+
+    Nothing is written here; the response is a patch the confirm screen
+    merges into its pending task. Same agent as the saved-task path, so
+    "make it Tuesday at 9" behaves identically either side of the save.
+
+    Declared before the /{task_id} routes so the path-param matcher
+    can't swallow "draft-voice-update" as a task id.
+    """
+    user_id = auth["user_id"]
+    user_tier = auth["tier"]
+
+    if not body.transcript or not body.transcript.strip():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=_error("Transcript is empty.", "TRANSCRIPT_EMPTY"),
+        )
+
+    language = body.language
+    if not language:
+        try:
+            prefs = await users_db.fetch_preferences(user_id)
+            language = (prefs or {}).get("language")
+        except Exception as exc:  # noqa: BLE001 — never block the edit
+            logger.warning("Could not read language preference: %s", exc)
+            language = None
+
+    result = await parse_voice_update(
+        current_task=body.draft.model_dump(mode="json"),
+        user_message=body.transcript,
+        user_id=user_id,
+        user_tier=user_tier,
+        user_timezone=body.user_timezone,
+        language=language,
     )
     return VoiceUpdateResponse(patch=result["patch"], reply=result["reply"])
 

@@ -709,6 +709,35 @@ export async function voiceUpdateTask(
   return (await res.json()) as VoiceUpdateResponse;
 }
 
+export interface DraftTaskInput {
+  title: string;
+  label?: string | null;
+  description?: string | null;
+  due_at?: string | null;
+  importance?: number | null;
+}
+
+/** Apply a spoken correction to a task that hasn't been created yet.
+ * Read-only server-side — returns a patch for the confirm screen to
+ * merge into its pending task. */
+export async function draftVoiceUpdate(
+  draft: DraftTaskInput,
+  transcript: string,
+): Promise<VoiceUpdateResponse> {
+  let userTimezone: string | undefined;
+  try {
+    userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  } catch {
+    userTimezone = undefined;
+  }
+  const res = await authFetch(`${V1}/tasks/draft-voice-update`, {
+    method: "POST",
+    body: JSON.stringify({ draft, transcript, user_timezone: userTimezone }),
+  });
+  if (!res.ok) throw await parseError(res);
+  return (await res.json()) as VoiceUpdateResponse;
+}
+
 export async function createTask(input: CreateTaskInput): Promise<ServerTask> {
   // owner_id is required by the Pydantic model but the router overrides
   // it with the JWT subject — we still have to send a value to satisfy

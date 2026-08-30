@@ -38,6 +38,7 @@ async def parse_voice_update(
     user_id: UUID,
     user_tier: str,
     user_timezone: str | None = None,
+    language: str | None = None,
 ) -> dict:
     """Return a {patch, reply} dict — patch contains only changed fields.
 
@@ -82,6 +83,12 @@ async def parse_voice_update(
         "status": current_task.get("status"),
     }
     context_lines.append("Current task:\n" + json.dumps(task_snapshot, indent=2))
+
+    # Without this the reply comes back in English even when the user
+    # spoke Portuguese — the prompt itself is English.
+    from app.services.locale import get_locale
+
+    context_lines.append(get_locale(language).prompt_instruction)
 
     system = _SYSTEM_PROMPT + "\n\n" + "\n".join(context_lines)
 
@@ -135,6 +142,7 @@ async def parse_voice_update(
             patch["due_at"],
             user_message,
             user_timezone,
+            language=language,
         )
         if overridden is not None:
             patch["due_at"] = overridden
