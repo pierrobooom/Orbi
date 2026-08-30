@@ -10,11 +10,21 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from app.agents._utils import strip_json_fences
+from app.services.context_budget import render_records
 from app.services.ai_router import get_ai_response, load_prompt
 
 logger = logging.getLogger(__name__)
 
 _SYSTEM_PROMPT = load_prompt("reminder_planner")
+
+
+# Scheduling a reminder needs when it's due and how much it matters —
+# not the description, embedding, or audit columns.
+_TASK_FIELDS = ("id", "title", "due_at", "importance", "pressure_score", "status")
+_TASK_BUDGET = 1800
+# Beyond this the planner is guessing anyway; the highest-pressure tasks
+# are the ones worth a notification.
+_MAX_TASKS = 50
 
 
 async def plan_reminders(
@@ -40,7 +50,14 @@ async def plan_reminders(
     prompt = (
         f"Current time: {now}\n"
         f"User preferences: {json.dumps(user_preferences)}\n\n"
-        f"Active tasks:\n{json.dumps(active_tasks)}"
+        "Active tasks:\n"
+        + render_records(
+            active_tasks,
+            _TASK_FIELDS,
+            max_tokens=_TASK_BUDGET,
+            max_records=_MAX_TASKS,
+            label="tasks",
+        )
     )
 
     raw = await get_ai_response(

@@ -15,6 +15,7 @@ from pydantic import BaseModel
 from app.agents.task_updater import parse_voice_update
 from app.db import tasks as tasks_db, users as users_db
 from app.models.task import TaskBubble, TaskBubbleCreate, TaskBubbleUpdate, TaskStatus
+from app.services.ai_router import AIRateLimited
 from app.services.auth import get_current_user, get_current_user_with_tier
 from app.services.embeddings import generate_embedding
 from app.services.scoring import calculate_pressure_score
@@ -237,13 +238,19 @@ async def voice_update_task(
             detail=_error("Transcript is empty.", "TRANSCRIPT_EMPTY"),
         )
 
-    result = await parse_voice_update(
-        current_task=task,
-        user_message=body.transcript,
-        user_id=user_id,
-        user_tier=user_tier,
-        user_timezone=body.user_timezone,
-    )
+    try:
+        result = await parse_voice_update(
+            current_task=task,
+            user_message=body.transcript,
+            user_id=user_id,
+            user_tier=user_tier,
+            user_timezone=body.user_timezone,
+        )
+    except AIRateLimited as exc:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=_error(str(exc), "AI_RATE_LIMITED"),
+        )
     return VoiceUpdateResponse(patch=result["patch"], reply=result["reply"])
 
 
@@ -303,14 +310,20 @@ async def draft_voice_update(
             logger.warning("Could not read language preference: %s", exc)
             language = None
 
-    result = await parse_voice_update(
-        current_task=body.draft.model_dump(mode="json"),
-        user_message=body.transcript,
-        user_id=user_id,
-        user_tier=user_tier,
-        user_timezone=body.user_timezone,
-        language=language,
-    )
+    try:
+        result = await parse_voice_update(
+            current_task=body.draft.model_dump(mode="json"),
+            user_message=body.transcript,
+            user_id=user_id,
+            user_tier=user_tier,
+            user_timezone=body.user_timezone,
+            language=language,
+        )
+    except AIRateLimited as exc:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=_error(str(exc), "AI_RATE_LIMITED"),
+        )
     return VoiceUpdateResponse(patch=result["patch"], reply=result["reply"])
 
 

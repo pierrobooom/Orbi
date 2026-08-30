@@ -9,6 +9,7 @@ import logging
 from uuid import UUID
 
 from app.agents._utils import strip_json_fences
+from app.services.context_budget import render_records
 from app.services.ai_router import get_ai_response, load_prompt
 
 logger = logging.getLogger(__name__)
@@ -24,6 +25,24 @@ _PROPOSAL_ACTION_TYPES = frozenset({
     "create_cluster", "move_tasks", "merge_clusters", "rename_cluster",
 })
 _MAX_PROPOSAL_ACTIONS = 5
+
+
+# Only what the clustering prompts actually reason about. A task row
+# carries ~18 columns; four of them are relevant to "which group does
+# this belong in", and the rest were pure token cost.
+_CLUSTER_FIELDS = ("id", "name", "kind", "active_count")
+_TASK_FIELDS = ("id", "title", "label", "domain_hint", "parent_cluster_id")
+
+# Budgets are per-section, in estimated tokens. Sized so the whole
+# auto-organise prompt (system prompt + both sections) stays near 3k,
+# comfortably inside Groq's free-tier 8k/minute alongside a reply.
+_SUGGEST_CLUSTER_BUDGET = 600
+_REVIEW_BUDGET = 900
+_PROPOSAL_CLUSTER_BUDGET = 700
+_PROPOSAL_TASK_BUDGET = 1600
+# A reorganisation proposal over more than this many tasks is not a
+# proposal the user can meaningfully review anyway.
+_PROPOSAL_MAX_TASKS = 60
 
 
 async def assign_task_to_cluster(
@@ -56,7 +75,13 @@ async def assign_task_to_cluster(
         f"Task: {task_title}\n"
         f"Description: {task_description or 'None'}\n"
         f"Domain hint: {domain_hint or 'None'}\n\n"
-        f"Existing clusters: {json.dumps(existing_clusters)}"
+        f"Existing clusters: "
+        + render_records(
+            existing_clusters,
+            _CLUSTER_FIELDS,
+            max_tokens=_SUGGEST_CLUSTER_BUDGET,
+            label="clusters",
+        )
     )
 
     raw = await get_ai_response(
@@ -100,7 +125,9 @@ async def suggest_reorganisation(
     Returns:
         {"suggestions": [{"action": str, "source": str, ...}]}
     """
-    prompt = f"Review these clusters and suggest improvements:\n{json.dumps(clusters)}"
+    prompt = "Review these clusters and suggest improvements:\n" + render_records(
+        clusters, _CLUSTER_FIELDS, max_tokens=_REVIEW_BUDGET, label="clusters"
+    )
 
     raw = await get_ai_response(
         prompt=prompt,
@@ -152,9 +179,24 @@ async def propose_organisation(
         mobile shows "nothing to suggest"). Invalid action entries are
         silently filtered.
     """
+    # This is the prompt that made a budget necessary: it serialised
+    # every cluster and every task with indent=2. Field-stripping alone
+    # removes ~14 unused columns per task, and dropping the pretty-print
+    # removes roughly a third of what was left.
+    #
+    # Tasks are passed newest-relevant-first by the caller, so a cap
+    # keeps the ones most worth reorganising.
     prompt = (
-        f"CLUSTERS:\n{json.dumps(clusters, indent=2)}\n\n"
-        f"TASKS:\n{json.dumps(tasks, indent=2)}"
+        "CLUSTERS:\n"
+        + render_records(
+            clusters, _CLUSTER_FIELDS, max_tokens=_PROPOSAL_CLUSTER_BUDGET,
+            label="clusters",
+        )
+        + "\n\nTASKS:\n"
+        + render_records(
+            tasks, _TASK_FIELDS, max_tokens=_PROPOSAL_TASK_BUDGET,
+            max_records=_PROPOSAL_MAX_TASKS, label="tasks",
+        )
     )
 
     raw = await get_ai_response(

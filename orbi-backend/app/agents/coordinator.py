@@ -12,6 +12,7 @@ from uuid import UUID
 
 from app.agents._utils import strip_json_fences
 from app.services.ai_router import get_ai_response, load_prompt
+from app.services.context_budget import fit_history
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +21,11 @@ logger = logging.getLogger(__name__)
 # intent, so the same mic can complete, delete, reschedule, and list
 # tasks that already exist.
 _SYSTEM_PROMPT = load_prompt("coordinator", version=3)
+
+# Conversation history is the only unbounded input to this prompt.
+# ~700 tokens is about three long voice transcripts, which is as much
+# context as intent classification has ever needed.
+_HISTORY_BUDGET = 700
 
 
 async def classify_intent(
@@ -63,7 +69,13 @@ async def classify_intent(
             pass
 
     if conversation_history:
-        recent = conversation_history[-5:]
+        # A message count is not a size bound: five turns can be five
+        # words or five paragraphs, and voice transcripts run long.
+        # Budget by tokens, keeping the newest — recency is what the
+        # user is actually referring to.
+        recent = fit_history(
+            conversation_history, max_tokens=_HISTORY_BUDGET, max_messages=5
+        )
         history_text = "\n".join(
             f"{msg['role']}: {msg['content']}" for msg in recent
         )

@@ -24,12 +24,14 @@ names (Spark / Pro / Genius) only appear in user-facing messages.
 """
 
 import logging
+import re
 import os
 import time
 from pathlib import Path
 from uuid import UUID
 
 import anthropic
+import groq
 from groq import Groq
 
 from app.services.usage_tracker import QuotaExceeded, check_and_record
@@ -65,6 +67,49 @@ _PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
 _FALLBACK_RESPONSE = (
     "I'm having trouble processing that right now. Please try again in a moment."
 )
+
+
+class AIRateLimited(Exception):
+    """The provider rejected the call for rate limiting, not for being wrong.
+
+    This is the ONE provider failure that gets its own exception rather
+    than collapsing into _FALLBACK_RESPONSE. A rate limit is transient and
+    the user can act on it ("wait a few seconds"); every other provider
+    error is opaque to them.
+
+    It also removes a genuinely confusing failure mode: the fallback
+    string is not JSON, so an agent that parses the reply reports
+    "failed to parse AI response" — which is what a DEAD MODEL looks like.
+    Groq's free tier allows 8,000 tokens/minute and the coordinator prompt
+    is a large fraction of that, so two quick voice commands can trip it.
+    Debugging that as a parser bug is a trap worth closing permanently.
+    """
+
+    def __init__(self, message: str, retry_after_seconds: float | None = None):
+        super().__init__(message)
+        self.retry_after_seconds = retry_after_seconds
+
+
+def _retry_after_from(exc: Exception) -> float | None:
+    """Pull a retry delay out of a provider error when it offers one.
+
+    Groq puts "Please try again in 8.145s" in the message and also sends a
+    retry-after header; the header is authoritative when present.
+    """
+    response = getattr(exc, "response", None)
+    header = None
+    if response is not None:
+        try:
+            header = response.headers.get("retry-after")
+        except Exception:  # noqa: BLE001 — header access is best-effort
+            header = None
+    if header:
+        try:
+            return float(header)
+        except (TypeError, ValueError):
+            pass
+    match = re.search(r"try again in ([\d.]+)s", str(exc))
+    return float(match.group(1)) if match else None
 
 
 def load_prompt(agent_name: str, version: int = 1) -> str:
@@ -199,6 +244,17 @@ async def _call_groq(
         )
         return result
 
+    except groq.RateLimitError as exc:
+        elapsed_ms = int((time.monotonic() - start_ms) * 1000)
+        logger.warning(
+            "Groq rate limited | model=%s latency_ms=%d error=%s",
+            model, elapsed_ms, exc,
+        )
+        raise AIRateLimited(
+            "Too many requests in a row. Wait a few seconds and try again.",
+            retry_after_seconds=_retry_after_from(exc),
+        ) from exc
+
     except Exception as exc:
         elapsed_ms = int((time.monotonic() - start_ms) * 1000)
         logger.error(
@@ -237,6 +293,17 @@ async def _call_claude(
             elapsed_ms,
         )
         return result
+
+    except anthropic.RateLimitError as exc:
+        elapsed_ms = int((time.monotonic() - start_ms) * 1000)
+        logger.warning(
+            "Anthropic rate limited | model=%s latency_ms=%d error=%s",
+            model, elapsed_ms, exc,
+        )
+        raise AIRateLimited(
+            "Too many requests in a row. Wait a few seconds and try again.",
+            retry_after_seconds=_retry_after_from(exc),
+        ) from exc
 
     except Exception as exc:
         elapsed_ms = int((time.monotonic() - start_ms) * 1000)

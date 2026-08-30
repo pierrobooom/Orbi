@@ -9,11 +9,22 @@ import logging
 from uuid import UUID
 
 from app.agents._utils import strip_json_fences
+from app.services.context_budget import render_records
 from app.services.ai_router import get_ai_response, load_prompt
 
 logger = logging.getLogger(__name__)
 
 _SYSTEM_PROMPT = load_prompt("memory_summarizer")
+
+
+# `embedding` is by far the largest column on a memory row — 1024 floats
+# serialise to roughly 12KB of JSON each, so a handful of rows could
+# exhaust the context window on their own. Field-stripping is not a
+# nicety here, it is the difference between working and not.
+_MEMORY_FIELDS = ("id", "node_type", "content", "created_at")
+_SUMMARY_BUDGET = 2200
+_QUERY_BUDGET = 1800
+_MAX_NODES = 40
 
 
 async def extract_memories(
@@ -81,7 +92,14 @@ async def synthesise_summary(
     """
     prompt = (
         f"Synthesise a summary for: {period}\n\n"
-        f"Memory nodes:\n{json.dumps(memory_nodes)}"
+        "Memory nodes:\n"
+        + render_records(
+            memory_nodes,
+            _MEMORY_FIELDS,
+            max_tokens=_SUMMARY_BUDGET,
+            max_records=_MAX_NODES,
+            label="memories",
+        )
     )
 
     raw = await get_ai_response(
@@ -119,7 +137,14 @@ async def answer_memory_query(
     """
     prompt = (
         f"User question: {question}\n\n"
-        f"Relevant memories:\n{json.dumps(relevant_memories)}"
+        "Relevant memories:\n"
+        + render_records(
+            relevant_memories,
+            _MEMORY_FIELDS,
+            max_tokens=_QUERY_BUDGET,
+            max_records=_MAX_NODES,
+            label="memories",
+        )
     )
 
     return await get_ai_response(

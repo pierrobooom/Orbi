@@ -23,6 +23,7 @@ from app.db import (
     users as users_db,
 )
 from app.models.conversation import ConversationSource
+from app.services.ai_router import AIRateLimited
 from app.services.auth import get_current_user_with_tier
 from app.services.cluster_matcher import (
     build_task_query_text,
@@ -214,15 +215,23 @@ async def chat(
     history = await conv_db.fetch_conversation_history(user_id, session_id, limit=10)
     history_messages = [{"role": h["role"], "content": h["content"]} for h in history]
 
-    # Coordinator classifies intent
-    classification = await coordinator.classify_intent(
-        user_message=body.message,
-        user_id=user_id,
-        user_tier=user_tier,
-        conversation_history=history_messages,
-        user_timezone=body.user_timezone,
-        language=language,
-    )
+    # Coordinator classifies intent. A rate limit here is reported as a
+    # 429 rather than swallowed, so the client can say "wait a moment"
+    # instead of "couldn't parse that".
+    try:
+        classification = await coordinator.classify_intent(
+            user_message=body.message,
+            user_id=user_id,
+            user_tier=user_tier,
+            conversation_history=history_messages,
+            user_timezone=body.user_timezone,
+            language=language,
+        )
+    except AIRateLimited as exc:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=_error(str(exc), "AI_RATE_LIMITED"),
+        )
 
     intent = classification.get("intent", "general_chat")
     agent_name = classification.get("agent")
