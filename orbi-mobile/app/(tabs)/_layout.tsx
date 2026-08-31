@@ -42,6 +42,15 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="chat"
+        options={{
+          title: t("Chat"),
+          tabBarIcon: ({ color, size }) => (
+            <MaterialIcons name="forum" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="money"
         options={{
           title: t("Money"),

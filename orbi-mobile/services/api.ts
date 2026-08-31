@@ -627,6 +627,56 @@ export async function setMyPreferences(
   return (await res.json()) as UserPreferences;
 }
 
+export interface ServerMemoryNode {
+  id: string;
+  user_id: string;
+  content: string;
+  memory_type: string;
+  tags: string[];
+  importance: number;
+  source_summary: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function listMemories(limit = 50): Promise<ServerMemoryNode[]> {
+  const res = await authFetch(`${V1}/memory?limit=${limit}`);
+  if (!res.ok) throw await parseError(res);
+  return (await res.json()) as ServerMemoryNode[];
+}
+
+export async function deleteMemory(id: string): Promise<void> {
+  const res = await authFetch(`${V1}/memory/${id}`, { method: "DELETE" });
+  if (!res.ok && res.status !== 404) throw await parseError(res);
+}
+
+export interface ChatHistoryMessage {
+  id: string;
+  session_id: string;
+  role: "user" | "assistant";
+  content: string;
+  intent: string | null;
+  created_at: string;
+}
+
+export interface ChatHistoryResponse {
+  session_id: string | null;
+  messages: ChatHistoryMessage[];
+}
+
+/** Past messages for a session, oldest first. Omit sessionId for the
+ * most recent conversation — what opening the Chat tab should show. */
+export async function getChatHistory(
+  sessionId?: string,
+  limit = 50,
+): Promise<ChatHistoryResponse> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (sessionId) params.set("session_id", sessionId);
+  const res = await authFetch(`${V1}/chat/history?${params.toString()}`);
+  if (!res.ok) throw await parseError(res);
+  return (await res.json()) as ChatHistoryResponse;
+}
+
 export async function chatMessage(
   message: string,
   source: "voice" | "text" = "text",

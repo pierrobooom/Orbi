@@ -243,4 +243,16 @@ export const ptPT: Record<string, string> = {
   "Couldn't find that task.": "Não encontrei essa tarefa.",
   "More than one task matches. Check this is the right one.": "Mais do que uma tarefa corresponde. Confirma se é a certa.",
   "Reopen task": "Reabrir tarefa",
+
+  // --- chat tab ---
+  "Chat": "Conversa",
+  "New": "Nova",
+  "Message Orbi": "Escreve ao Orbi",
+  "Ask Orbi anything": "Pergunta o que quiseres ao Orbi",
+  "Capture a task, ask what's overdue, or mark something done — typed or spoken.": "Cria uma tarefa, pergunta o que está atrasado, ou marca algo como feito — escrito ou falado.",
+  "Not sent": "Não enviada",
+  "Review task": "Rever tarefa",
+  "Review {n} tasks": "Rever {n} tarefas",
+  "Review change": "Rever alteração",
+  "From chat": "Da conversa",
 };

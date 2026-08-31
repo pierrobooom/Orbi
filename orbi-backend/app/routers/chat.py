@@ -24,7 +24,7 @@ from app.db import (
 )
 from app.models.conversation import ConversationSource
 from app.services.ai_router import AIRateLimited
-from app.services.auth import get_current_user_with_tier
+from app.services.auth import get_current_user, get_current_user_with_tier
 from app.services.cluster_matcher import (
     build_task_query_text,
     match_cluster_semantic,
@@ -169,6 +169,69 @@ def _filter_tasks(
 def _error(message: str, error_code: str) -> dict:
     """Build a structured error response body."""
     return {"message": message, "error_code": error_code}
+
+
+class ChatHistoryMessage(BaseModel):
+    id: UUID
+    session_id: UUID
+    role: str
+    content: str
+    intent: Optional[str] = None
+    created_at: datetime
+
+
+class ChatHistoryResponse(BaseModel):
+    session_id: Optional[UUID] = None
+    messages: list[ChatHistoryMessage]
+
+
+@router.get("/history", response_model=ChatHistoryResponse)
+async def chat_history(
+    session_id: Optional[UUID] = None,
+    limit: int = 50,
+    user_id: UUID = Depends(get_current_user),
+):
+    """Return a conversation's messages, oldest first.
+
+    The events were always being stored; nothing exposed them, so the
+    chat surface had no way to survive an app restart and every reopen
+    looked like a brand-new assistant with no memory of the last
+    exchange.
+
+    With no session_id, the most recent session is used — which is what
+    "open the chat tab" should show.
+
+    Declared before /{...} style routes for the same reason the cluster
+    routes are: a static path must not be captured by a path param.
+    """
+    resolved = session_id
+    if resolved is None:
+        try:
+            recent = await conv_db.fetch_recent_sessions(user_id, limit=1)
+        except Exception as exc:  # noqa: BLE001 — empty history is not an error
+            logger.warning("Could not list recent sessions: %s", exc)
+            recent = []
+        if not recent:
+            return ChatHistoryResponse(session_id=None, messages=[])
+        resolved = recent[0]["session_id"]
+
+    rows = await conv_db.fetch_conversation_history(
+        user_id, resolved, limit=max(1, min(limit, 200))
+    )
+    return ChatHistoryResponse(
+        session_id=resolved,
+        messages=[
+            ChatHistoryMessage(
+                id=row["id"],
+                session_id=row["session_id"],
+                role=row["role"],
+                content=row["content"],
+                intent=row.get("intent"),
+                created_at=row["created_at"],
+            )
+            for row in rows
+        ],
+    )
 
 
 @router.post("", response_model=ChatResponse)
