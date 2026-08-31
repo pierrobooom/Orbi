@@ -67,3 +67,18 @@ async def upsert_preferences(payload: dict) -> dict:
         .execute()
     )
     return response.data[0]
+
+
+async def delete_auth_user(user_id: UUID) -> None:
+    """Delete the Supabase Auth user, which cascades to everything else.
+
+    Every table hangs off user_profiles with ON DELETE CASCADE, and
+    user_profiles itself references auth.users(id) the same way. So one
+    admin delete removes the profile, preferences, clusters, tasks,
+    memories, conversations, voice sessions, finance rows, budgets,
+    insights, usage counters and device tokens — atomically, in the
+    database, with no chance of a half-deleted account.
+
+    Requires the service key; the anon key cannot touch auth.admin.
+    """
+    get_client().auth.admin.delete_user(str(user_id))

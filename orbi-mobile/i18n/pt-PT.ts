@@ -255,4 +255,16 @@ export const ptPT: Record<string, string> = {
   "Review {n} tasks": "Rever {n} tarefas",
   "Review change": "Rever alteração",
   "From chat": "Da conversa",
+
+  // --- account deletion ---
+  "Delete account": "Apagar conta",
+  "This cannot be undone. Everything below is deleted immediately.": "Isto não pode ser revertido. Tudo o que está abaixo é apagado imediatamente.",
+  "What gets deleted": "O que é apagado",
+  "Your account and sign-in": "A tua conta e o acesso",
+  "Every task and cluster": "Todas as tarefas e grupos",
+  "All finance entries and budgets": "Todos os registos e orçamentos",
+  "Conversations and memories": "Conversas e memórias",
+  "Preferences and notification devices": "Preferências e dispositivos de notificação",
+  "Type your email to confirm": "Escreve o teu email para confirmar",
+  "Permanently delete my account": "Apagar a minha conta permanentemente",
 };

@@ -392,6 +392,16 @@ export default function SettingsScreen() {
             <Text style={styles.signOutText}>{t("Sign out")}</Text>
           )}
         </Pressable>
+
+        {/* Apple requires in-app account deletion for any app that offers
+            account creation. Kept visually quieter than Sign out — it is
+            not an action anyone should reach for by accident. */}
+        <Pressable
+          onPress={() => router.push("/delete-account" as Href)}
+          style={styles.deleteAccountBtn}
+        >
+          <Text style={styles.deleteAccountText}>{t("Delete account")}</Text>
+        </Pressable>
       </ScrollView>
     </SafeAreaView>
   );
@@ -537,4 +547,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   signOutText: { color: colors.overdue, fontSize: 15, fontWeight: "700" },
+  deleteAccountBtn: { alignItems: "center", paddingVertical: 16 },
+  deleteAccountText: { color: colors.inkDim, fontSize: 13, fontWeight: "600" },
 });

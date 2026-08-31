@@ -4,6 +4,7 @@ Routers contain no business logic. Each handler extracts inputs, delegates to
 a service or db function, and formats the response.
 """
 
+import logging
 from datetime import datetime, time, timezone
 from typing import Literal, Optional
 from uuid import UUID
@@ -17,6 +18,8 @@ from app.services.auth import get_current_user, get_current_user_with_tier
 from app.services.locale import get_locale
 from app.services.push import send_push
 from app.services.usage_tracker import get_user_usage
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -156,6 +159,73 @@ async def set_my_preferences(
 
     row = await users_db.upsert_preferences(payload)
     return row
+
+
+class DeleteAccountRequest(BaseModel):
+    """Confirmation body for account deletion.
+
+    The JWT already proves WHO is asking; typing the email proves the
+    request was INTENDED. This is irreversible and cascades across every
+    table, so a mis-tapped button must not be enough to trigger it.
+    """
+
+    confirm_email: str
+
+
+@router.post("/me/delete", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_my_account(
+    body: DeleteAccountRequest,
+    auth: dict = Depends(get_current_user_with_tier),
+):
+    """Permanently delete the authenticated user and all of their data.
+
+    Apple requires an app that offers account creation to offer in-app
+    account deletion, so this is a store-submission blocker, not a
+    nicety.
+
+    Deletes the Supabase Auth user; the ON DELETE CASCADE chain removes
+    every owned row. Nothing is soft-deleted and nothing is retained —
+    that is the point.
+
+    POST rather than DELETE because it takes a confirmation body, and a
+    request body on DELETE is poorly supported across proxies and
+    clients.
+    """
+    user_id = auth["user_id"]
+
+    profile = await users_db.fetch_profile(user_id)
+    if profile is None:
+        # Nothing to delete. Idempotent by design: a client retrying
+        # after a dropped response should not get an error.
+        return None
+
+    submitted = (body.confirm_email or "").strip().lower()
+    actual = str(profile.get("email") or "").strip().lower()
+    if not submitted or submitted != actual:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=_error(
+                "Type your account email exactly to confirm deletion.",
+                "DELETE_CONFIRMATION_MISMATCH",
+            ),
+        )
+
+    try:
+        await users_db.delete_auth_user(user_id)
+    except Exception as exc:  # noqa: BLE001 — surfaced, not swallowed
+        logger.error("Account deletion failed for %s: %s", user_id, exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=_error(
+                "Could not delete the account. Nothing was removed — try again.",
+                "ACCOUNT_DELETE_FAILED",
+            ),
+        )
+
+    # Deliberately logged: an irreversible, user-initiated destruction is
+    # exactly the event you want a record of. No content, just the fact.
+    logger.warning("Account deleted | user_id=%s", user_id)
+    return None
 
 
 # ---------------------------------------------------------------------------

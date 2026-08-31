@@ -627,6 +627,19 @@ export async function setMyPreferences(
   return (await res.json()) as UserPreferences;
 }
 
+/** Permanently delete the account and every row it owns.
+ *
+ * confirmEmail must match the account email exactly — the server rejects
+ * anything else. Apple requires in-app account deletion for any app that
+ * offers account creation. */
+export async function deleteMyAccount(confirmEmail: string): Promise<void> {
+  const res = await authFetch(`${V1}/users/me/delete`, {
+    method: "POST",
+    body: JSON.stringify({ confirm_email: confirmEmail }),
+  });
+  if (!res.ok) throw await parseError(res);
+}
+
 export interface ServerMemoryNode {
   id: string;
   user_id: string;
