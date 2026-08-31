@@ -60,7 +60,7 @@ code keeps working; `premium` maps to the Genius marketing name.
 
 \- Voice in: on-device Whisper (free) — full create/update/delete via speech
 
-\- Voice out: device-native TTS (robotic, free)
+\- Voice out: device-native TTS (free, on-device)
 
 \- AI model: Llama 3.1 8B via Groq (\~$0.001/user/day)
 
@@ -70,7 +70,7 @@ code keeps working; `premium` maps to the Genius marketing name.
 
 \- Agent personality: reactive — answers what you ask
 
-\- Daily cap: 30 AI turns, 5 min cloud STT fallback, 30s ElevenLabs preview
+\- Daily cap: 30 AI turns, 5 min cloud STT fallback. No cloud TTS.
 
 
 
@@ -80,7 +80,7 @@ code keeps working; `premium` maps to the Genius marketing name.
 
 \- Voice in: on-device Whisper + Deepgram cloud fallback
 
-\- Voice out: ElevenLabs natural voice (on-demand only — not auto on every reply)
+\- Voice out: device-native TTS (free, on-device)
 
 \- AI model: Llama 3.1 70B via Groq
 
@@ -90,7 +90,7 @@ code keeps working; `premium` maps to the Genius marketing name.
 
 \- Agent personality: helpful — offers suggestions when asked
 
-\- Daily cap: 200 AI turns, 30 min cloud STT, 30 min ElevenLabs TTS
+\- Daily cap: 200 AI turns, 30 min cloud STT. No cloud TTS.
 
 
 
@@ -112,7 +112,7 @@ code keeps working; `premium` maps to the Genius marketing name.
 
 &#x20; offers unsolicited but useful opinions, runs full voice debriefs
 
-\- Daily cap: 500 AI turns, 60 min cloud STT, 60 min ElevenLabs TTS
+\- Daily cap: 500 AI turns, 60 min cloud STT. No cloud TTS.
 
 \- Monthly cap: 100 Claude calls
 
@@ -128,10 +128,13 @@ code keeps working; `premium` maps to the Genius marketing name.
 
 &#x20; Pro and Genius get cloud fallback
 
-\- TTS is on-demand for Pro and Genius — UI must require an explicit "listen"
-
-&#x20; tap to call ElevenLabs. Never auto-TTS every chat reply (cost killer)
-
+\- Voice OUT is the device's built-in TTS on every tier. There is no
+&#x20; cloud TTS bill and no TTS meter to enforce. Priced 2026-08-31:
+&#x20; ElevenLabs at the original 30-60 min/day caps cost $162-$324 per
+&#x20; user/month against $9.73-$18.55 of post-Apple revenue. If a natural
+&#x20; voice returns, use Deepgram Aura-1 (~12x cheaper, same vendor as
+&#x20; STT, key already in .env) with caps around 10 min/day for Pro and
+&#x20; 15 min/day for Genius, which models to a positive worst case.
 \- Daily and monthly caps are enforced in app/services/ai\_router.py with
 
 &#x20; graceful "limit reached, resets midnight UTC" responses, never billing surprises
@@ -304,15 +307,19 @@ Every AI call must go through app/services/ai\_router.py which:
 
 &#x20; Deepgram cloud fallback only when on-device fails or device is too low-end.
 
-\- Text to speech: device-native TTS for Spark (free, robotic).
+\- Text to speech: device-native TTS on every tier (free, on-device).
 
-&#x20; ElevenLabs for Pro and Genius — gated to explicit "listen" taps in the UI,
+&#x20; No cloud TTS provider is in use. ElevenLabs was priced out on 2026-08-31 —
 
-&#x20; never auto-played on every assistant reply (cost killer).
+&#x20; see the Subscription Rules above for the numbers and for the route back
+
+&#x20; (Deepgram Aura-1) if a natural voice is wanted later.
 
 \- Voice IN (creating/updating/deleting tasks via speech) works on every tier.
 
-&#x20; Voice OUT quality is the differentiator.
+&#x20; Tier value is turns, memory retention, and agent personality — NOT voice
+
+&#x20; quality, which is now identical everywhere.
 
 
 
@@ -755,7 +762,7 @@ Completed phases:
 
 Open before a test release:
 \- Groq Developer tier — the free tier's 200k tokens/day cannot serve one Pro user
-\- Price ElevenLabs + Deepgram per tier; they, not Groq, are the margin risk
+\- Voice provider costs priced 2026-08-31: device TTS chosen, Deepgram STT kept
 \- Reminder firing — reminder_planner is imported by nothing, there is no
   notification_plans table and no scheduler, so nothing ever fires
 \- Chat / Memory tab — backend complete, no mobile surface

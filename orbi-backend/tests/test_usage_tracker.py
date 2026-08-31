@@ -35,14 +35,12 @@ class TestCapFor:
     def test_genius_ai_turn(self):
         assert cap_for("premium", "ai_turn") == 500
 
-    def test_spark_tts_is_30_second_preview(self):
-        assert cap_for("free", "tts_seconds") == 30
-
-    def test_pro_tts_is_30_minutes(self):
-        assert cap_for("pro", "tts_seconds") == 30 * 60
-
-    def test_genius_tts_is_60_minutes(self):
-        assert cap_for("premium", "tts_seconds") == 60 * 60
+    # Cloud TTS is off on every tier — Orbi speaks with the device voice,
+    # which is free and unmetered. A cap of 0 is the enforcement. See
+    # usage_tracker._DAILY_CAPS for why (ElevenLabs priced out 2026-08-31).
+    def test_no_tier_has_cloud_tts(self):
+        for tier in ("free", "pro", "premium"):
+            assert cap_for(tier, "tts_seconds") == 0
 
     def test_spark_stt_is_5_minutes(self):
         assert cap_for("free", "stt_seconds") == 5 * 60
@@ -151,6 +149,16 @@ class TestCheckAndRecord:
         with pytest.raises(QuotaExceeded):
             await check_and_record(user, "pro", "claude_call")
 
+    async def test_cloud_tts_denied_on_every_tier(self, fake_db):
+        # tts_seconds is capped at 0 everywhere: Orbi uses the device
+        # voice. This is the test that fails if someone wires a cloud TTS
+        # provider back in without revisiting the pricing that killed the
+        # last one.
+        user = uuid4()
+        for tier in ("free", "pro", "premium"):
+            with pytest.raises(QuotaExceeded):
+                await check_and_record(user, tier, "tts_seconds", amount=1)
+
     async def test_genius_claude_monthly_cap(self, fake_db):
         user = uuid4()
         for _ in range(100):
@@ -163,8 +171,9 @@ class TestCheckAndRecord:
         user = uuid4()
         for _ in range(30):
             await check_and_record(user, "free", "ai_turn")
-        # ai_turn is exhausted but tts_seconds is fresh — Spark gets 30s preview.
-        total = await check_and_record(user, "free", "tts_seconds", amount=10)
+        # ai_turn is exhausted but stt_seconds is fresh and independent.
+        # (stt, not tts: cloud TTS is capped at 0 on every tier now.)
+        total = await check_and_record(user, "free", "stt_seconds", amount=10)
         assert total == 10
 
     async def test_multi_unit_amount_for_audio_seconds(self, fake_db):

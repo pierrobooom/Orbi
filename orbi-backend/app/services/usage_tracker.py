@@ -74,21 +74,36 @@ logger = logging.getLogger(__name__)
 # no cap (unused today; reserved for unmetered internal accounts).
 
 # Daily caps
+#
+# tts_seconds is 0 on every tier: Orbi speaks with the device's built-in
+# voice, which is free and unmetered, so there is no cloud TTS to bill or
+# to cap. This was a deliberate reversal, priced on 2026-08-31.
+#
+# The original plan gave Pro and Genius 30 and 60 minutes/day of
+# ElevenLabs. At ~$0.18/minute that is $162 and $324 per user per month
+# against roughly $9.73 and $18.55 of revenue after Apple's 30% cut — a
+# single power user cost more than a hundred subscriptions. Cheaper
+# vendors exist (Deepgram Aura-1 and OpenAI tts-1 are both ~12x less)
+# and remain the route back to a natural voice, but they still need caps
+# an order of magnitude below the original ones.
+#
+# Keeping the meter defined at 0 rather than deleting it means turning
+# cloud TTS back on is a number change here, not a re-architecture.
 _DAILY_CAPS: dict[str, dict[str, int]] = {
     "free": {  # Spark
         "ai_turn":     30,
         "stt_seconds": 5 * 60,    # 5 minutes
-        "tts_seconds": 30,        # 30-second preview
+        "tts_seconds": 0,         # device voice only
     },
     "pro": {  # Pro
         "ai_turn":     200,
         "stt_seconds": 30 * 60,
-        "tts_seconds": 30 * 60,
+        "tts_seconds": 0,         # device voice only
     },
     "premium": {  # Genius
         "ai_turn":     500,
         "stt_seconds": 60 * 60,
-        "tts_seconds": 60 * 60,
+        "tts_seconds": 0,         # device voice only
     },
 }
 
