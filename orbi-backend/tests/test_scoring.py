@@ -205,10 +205,21 @@ class TestResolveWeekdayDate:
         saturday = datetime(2026, 8, 29, 9, 0, tzinfo=timezone.utc)
         assert resolve_weekday_date(saturday, 5).date() == date(2026, 8, 29)
 
-    def test_explicit_next_skips_a_week(self):
+    def test_explicit_next_does_not_skip_a_week(self):
+        # "next Friday" / "na proxima sexta" said on a Saturday means the
+        # Friday six days away, not thirteen. Adding a week here was a
+        # real bug: a task spoken for the coming Monday landed a week and
+        # a half out.
         saturday = datetime(2026, 8, 29, 9, 0, tzinfo=timezone.utc)
         got = resolve_weekday_date(saturday, 4, explicit_next=True)
-        assert got.date() == date(2026, 9, 11)
+        assert got.date() == date(2026, 9, 4)
+
+    def test_explicit_next_skips_only_when_today_is_that_day(self):
+        # Said ON a Saturday about Saturday, "next" plainly means the
+        # following one.
+        saturday = datetime(2026, 8, 29, 9, 0, tzinfo=timezone.utc)
+        assert resolve_weekday_date(saturday, 5, explicit_next=True).date() == date(2026, 9, 5)
+        assert resolve_weekday_date(saturday, 5).date() == date(2026, 8, 29)
 
     def test_time_of_day_is_preserved(self):
         saturday = datetime(2026, 8, 29, 18, 30, tzinfo=timezone.utc)

@@ -444,16 +444,16 @@ export default function VoiceConfirmScreen() {
             ]}
           >
             {voiceBusy ? (
-              <ActivityIndicator size="small" color={colors.accent} />
+              <ActivityIndicator color={colors.accent} />
             ) : (
               <MaterialIcons
                 name="mic"
-                size={20}
-                color={voice.isRecording ? "white" : colors.inkDim}
+                size={30}
+                color={voice.isRecording ? "white" : colors.ink}
               />
             )}
           </Pressable>
-          <Text style={styles.micHint}>
+          <Text style={styles.micHint} numberOfLines={2}>
             {voice.isRecording
               ? t("Listening…")
               : voiceBusy
@@ -579,26 +579,37 @@ const styles = StyleSheet.create({
   clearDueText: { color: colors.inkDim, fontSize: 13, fontWeight: "600" },
   doneRow: { alignItems: "flex-end", paddingTop: 6 },
   doneText: { color: colors.accent, fontSize: 14, fontWeight: "700" },
+  // Centred column, not a left-aligned row. The mic is the primary
+  // gesture on this screen and it was sitting in the corner at 42px,
+  // which is below the 44pt touch target Apple recommends and awkward to
+  // reach one-handed. Now it is centred on the screen's width with the
+  // hint underneath.
   micRow: {
-    flexDirection: "row",
     alignItems: "center",
-    gap: 12,
     paddingHorizontal: 24,
-    paddingTop: 12,
+    paddingTop: 14,
+    paddingBottom: 2,
     borderTopColor: colors.line,
     borderTopWidth: 1,
   },
   micButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    borderWidth: 1,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    borderWidth: 1.5,
     borderColor: colors.line,
+    backgroundColor: colors.panel,
     alignItems: "center",
     justifyContent: "center",
   },
   micButtonActive: { backgroundColor: colors.accent, borderColor: colors.accent },
-  micHint: { color: colors.inkDim, fontSize: 12, flex: 1, lineHeight: 16 },
+  micHint: {
+    color: colors.inkDim,
+    fontSize: 12,
+    lineHeight: 16,
+    marginTop: 8,
+    textAlign: "center",
+  },
   confidence: { color: colors.inkDim, fontSize: 12, marginTop: 22 },
   error: { color: colors.overdue, fontSize: 13, marginTop: 16 },
   centered: { flex: 1, justifyContent: "center", alignItems: "center", padding: 24 },

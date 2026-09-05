@@ -343,11 +343,16 @@ def resolve_weekday_date(
     """
     delta = (weekday_index - reference.weekday()) % 7
     if delta == 0:
-        # Today already is that weekday. Treat a bare mention as meaning
-        # today; the clock override decides the hour.
+        # Today already is that weekday. A bare mention means today (the
+        # clock override decides the hour); an explicit "next"/"próxima"
+        # means the following week, which is the one case where the
+        # marker genuinely changes the answer.
         delta = 7 if explicit_next else 0
-    elif explicit_next:
-        delta += 7
+    # NOTE: an explicit marker does NOT add a week otherwise. "Next
+    # Monday" and "na próxima segunda-feira" said on a Saturday both mean
+    # the Monday two days away, not the one nine days away. Adding a week
+    # there was a real bug: a task spoken for the coming Monday landed a
+    # week and a half out.
     return reference + timedelta(days=delta)
 
 
