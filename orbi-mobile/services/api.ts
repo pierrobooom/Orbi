@@ -10,6 +10,7 @@
 // Production will replace all three with a fixed cloud URL.
 
 import Constants from "expo-constants";
+import { File } from "expo-file-system";
 
 import { supabase } from "@/services/supabase";
 
@@ -552,14 +553,18 @@ export async function transcribeAudio(
   // multipart/form-data upload. Don't set Content-Type manually — the
   // fetch boundary is generated when the browser/RN builds the body.
   const form = new FormData();
-  // React Native's FormData accepts an object with { uri, name, type }
-  // for file fields; the cast to any is the standard workaround for the
-  // type mismatch with DOM FormData.
-  form.append("audio", {
-    uri,
-    name: "recording.m4a",
-    type: mimeType,
-  } as unknown as Blob);
+  // React Native 0.86 (Expo SDK 57) ships a spec-compliant FormData that
+  // rejects the old RN-only `{ uri, name, type }` object with
+  // "Unsupported FormDataPart implementation". expo-file-system's File
+  // class implements Blob, so it can be appended directly — which is the
+  // supported replacement rather than a workaround.
+  const file = new File(uri);
+  form.append("audio", file, "recording.m4a");
+  // Sent explicitly rather than relying on the Blob's inferred type: the
+  // backend passes this to Deepgram, and an inferred
+  // "application/octet-stream" is the difference between a transcript and
+  // a rejected upload.
+  form.append("mimetype", mimeType);
 
   // Deepgram can't infer the language from the audio, so it has to be
   // sent with the upload. Omitted means "use my stored preference".

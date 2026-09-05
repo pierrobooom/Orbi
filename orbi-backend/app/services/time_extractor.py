@@ -63,8 +63,14 @@ _RE_PT_HMIN = re.compile(r"\b(\d{1,2})\s*h\s*(\d{2})\b", re.IGNORECASE)
 
 # "às 8", "as 20", "à uma", "as oito" — with an optional part-of-day
 # qualifier that decides AM vs PM.
+# Portuguese introduces a clock time with several prepositions, not just
+# "às": "das 9 da manhã", "pelas 9", "por volta das 9". Accepting only
+# "às/as" meant those fell through to the model's own hour, which is the
+# thing this module exists to stop trusting.
 _RE_PT_AT = re.compile(
-    r"\b[àa]s?\s+(\d{1,2}|" + "|".join(_PT_NUMBER_WORDS) + r")"
+    r"\b(?:[àa]s?|das|pelas|para\s+as)\s+(\d{1,2}|"
+    + "|".join(_PT_NUMBER_WORDS)
+    + r")"
     r"(?:\s*[:h]\s*(\d{2}))?"
     r"(\s+e\s+meia)?"
     r"(?:\s+(?:da|de)\s+(manhã|manha|tarde|noite|madrugada))?",
@@ -276,11 +282,17 @@ _WEEKDAYS = {
     # pt-PT. "Sábado"/"domingo" are the only ones that aren't
     # "<n>-feira"; the numbered ones are often said without the suffix,
     # so both spellings are accepted.
-    "segunda-feira": 0, "segunda": 0,
-    "terça-feira": 1, "terça": 1, "terca-feira": 1, "terca": 1,
-    "quarta-feira": 2, "quarta": 2,
-    "quinta-feira": 3, "quinta": 3,
-    "sexta-feira": 4, "sexta": 4,
+    # Three spellings each, because all three occur in real transcripts:
+    # hyphenated as written, bare as spoken, and RUN TOGETHER because
+    # Deepgram returns "segundafeira" for spoken "segunda-feira". Missing
+    # that last form is not cosmetic — it silently disabled the weekday
+    # correction on the exact phrasing a Portuguese speaker uses most.
+    "segunda-feira": 0, "segundafeira": 0, "segunda": 0,
+    "terça-feira": 1, "terçafeira": 1, "terça": 1,
+    "terca-feira": 1, "tercafeira": 1, "terca": 1,
+    "quarta-feira": 2, "quartafeira": 2, "quarta": 2,
+    "quinta-feira": 3, "quintafeira": 3, "quinta": 3,
+    "sexta-feira": 4, "sextafeira": 4, "sexta": 4,
     "sábado": 5, "sabado": 5,
     "domingo": 6,
 }

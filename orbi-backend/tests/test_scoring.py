@@ -166,6 +166,7 @@ class TestCalculatePressureScore:
 # so a wrong weekday reached the user's reminder untouched.
 
 from app.services.time_extractor import (  # noqa: E402
+    extract_local_clock,
     extract_weekday,
     resolve_weekday_date,
 )
@@ -213,3 +214,35 @@ class TestResolveWeekdayDate:
         saturday = datetime(2026, 8, 29, 18, 30, tzinfo=timezone.utc)
         got = resolve_weekday_date(saturday, 0)
         assert (got.hour, got.minute) == (18, 30)
+
+
+class TestPortugueseTranscriptForms:
+    """Forms that appear in real Deepgram output, not in a dictionary.
+
+    Both of these were found from a live capture that scheduled a Monday
+    task for the following Friday at the wrong hour, because neither the
+    weekday nor the clock pattern matched what was actually transcribed.
+    """
+
+    def test_run_together_weekday(self):
+        # Deepgram writes spoken "segunda-feira" as one word.
+        assert extract_weekday("na proxima segundafeira") == (0, True)
+        assert extract_weekday("na sextafeira") == (4, False)
+        assert extract_weekday("tercafeira") == (1, False)
+
+    def test_hyphenated_and_bare_still_work(self):
+        assert extract_weekday("proxima segunda-feira") == (0, True)
+        assert extract_weekday("na sexta") == (4, False)
+
+    def test_clock_prepositions_beyond_as(self):
+        # "às" is not the only way Portuguese introduces a time.
+        assert extract_local_clock("por volta das 9 da manha", language="pt-PT") == (9, 0)
+        assert extract_local_clock("das 9 da manha", language="pt-PT") == (9, 0)
+        assert extract_local_clock("pelas 9", language="pt-PT") == (9, 0)
+
+    def test_part_of_day_still_applies(self):
+        assert extract_local_clock("das 8 da noite", language="pt-PT") == (20, 0)
+
+    def test_english_patterns_unaffected(self):
+        assert extract_local_clock("at 8 pm") == (20, 0)
+        assert extract_local_clock("at 20:30") == (20, 30)

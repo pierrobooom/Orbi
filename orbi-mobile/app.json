@@ -47,7 +47,12 @@
       ],
       "expo-secure-store",
       "@react-native-community/datetimepicker",
-      "expo-audio",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Orbi uses the microphone so you can capture and edit tasks by speaking."
+        }
+      ],
       [
         "expo-notifications",
         {

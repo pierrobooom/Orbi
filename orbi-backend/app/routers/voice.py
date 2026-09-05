@@ -58,6 +58,11 @@ async def transcribe(
         None,
         description="BCP-47 tag, e.g. 'pt-PT'. Falls back to the stored preference.",
     ),
+    mimetype: str | None = Form(
+        None,
+        description="Audio MIME type. Preferred over the part's own "
+        "Content-Type, which the client cannot always control.",
+    ),
     auth: dict = Depends(get_current_user_with_tier),
 ):
     """Transcribe an uploaded audio file via Deepgram.
@@ -91,7 +96,10 @@ async def transcribe(
             audio_bytes=audio_bytes,
             user_id=user_id,
             user_tier=user_tier,
-            mimetype=audio.content_type or "audio/webm",
+            # Client-supplied type wins: since RN 0.86 the upload is a
+            # Blob whose inferred Content-Type depends on the file
+            # extension, and Deepgram needs the real container.
+            mimetype=mimetype or audio.content_type or "audio/webm",
             language=language,
         )
     except transcription.TranscriptionQuotaExceeded as exc:

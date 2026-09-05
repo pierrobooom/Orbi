@@ -62,6 +62,7 @@ export function useVoiceRecorder() {
     const run = async (): Promise<boolean> => {
       const perm = await requestRecordingPermissionsAsync();
       if (!perm.granted) {
+        console.warn("[voice] permission not granted:", JSON.stringify(perm));
         setPermissionError(
           "Microphone permission denied. Enable it in iOS Settings to use voice.",
         );
@@ -94,6 +95,11 @@ export function useVoiceRecorder() {
         return true;
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
+        // Logged as well as surfaced: the in-app message is all the user
+        // needs, but a swallowed stack is invisible to anyone debugging
+        // from the Metro console — which is exactly where a native audio
+        // failure has to be diagnosed from.
+        console.error("[voice] start failed:", e);
         setPermissionError(`Could not start recording: ${msg}`);
         return false;
       }
