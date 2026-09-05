@@ -267,4 +267,5 @@ export const ptPT: Record<string, string> = {
   "Preferences and notification devices": "Preferências e dispositivos de notificação",
   "Type your email to confirm": "Escreve o teu email para confirmar",
   "Permanently delete my account": "Apagar a minha conta permanentemente",
+  "Showing {n} of {total}": "A mostrar {n} de {total}",
 };

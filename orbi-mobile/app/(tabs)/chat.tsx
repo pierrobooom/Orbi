@@ -10,6 +10,13 @@
 // difference is that a structured result becomes an offer — a card you
 // tap to confirm — rather than an immediate navigation, because in a
 // chat you are often thinking out loud rather than issuing a command.
+//
+// That principle applies to list results too. An earlier version pushed
+// matches into the Universe tab's focused-cluster view, which meant
+// asking "show me the gym tasks" silently rearranged a screen you were
+// not looking at and then made you go find it. A question asked in the
+// chat gets answered in the chat: the matches render as rows you can tap
+// straight through to.
 
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
@@ -32,7 +39,6 @@ import { useT } from "@/i18n";
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
 import { ApiError, isQuotaError, transcribeAudio } from "@/services/api";
 import { useChatStore, type ChatMessage } from "@/stores/chatStore";
-import { useUniverseStore } from "@/stores/universeStore";
 import { colors } from "@/theme/colors";
 
 interface ParsedTask {
@@ -45,8 +51,18 @@ interface ParsedTask {
   confidence?: number;
 }
 
+interface ListResult {
+  id: string;
+  title: string;
+  label?: string | null;
+  due_at?: string | null;
+  parent_cluster_id?: string | null;
+}
+
 interface ChatData {
   tasks?: ParsedTask[];
+  results?: ListResult[];
+  count?: number;
   action?: "complete" | "delete" | "update" | "list";
   resolved?: boolean;
   ambiguous?: boolean;
@@ -67,7 +83,6 @@ export default function ChatScreen() {
   const hydrate = useChatStore((s) => s.hydrate);
   const send = useChatStore((s) => s.send);
   const clear = useChatStore((s) => s.clear);
-  const setSearchResults = useUniverseStore((s) => s.setSearchResults);
 
   const [draft, setDraft] = useState("");
   const [voiceBusy, setVoiceBusy] = useState(false);
@@ -88,16 +103,11 @@ export default function ChatScreen() {
   const submit = useCallback(
     async (text: string, source: "text" | "voice") => {
       setError(null);
-      const reply = await send(text, source);
-      if (!reply) return;
-      const data = reply.data as ChatData | null;
-      // A list result is better shown than described — push it into the
-      // universe's focused-cluster view, same as voice search.
-      if (data?.action === "list" && data.task_ids && data.task_ids.length > 0) {
-        setSearchResults(text, data.task_ids);
-      }
+      await send(text, source);
+      // Deliberately does NOT touch the universe. List results render
+      // inline below the reply — see the note at the top of the file.
     },
-    [send, setSearchResults],
+    [send],
   );
 
   const onSend = async () => {
@@ -172,6 +182,8 @@ export default function ChatScreen() {
     const offersTasks = !!data?.tasks && data.tasks.length > 0;
     const offersAction =
       !!data?.action && data.action !== "list" && !!data.resolved && !!data.task;
+    const results = data?.action === "list" ? (data.results ?? []) : [];
+    const total = data?.count ?? results.length;
 
     return (
       <View style={[styles.row, mine ? styles.rowMine : styles.rowTheirs]}>
@@ -190,6 +202,52 @@ export default function ChatScreen() {
             <Text style={styles.failedNote}>{t("Not sent")}</Text>
           ) : null}
         </View>
+
+        {results.length > 0 ? (
+          <View style={styles.results}>
+            {results.map((r) => (
+              <Pressable
+                key={r.id}
+                style={styles.resultRow}
+                onPress={() =>
+                  router.push({ pathname: "/task-detail", params: { id: r.id } })
+                }
+              >
+                <View style={styles.resultDot} />
+                <View style={styles.resultBody}>
+                  <Text style={styles.resultTitle} numberOfLines={2}>
+                    {r.title}
+                  </Text>
+                  {r.due_at ? (
+                    <Text
+                      style={[
+                        styles.resultDue,
+                        new Date(r.due_at) < new Date() && styles.resultOverdue,
+                      ]}
+                    >
+                      {new Date(r.due_at).toLocaleString(undefined, {
+                        month: "short",
+                        day: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </Text>
+                  ) : null}
+                </View>
+                <MaterialIcons
+                  name="chevron-right"
+                  size={18}
+                  color={colors.inkDim}
+                />
+              </Pressable>
+            ))}
+            {total > results.length ? (
+              <Text style={styles.resultMore}>
+                {t("Showing {n} of {total}", { n: results.length, total })}
+              </Text>
+            ) : null}
+          </View>
+        ) : null}
 
         {offersTasks || offersAction ? (
           <Pressable style={styles.offer} onPress={() => openTaskOffer(data!)}>
@@ -364,6 +422,39 @@ const styles = StyleSheet.create({
     borderColor: colors.accent,
   },
   offerText: { color: colors.accent, fontSize: 13, fontWeight: "600" },
+  results: {
+    marginTop: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.line,
+    overflow: "hidden",
+    alignSelf: "stretch",
+  },
+  resultRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 11,
+    paddingHorizontal: 12,
+    borderBottomColor: colors.line,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  resultDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.accent,
+  },
+  resultBody: { flex: 1 },
+  resultTitle: { color: colors.ink, fontSize: 14, lineHeight: 19 },
+  resultDue: { color: colors.inkDim, fontSize: 11, marginTop: 2 },
+  resultOverdue: { color: colors.overdue, fontWeight: "700" },
+  resultMore: {
+    color: colors.inkDim,
+    fontSize: 11,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
   error: {
     color: colors.overdue,
     fontSize: 12,

@@ -64,6 +64,11 @@ class ChatResponse(BaseModel):
 
 _TASK_ACTIONS = frozenset({"complete", "delete", "update", "list"})
 
+# A chat reply listing more than this is a wall of text, not an answer.
+# `count` still reports the true total, so the client can say
+# "showing 20 of 34" rather than quietly truncating.
+_LIST_RESULT_LIMIT = 20
+
 # Values that mean "the model left this empty" rather than being content.
 _NULLISH = frozenset({"", "null", "none", "undefined", "n/a", "nil"})
 
@@ -371,7 +376,31 @@ async def chat(
             data = {
                 "action": "list",
                 "filter": task_filter,
+                # task_ids drives the universe's focused-cluster view, which
+                # is what the mic on the Universe tab uses.
                 "task_ids": [str(t["id"]) for t in matches],
+                # `results` carries enough to RENDER the list wherever the
+                # question was asked. The chat surface answers inline
+                # rather than mutating the universe behind another tab —
+                # asking a question should not silently rearrange a screen
+                # you are not looking at.
+                #
+                # Field-stripped deliberately: a task row is ~19 columns
+                # including a 12KB embedding, and the client needs five.
+                "results": [
+                    {
+                        "id": str(t["id"]),
+                        "title": t.get("title"),
+                        "label": t.get("label"),
+                        "due_at": t.get("due_at"),
+                        "parent_cluster_id": (
+                            str(t["parent_cluster_id"])
+                            if t.get("parent_cluster_id")
+                            else None
+                        ),
+                    }
+                    for t in matches[:_LIST_RESULT_LIMIT]
+                ],
                 "count": len(matches),
             }
             reply = (
