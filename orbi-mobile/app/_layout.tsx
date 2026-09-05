@@ -3,8 +3,16 @@
 // to gestures later), registers the safe-area provider, and gates routes
 // on auth state.
 
-import { ThemeProvider } from "@react-navigation/native";
-import { Stack, useRouter, useSegments, type Href } from "expo-router";
+// ThemeProvider comes from expo-router now: SDK 56 dropped
+// compatibility between expo-router and standalone react-navigation,
+// and Metro refuses to bundle a project that depends on both.
+import {
+  Stack,
+  ThemeProvider,
+  useRouter,
+  useSegments,
+  type Href,
+} from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect } from "react";
 import { ActivityIndicator, View } from "react-native";
@@ -116,10 +124,7 @@ export default function RootLayout() {
                 name="delete-account"
                 options={{ presentation: "modal", headerShown: false }}
               />
-              <Stack.Screen
-                name="modal"
-                options={{ presentation: "modal", title: "Modal" }}
-              />
+
             </Stack>
           </AuthGate>
           <StatusBar style="light" />
