@@ -210,13 +210,15 @@ export default function NewTaskScreen() {
               mode="datetime"
               display={Platform.OS === "ios" ? "spinner" : "default"}
               themeVariant="dark"
-              onChange={(event, date) => {
-                // Android closes the picker after a selection; iOS keeps
-                // it open on the spinner (we close on done via the body tap).
+              // Split callbacks replace the deprecated `onChange`, which
+              // multiplexed select/dismiss through one handler keyed on
+              // event.type. Android closes the picker after a selection;
+              // iOS keeps the spinner open and closes via the Done row.
+              onValueChange={(_event, date) => {
                 if (Platform.OS === "android") setShowPicker(false);
-                if (event.type === "set" && date) setDueAt(date);
-                if (event.type === "dismissed") setShowPicker(false);
+                if (date) setDueAt(date);
               }}
+              onDismiss={() => setShowPicker(false)}
             />
           ) : null}
 

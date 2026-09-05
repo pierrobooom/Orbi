@@ -398,13 +398,13 @@ export default function VoiceConfirmScreen() {
               mode="datetime"
               display={Platform.OS === "ios" ? "spinner" : "default"}
               themeVariant="dark"
-              onChange={(event, date) => {
+              // See new-task.tsx — same migration off the deprecated
+              // `onChange` multiplexer.
+              onValueChange={(_event, date) => {
                 if (Platform.OS === "android") setShowPicker(false);
-                if (event.type === "set" && date) {
-                  applyEdit({ due_at: date.toISOString() });
-                }
-                if (event.type === "dismissed") setShowPicker(false);
+                if (date) applyEdit({ due_at: date.toISOString() });
               }}
+              onDismiss={() => setShowPicker(false)}
             />
           ) : null}
 
