@@ -25,6 +25,7 @@ from app.db import (
 from app.models.conversation import ConversationSource
 from app.services.ai_router import AIRateLimited
 from app.services.auth import get_current_user, get_current_user_with_tier
+from app.services.chat_context import build_chat_context
 from app.services.cluster_matcher import (
     build_task_query_text,
     match_cluster_semantic,
@@ -52,6 +53,11 @@ class ChatRequest(BaseModel):
     # BCP-47 tag. Optional — when absent the server falls back to the
     # user's stored preference, then to English.
     language: Optional[str] = None
+    # Opt-in retrieval. The Chat tab sets this so the model can answer
+    # questions about the user's actual tasks; the Universe mic leaves it
+    # off, because capturing "buy milk" does not need the task list and
+    # the context costs ~600 tokens a call.
+    include_context: bool = False
 
 
 class ChatResponse(BaseModel):
@@ -287,6 +293,24 @@ async def chat(
     history = await conv_db.fetch_conversation_history(user_id, session_id, limit=10)
     history_messages = [{"role": h["role"], "content": h["content"]} for h in history]
 
+    # Retrieval, when the caller asked for it. Failure is non-fatal: the
+    # model falls back to being a pure intent router, which is what it
+    # was before this existed.
+    extra_context: str | None = None
+    if body.include_context:
+        try:
+            ctx_tasks = await tasks_db.fetch_tasks_for_user(user_id)
+            ctx_clusters = await clusters_db.fetch_clusters_for_user(user_id)
+            extra_context = await build_chat_context(
+                message=body.message,
+                user_id=user_id,
+                active_tasks=[t for t in ctx_tasks if t.get("status") == "active"],
+                clusters=ctx_clusters,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Could not build chat context: %s", exc)
+            extra_context = None
+
     # Coordinator classifies intent. A rate limit here is reported as a
     # 429 rather than swallowed, so the client can say "wait a moment"
     # instead of "couldn't parse that".
@@ -298,6 +322,7 @@ async def chat(
             conversation_history=history_messages,
             user_timezone=body.user_timezone,
             language=language,
+            extra_context=extra_context,
         )
     except AIRateLimited as exc:
         raise HTTPException(

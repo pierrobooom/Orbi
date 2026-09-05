@@ -694,6 +694,11 @@ export async function chatMessage(
   message: string,
   source: "voice" | "text" = "text",
   sessionId?: string,
+  /** Ask the server to retrieve the user's tasks and give them to the
+   * model, so it can ANSWER questions rather than only route them. Costs
+   * ~500 extra tokens per call, so the Chat tab opts in and the Universe
+   * mic does not — capturing "buy milk" needs no task list. */
+  includeContext = false,
 ): Promise<ChatResponse> {
   // Send the device's IANA timezone so the LLM can interpret
   // user-stated times like "4 PM" in local time. Falling back to
@@ -710,6 +715,7 @@ export async function chatMessage(
     source,
     session_id: sessionId,
     user_timezone: userTimezone,
+    include_context: includeContext,
   };
   const res = await authFetch(`${V1}/chat`, {
     method: "POST",

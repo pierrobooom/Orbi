@@ -38,6 +38,7 @@ async def classify_intent(
     conversation_history: list[dict] | None = None,
     user_timezone: str | None = None,
     language: str | None = None,
+    extra_context: str | None = None,
 ) -> dict:
     """Classify the user's intent and determine which agent should handle it.
 
@@ -83,6 +84,13 @@ async def classify_intent(
             f"{msg['role']}: {msg['content']}" for msg in recent
         )
         context_lines.append(f"Recent conversation:\n{history_text}")
+
+    # Retrieved context about the user's actual tasks, when the caller
+    # asked for it. Appended AFTER the static prompt so the cached prefix
+    # is unaffected — Groq caches on exact prefix, and putting variable
+    # content early would invalidate the cache on every single call.
+    if extra_context:
+        context_lines.append(extra_context)
 
     # The prompt is written in English, so without an explicit
     # instruction the model replies in English even when the user spoke

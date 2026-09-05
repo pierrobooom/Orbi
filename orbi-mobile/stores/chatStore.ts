@@ -114,7 +114,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }));
 
     try {
-      const reply = await chatMessage(trimmed, source, get().sessionId ?? undefined);
+      // Chat always opts into retrieval — this surface is where the
+      // user asks questions, not just issues commands.
+      const reply = await chatMessage(
+        trimmed,
+        source,
+        get().sessionId ?? undefined,
+        true,
+      );
 
       // First message of a fresh conversation: the server minted the
       // session id, so adopt and persist it.
