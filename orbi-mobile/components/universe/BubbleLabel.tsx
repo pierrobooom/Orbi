@@ -30,10 +30,19 @@ interface PhysicsState {
   phaseY: number;
   freqX: number;
   freqY: number;
+  // The bubble this entry belongs to. Consumers resolve by id instead of
+  // by array position so a one-render-stale array cannot hand them
+  // another bubble's coordinates.
+  id: string;
 }
 
 interface Props {
   index: number;
+  // Identity, so a stale physics array can't hand us the wrong bubble.
+  bubbleId: string;
+  // Layout position for this bubble, always in step with the current
+  // bubble list. Used when the physics array has not caught up yet.
+  fallback: PhysicsState;
   label: string;
   physics: SharedValue<PhysicsState[]>;
   // Bigger label for dominant bubbles (cluster name); smaller for the
@@ -44,10 +53,26 @@ interface Props {
 
 const LABEL_WIDTH = 120; // wide enough for our truncated label; centered
 
-export default function BubbleLabel({ index, label, physics, size = "normal", subtitle }: Props) {
+export default function BubbleLabel({
+  index,
+  bubbleId,
+  fallback,
+  label,
+  physics,
+  size = "normal",
+  subtitle,
+}: Props) {
   const containerStyle = useAnimatedStyle(() => {
-    const p = physics.value[index];
-    if (!p) return { opacity: 0 } as const;
+    // Index first as a fast path, but only trust it when the entry is
+    // actually this bubble's. Otherwise scan, and fall back to the
+    // layout anchor rather than hiding — an invisible label is how this
+    // went unnoticed the first time.
+    const byIndex = physics.value[index];
+    let p =
+      byIndex && byIndex.id === bubbleId
+        ? byIndex
+        : physics.value.find((e) => e.id === bubbleId);
+    if (!p) p = fallback;
     return {
       position: "absolute" as const,
       left: p.x - LABEL_WIDTH / 2,

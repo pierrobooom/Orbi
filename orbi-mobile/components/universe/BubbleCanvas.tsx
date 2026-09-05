@@ -76,6 +76,10 @@ interface PhysicsState {
   phaseY: number;
   freqX: number;
   freqY: number;
+  // The bubble this entry belongs to. Consumers resolve by id instead of
+  // by array position so a one-render-stale array cannot hand them
+  // another bubble's coordinates.
+  id: string;
 }
 
 function pressureToRadius(p: number): number {
@@ -193,6 +197,7 @@ function buildInitialStates(
       // the path is a slow open curve rather than a circle or a line.
       freqX: (Math.PI * 2) / (14000 + Math.random() * 12000),
       freqY: (Math.PI * 2) / (16000 + Math.random() * 12000),
+      id: b.id,
     };
   });
 }
@@ -628,6 +633,7 @@ function BubbleField({
           phaseY: prev[prevIdx].phaseY,
           freqX: prev[prevIdx].freqX,
           freqY: prev[prevIdx].freqY,
+          id,
         };
       }
       return init;
@@ -748,6 +754,8 @@ function BubbleField({
             <BubbleLabel
               key={`label-${b.id}`}
               index={i}
+              bubbleId={b.id}
+              fallback={initial[i]}
               physics={physics}
               label={cluster.name}
               subtitle={
@@ -764,6 +772,8 @@ function BubbleField({
           <BubbleLabel
             key={`label-${b.id}`}
             index={i}
+            bubbleId={b.id}
+            fallback={initial[i]}
             physics={physics}
             label={showAsDominant ? cluster.name : label}
             subtitle={showAsDominant ? label : undefined}
@@ -775,6 +785,8 @@ function BubbleField({
         <BubbleHitArea
           key={`hit-${b.id}`}
           index={i}
+          bubbleId={b.id}
+          fallback={initial[i]}
           physics={physics}
           onPress={() => onBubblePress(b)}
           onLongPress={onBubbleLongPress ? () => onBubbleLongPress(b) : undefined}

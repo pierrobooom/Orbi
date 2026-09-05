@@ -37,10 +37,19 @@ interface PhysicsState {
   phaseY: number;
   freqX: number;
   freqY: number;
+  // The bubble this entry belongs to. Consumers resolve by id instead of
+  // by array position so a one-render-stale array cannot hand them
+  // another bubble's coordinates.
+  id: string;
 }
 
 interface Props {
   index: number;
+  // Identity, so a stale physics array can't move the tap target onto a
+  // different bubble — or size it to zero and swallow the tap entirely.
+  bubbleId: string;
+  // Layout position, always in step with the current bubble list.
+  fallback: PhysicsState;
   physics: SharedValue<PhysicsState[]>;
   // Tap padding — gives the user a generous hit area without making
   // overlapping bubbles steal each other's taps. Roughly 1× the radius
@@ -53,12 +62,24 @@ interface Props {
   onLongPress?: () => void;
 }
 
-export default function BubbleHitArea({ index, physics, padding = 6, onPress, onLongPress }: Props) {
+export default function BubbleHitArea({
+  index,
+  bubbleId,
+  fallback,
+  physics,
+  padding = 6,
+  onPress,
+  onLongPress,
+}: Props) {
   const overlayStyle = useAnimatedStyle(() => {
-    const p = physics.value[index];
-    if (!p) {
-      return { opacity: 0, width: 0, height: 0 } as const;
-    }
+    const byIndex = physics.value[index];
+    let p =
+      byIndex && byIndex.id === bubbleId
+        ? byIndex
+        : physics.value.find((e) => e.id === bubbleId);
+    // Never collapse to zero size: that silently ate every tap on this
+    // bubble until the subtree remounted.
+    if (!p) p = fallback;
     const size = (p.r + padding) * 2;
     return {
       position: "absolute" as const,
