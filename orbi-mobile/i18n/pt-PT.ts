@@ -292,6 +292,12 @@ export const ptPT: Record<string, string> = {
   "Quiet until": "Silêncio até às",
   "Nothing arrives during these hours. A reminder that falls inside waits for the morning rather than being lost.":
     "Nada chega durante estas horas. Um lembrete que caia neste período espera pela manhã em vez de se perder.",
+  // Notification action buttons. Kept to one or two words — iOS truncates
+  // them hard on the lock screen.
+  "Snooze 1h": "Adiar 1h",
+  "Reply": "Responder",
+  "Send": "Enviar",
+  "What happened?": "O que aconteceu?",
   "Mute reminders": "Silenciar lembretes",
   "No notifications for tasks in this cluster. The tasks stay exactly as they are — only the nudges stop.":
     "Sem notificações para as tarefas deste grupo. As tarefas ficam exactamente como estão — só os avisos param.",

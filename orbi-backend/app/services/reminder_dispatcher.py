@@ -68,56 +68,86 @@ _CATEGORIES = {
     "escalate": "orbi.task.chase",
 }
 
-# Copy lives here rather than coming from the LLM: it is four sentences per
-# language, it must be identical every time, and translating it is a
-# dictionary lookup instead of a prompt. {title} is the task title.
-_COPY = {
+# How a notification is laid out, and why.
+#
+# The first version led with the kind ("Coming up", "Due now") and pushed
+# the task into the body. That is backwards: on a lock screen the bold
+# first line is the only thing reliably read, and "Coming up" is the one
+# piece of information the user already has — they know it's a reminder,
+# it came from a reminders app. So the TITLE is the task itself.
+#
+# iOS gives a second bold line, the subtitle, which is exactly the shape
+# of a countdown, so that is where "in 1h 30m" goes. Android drops the
+# subtitle, so the body repeats nothing essential but must still stand
+# alone there.
+#
+#   Tomar banho            <- title: what
+#   Daqui a 1h 30m         <- subtitle: when (iOS only)
+#   Adrift                 <- body: context, or the question being asked
+#
+# Copy is templated rather than generated: it must be identical every
+# time, and translating it is a dictionary lookup instead of a prompt.
+
+
+def _is_pt(language: str | None) -> bool:
+    return (language or "").lower().startswith("pt")
+
+
+def _format_duration(minutes: int, portuguese: bool) -> str:
+    """A compact human duration: "45 min", "1h 30m", "2 d 4h", "3 weeks".
+
+    Two units at most. "1 day, 4 hours and 12 minutes" is a train
+    timetable, not a nudge, and the extra precision changes no decision.
+    """
+    if minutes < 60:
+        return f"{minutes} min"
+    if minutes < 1440:
+        hours, rest = divmod(minutes, 60)
+        return f"{hours}h {rest}m" if rest else f"{hours}h"
+    if minutes < 20160:  # under a fortnight, days read better than weeks
+        days, rest = divmod(minutes, 1440)
+        hours = rest // 60
+        unit = "dia" if portuguese and days == 1 else ("dias" if portuguese else ("day" if days == 1 else "days"))
+        return f"{days} {unit} {hours}h" if hours else f"{days} {unit}"
+    weeks = minutes // 10080
+    if portuguese:
+        return f"{weeks} semana" if weeks == 1 else f"{weeks} semanas"
+    return f"{weeks} week" if weeks == 1 else f"{weeks} weeks"
+
+
+def _countdown(due_at: datetime | None, now: datetime, language: str | None) -> str:
+    """The subtitle line: how long until the deadline, or how far past it."""
+    portuguese = _is_pt(language)
+    if due_at is None:
+        return "Sem prazo" if portuguese else "No deadline"
+
+    delta = (due_at - now).total_seconds()
+    minutes = int(abs(delta) // 60)
+
+    if minutes < 1:
+        return "É agora" if portuguese else "Due now"
+
+    duration = _format_duration(minutes, portuguese)
+    if delta < 0:
+        return f"Atrasada {duration}" if portuguese else f"{duration} overdue"
+    return f"Daqui a {duration}" if portuguese else f"Due in {duration}"
+
+
+# Body line per kind. `lead` and `due` carry context (which cluster this
+# belongs to); `chase` and `escalate` carry the question they are asking,
+# because that question is the whole point of them.
+_BODY = {
     "en": {
-        "lead": ("Coming up", "{title} is due {when}."),
-        "due": ("Due now", "{title}"),
-        "chase": ("Did you get to it?", "{title} was due {when}."),
-        "escalate": ("Still open", "{title} is still waiting."),
+        "chase": "Did you get this done?",
+        "escalate": "Still open — worth a decision.",
     },
     "pt": {
-        "lead": ("Está a chegar", "{title} tem prazo {when}."),
-        "due": ("É agora", "{title}"),
-        "chase": ("Conseguiste fazer?", "{title} tinha prazo {when}."),
-        "escalate": ("Ainda por fazer", "{title} continua à espera."),
+        "chase": "Já está feita?",
+        "escalate": "Continua em aberto — vale a pena decidir.",
     },
 }
 
-
-def _copy_for(language: str | None) -> dict:
-    return _COPY["pt"] if (language or "").lower().startswith("pt") else _COPY["en"]
-
-
-def _relative_when(due_at: datetime | None, now: datetime, language: str | None) -> str:
-    """A short, human phrase for when the deadline is or was.
-
-    Intentionally coarse. The notification is a nudge, not a schedule — an
-    exact timestamp reads as machine output and takes up room the task
-    title needs.
-    """
-    portuguese = (language or "").lower().startswith("pt")
-    if due_at is None:
-        return "soon" if not portuguese else "em breve"
-
-    delta = due_at - now
-    minutes = int(abs(delta).total_seconds() // 60)
-    past = delta.total_seconds() < 0
-
-    if minutes < 60:
-        unit = f"{minutes} min"
-    elif minutes < 1440:
-        hours = minutes // 60
-        unit = f"{hours}h"
-    else:
-        days = minutes // 1440
-        unit = f"{days} d"
-
-    if portuguese:
-        return f"há {unit}" if past else f"daqui a {unit}"
-    return f"{unit} ago" if past else f"in {unit}"
+_NO_CLUSTER = {"en": "Adrift", "pt": "Adrift"}
 
 
 def _parse_dt(value) -> datetime | None:
@@ -333,6 +363,21 @@ async def dispatch_due(now: datetime | None = None) -> dict:
     }
 
 
+async def _cluster_names_for(owner_id: UUID) -> dict[str, str]:
+    """Cluster id -> name, for the body line. Never fails a dispatch.
+
+    A notification that says which part of your life a task belongs to is
+    more useful than one that doesn't, but not so much more useful that a
+    failed lookup should stop it being sent.
+    """
+    try:
+        rows = await clusters_db.fetch_clusters_for_user(owner_id)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Cluster names unavailable for notification body: %s", exc)
+        return {}
+    return {str(c["id"]): str(c.get("name") or "") for c in rows}
+
+
 async def _dispatch_for_owner(
     owner_id: UUID, plans: list[dict], now: datetime
 ) -> dict:
@@ -402,21 +447,29 @@ async def _dispatch_for_owner(
         await notifications_db.mark_state([p["id"] for p in winners], "skipped")
         return {"sent": 0, "skipped": len(losers) + len(winners), "postponed": 0}
 
-    copy = _copy_for(prefs.get("language"))
+    language = prefs.get("language")
+    lang_key = "pt" if _is_pt(language) else "en"
+    cluster_names = await _cluster_names_for(owner_id)
+
     sent_ids: list[str] = []
     for plan in winners:
         task = plan.get("task_bubbles") or {}
-        title_template, body_template = copy.get(plan["kind"], copy["due"])
-        when = _relative_when(_parse_dt(task.get("due_at")), now, prefs.get("language"))
+        kind = plan["kind"]
+
+        cluster_id = task.get("parent_cluster_id")
+        cluster = cluster_names.get(str(cluster_id)) if cluster_id else None
+        body = _BODY[lang_key].get(kind) or cluster or _NO_CLUSTER[lang_key]
+
         await send_push(
             tokens,
-            title=title_template,
-            body=body_template.format(title=task.get("title") or "", when=when),
+            title=task.get("title") or "",
+            subtitle=_countdown(_parse_dt(task.get("due_at")), now, language),
+            body=body,
+            category_id=_CATEGORIES.get(kind, _CATEGORIES["due"]),
             data={
-                "kind": plan["kind"],
+                "kind": kind,
                 "planId": plan["id"],
                 "taskId": str(plan["task_id"]),
-                "categoryId": _CATEGORIES.get(plan["kind"], _CATEGORIES["due"]),
             },
         )
         sent_ids.append(plan["id"])

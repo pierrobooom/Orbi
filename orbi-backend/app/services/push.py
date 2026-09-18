@@ -28,10 +28,21 @@ async def send_push(
     title: str,
     body: str,
     data: dict | None = None,
+    subtitle: str | None = None,
+    category_id: str | None = None,
 ) -> list[dict]:
     """Fan out a push to every token. Returns the list of tickets Expo returned.
 
     Empty token list short-circuits without touching the network.
+
+    `subtitle` is an iOS-only second line, rendered between the title and
+    the body. Android ignores it, so nothing essential may live there.
+
+    `category_id` names a set of action buttons the CLIENT registered with
+    setNotificationCategoryAsync. It has to be a TOP-LEVEL field: it was
+    originally passed inside `data`, where Expo never looks for it, so the
+    buttons silently never appeared on a notification that otherwise
+    worked perfectly.
     """
     token_list = [t for t in tokens if t]
     if not token_list:
@@ -48,6 +59,8 @@ async def send_push(
                     "body": body,
                     "data": data or {},
                     "sound": "default",
+                    **({"subtitle": subtitle} if subtitle else {}),
+                    **({"categoryId": category_id} if category_id else {}),
                 }
                 for tok in batch
             ]

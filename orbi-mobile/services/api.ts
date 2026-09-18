@@ -684,6 +684,37 @@ export async function resyncNotificationPlans(): Promise<{
   return await res.json();
 }
 
+/** Push a reminder back and let it fire again.
+ *
+ * Re-arms the same plan rather than creating a new one, so snooze_count
+ * keeps climbing — that count is the signal a task is being avoided
+ * rather than done. */
+export async function snoozeNotification(
+  planId: string,
+  minutes: number,
+): Promise<NotificationPlan> {
+  const res = await authFetch(`${V1}/notifications/${planId}/snooze`, {
+    method: "POST",
+    body: JSON.stringify({ minutes }),
+  });
+  if (!res.ok) throw await parseError(res);
+  return (await res.json()) as NotificationPlan;
+}
+
+/** Record that the user dealt with a reminder without completing the task.
+ *
+ * Stops the escalation without claiming the work is done — "seen it, not
+ * yet" is a real answer. */
+export async function markNotificationAnswered(
+  planId: string,
+): Promise<NotificationPlan> {
+  const res = await authFetch(`${V1}/notifications/${planId}/answered`, {
+    method: "POST",
+  });
+  if (!res.ok) throw await parseError(res);
+  return (await res.json()) as NotificationPlan;
+}
+
 export async function getMyPreferences(): Promise<UserPreferences> {
   const res = await authFetch(`${V1}/users/me/preferences`);
   if (!res.ok) throw await parseError(res);

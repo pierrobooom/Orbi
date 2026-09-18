@@ -20,6 +20,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import "react-native-reanimated";
 
+import { useNotificationActions } from "@/hooks/useNotificationActions";
 import { usePushRegistration } from "@/hooks/usePushRegistration";
 // Importing the authStore here ensures supabase.auth.onAuthStateChange is
 // subscribed before any screen reads from it.
@@ -145,6 +146,10 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   // Kick off Expo push registration after sign-in. Hook is no-op until
   // the session is non-null, and self-guards against duplicate runs.
   usePushRegistration();
+  // Register the Done / Snooze / Reply buttons and act on them. Must be
+  // mounted at the root: a response can arrive while the app is cold, and
+  // a listener living on a screen isn't there to hear it.
+  useNotificationActions();
   // Seed UI language from the server-side preference once signed in.
   // Failure is silent and leaves English — a missing preferences row
   // is the normal state for a new user, not an error worth surfacing.
