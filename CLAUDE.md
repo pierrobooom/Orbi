@@ -772,20 +772,42 @@ Completed phases:
   on existing tasks, semantic search + cluster matching, Money tab, tier gating,
   push registration, European Portuguese (pipeline + UI), overdue/Done task views
 
-Open before a test release:
+Open before a test release. Reviewed against the code on 2026-09-18 — four
+items previously listed here were already done and have been removed
+(transcript logging IS gated in services/privacy.py, the bubble cap IS
+enforced at routers/tasks.py, weekday parsing was fixed, and the Chat tab
+shipped). Verify before trusting this list again.
+
 \- Groq Developer tier — the free tier's 200k tokens/day cannot serve one Pro user
-\- Voice provider costs priced 2026-08-31: device TTS chosen, Deepgram STT kept
-\- Reminder ACTIONS — scheduling and sending are done (migration 0011,
-  services/reminder_schedule.py + reminder_dispatcher.py, Settings UI). What
-  is missing is the Done / Snooze / Reply buttons on the notification itself:
-  they need notification categories, which need an EAS dev build, which needs
-  an Apple Developer account. iOS cannot record the microphone from a
-  notification at all — the achievable version is a text-input action whose
-  keyboard offers dictation, so treat "mic on the lock screen" as that.
-\- Chat / Memory tab — backend complete, no mobile surface
-\- Weekday parsing — "Friday" resolves to the wrong date in EN and PT
-\- Gate transcript logging behind ENVIRONMENT (violates the security rules above)
-\- Server-side bubble cap — the client is currently the only enforcement
+\- FINANCE INTELLIGENCE is sold and not built. Pro's "weekly + monthly
+  reports, AI insights, anomaly detection" and Genius's "daily reports,
+  proactive insights, cross-month patterns" have no implementation:
+  agents/finance_agent.py's generate_insights is called by nothing, the
+  finance_insights table has no db helper touching it, and budgets have
+  endpoints but no mobile surface. The Money tab is entry logging and a
+  monthly total. This is the largest gap between the pricing page and the
+  product.
+\- Reminder actions are built but UNVERIFIED. The Done / Snooze / Tomorrow
+  / Pick-a-time / Reply buttons exist (hooks/useNotificationActions.ts) and
+  categories are registered at runtime, which MAY work in Expo Go on iOS
+  but is not documented to. Confirm on a dev build before believing it.
+  iOS cannot record the microphone from a notification at all — the
+  text-input action, whose keyboard offers system dictation, is the
+  achievable version of "talk to the notification", not a placeholder.
+\- agents/reminder_planner.py is now dead code. services/reminder_schedule.py
+  replaced it with arithmetic; nothing imports the agent. Delete it or
+  reduce it to copy generation, but do not leave a second, divergent idea
+  of when reminders fire lying around.
+\- notification_plans grows without bound — sent and cancelled rows are kept
+  deliberately (they are the record of what the user was told) but nothing
+  ever prunes them. Needs a retention window before real usage.
+\- Tasks with no due date get no reminders at all. A deliberate boundary in
+  reminder_schedule.py, and an honest product gap: every event there is
+  defined relative to due_at. Revisit if undated tasks turn out to be the
+  common case.
+\- No in-app view of the reminder schedule. GET /notifications/plans exists
+  and returns the daily budget alongside the plans, so "why didn't I get
+  told?" is answerable — nothing renders it.
 
 
 
