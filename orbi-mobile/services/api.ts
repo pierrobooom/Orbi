@@ -390,6 +390,9 @@ export interface ServerCluster {
   active_count: number;
   parent_cluster_id: string | null;
   created_at: string;
+  // Since migration 0011. Optional so a stale client reading a pre-0011
+  // row still type-checks; absent reads as not muted.
+  notifications_muted?: boolean;
 }
 
 export async function listTasks(): Promise<ServerTask[]> {
@@ -423,6 +426,7 @@ export interface UpdateClusterInput {
   name?: string;
   color?: string;
   summary?: string | null;
+  notifications_muted?: boolean;
 }
 
 export async function updateCluster(
@@ -604,11 +608,80 @@ export type LanguageTag = (typeof SUPPORTED_LANGUAGES)[number]["tag"];
 
 export interface UserPreferences {
   user_id: string;
+  // "HH:MM:SS". The window normally wraps midnight (22:00 -> 08:00).
   quiet_hours_start: string;
   quiet_hours_end: string;
+  // 1-5. The server turns this into a hard ceiling on notifications per
+  // day — see REMINDER_DENSITY below for the mapping the UI shows.
   proactivity_level: number;
   preferred_reminder_channel: string;
   language: LanguageTag;
+  reminders_enabled: boolean;
+  lead_reminders_enabled: boolean;
+  chase_reminders_enabled: boolean;
+  // IANA zone. Quiet hours are zone-less times, so the background
+  // dispatcher cannot interpret them without this — the client is the only
+  // thing that knows where the device is.
+  timezone: string;
+}
+
+/** How proactivity_level reads to a human. Mirrors _DAILY_BUDGET in
+ * services/reminder_schedule.py — if that changes, change this. */
+export const REMINDER_DENSITY: Record<number, { label: string; perDay: number }> = {
+  1: { label: "Minimal", perDay: 2 },
+  2: { label: "Light", perDay: 4 },
+  3: { label: "Balanced", perDay: 6 },
+  4: { label: "Attentive", perDay: 10 },
+  5: { label: "Insistent", perDay: 20 },
+};
+
+export const DEFAULT_PREFERENCES: UserPreferences = {
+  user_id: "",
+  quiet_hours_start: "22:00:00",
+  quiet_hours_end: "08:00:00",
+  proactivity_level: 3,
+  preferred_reminder_channel: "push",
+  language: "en-GB",
+  reminders_enabled: true,
+  lead_reminders_enabled: true,
+  chase_reminders_enabled: true,
+  timezone: "UTC",
+};
+
+export interface NotificationPlan {
+  id: string;
+  task_id: string;
+  kind: "lead" | "due" | "chase" | "escalate";
+  trigger_at: string;
+  state: "pending" | "sent" | "answered" | "cancelled" | "skipped";
+  snooze_count: number;
+  sent_at: string | null;
+}
+
+export interface NotificationPlanList {
+  plans: NotificationPlan[];
+  daily_budget: number;
+}
+
+/** The caller's scheduled and recently sent reminders. */
+export async function getNotificationPlans(): Promise<NotificationPlanList> {
+  const res = await authFetch(`${V1}/notifications/plans`);
+  if (!res.ok) throw await parseError(res);
+  return (await res.json()) as NotificationPlanList;
+}
+
+/** Recompute every reminder from the current settings.
+ *
+ * The server already resyncs on its own when a schedule-affecting
+ * preference is saved; this is for the manual "my reminders look wrong"
+ * escape hatch. */
+export async function resyncNotificationPlans(): Promise<{
+  tasks_considered: number;
+  plans_scheduled: number;
+}> {
+  const res = await authFetch(`${V1}/notifications/resync`, { method: "POST" });
+  if (!res.ok) throw await parseError(res);
+  return await res.json();
 }
 
 export async function getMyPreferences(): Promise<UserPreferences> {

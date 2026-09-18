@@ -409,7 +409,19 @@ ELEVENLABS\_API\_KEY=
 
 ENVIRONMENT=development
 
+RUN\_REMINDER\_DISPATCHER=1
+
+NOTIFICATIONS\_DISPATCH\_SECRET=
+
 ```
+
+The last two control reminder delivery. `RUN_REMINDER_DISPATCHER=1` (the
+default) runs the schedule loop inside the API process, which is correct for
+a single instance and wrong for several — every replica would send every
+reminder. Past one instance, set it to `0` and have a single external cron
+POST `/api/v1/notifications/dispatch` with an `X-Dispatch-Secret` header
+matching `NOTIFICATIONS_DISPATCH_SECRET`. That endpoint returns 503 while the
+secret is unset, so it cannot be left accidentally open.
 
 
 
@@ -763,8 +775,13 @@ Completed phases:
 Open before a test release:
 \- Groq Developer tier — the free tier's 200k tokens/day cannot serve one Pro user
 \- Voice provider costs priced 2026-08-31: device TTS chosen, Deepgram STT kept
-\- Reminder firing — reminder_planner is imported by nothing, there is no
-  notification_plans table and no scheduler, so nothing ever fires
+\- Reminder ACTIONS — scheduling and sending are done (migration 0011,
+  services/reminder_schedule.py + reminder_dispatcher.py, Settings UI). What
+  is missing is the Done / Snooze / Reply buttons on the notification itself:
+  they need notification categories, which need an EAS dev build, which needs
+  an Apple Developer account. iOS cannot record the microphone from a
+  notification at all — the achievable version is a text-input action whose
+  keyboard offers dictation, so treat "mic on the lock screen" as that.
 \- Chat / Memory tab — backend complete, no mobile surface
 \- Weekday parsing — "Friday" resolves to the wrong date in EN and PT
 \- Gate transcript logging behind ENVIRONMENT (violates the security rules above)

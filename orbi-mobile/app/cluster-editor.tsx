@@ -24,6 +24,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
@@ -102,6 +103,7 @@ export default function ClusterEditorScreen() {
 
   const [name, setName] = useState(existing?.name ?? "");
   const [color, setColor] = useState(existing?.color ?? defaultColor);
+  const [muted, setMuted] = useState(existing?.notifications_muted ?? false);
   const [busy, setBusy] = useState<"save" | "delete" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -109,6 +111,7 @@ export default function ClusterEditorScreen() {
     if (existing) {
       setName(existing.name);
       setColor(existing.color);
+      setMuted(existing.notifications_muted ?? false);
     } else {
       // New cluster — reset to the first unused color when the palette
       // shifts (e.g., a cluster gets deleted while the modal is open).
@@ -125,7 +128,11 @@ export default function ClusterEditorScreen() {
       if (isNew) {
         await createCluster({ name: name.trim(), color });
       } else {
-        await updateCluster(id, { name: name.trim(), color });
+        await updateCluster(id, {
+          name: name.trim(),
+          color,
+          notifications_muted: muted,
+        });
       }
       await hydrate();
       router.back();
@@ -274,6 +281,25 @@ export default function ClusterEditorScreen() {
                 </View>
               </View>
 
+              {/* Only for clusters that exist: a mute has nothing to act
+                  on until there are tasks in here, and createCluster has
+                  no field for it. */}
+              {!isNew ? (
+                <View style={styles.muteRow}>
+                  <View style={styles.muteLabelGroup}>
+                    <Text style={styles.label}>{t("Mute reminders")}</Text>
+                    <Text style={styles.colorHint}>
+                      {t("No notifications for tasks in this cluster. The tasks stay exactly as they are — only the nudges stop.")}
+                    </Text>
+                  </View>
+                  <Switch
+                    value={muted}
+                    onValueChange={setMuted}
+                    trackColor={{ false: colors.line, true: colors.accent }}
+                  />
+                </View>
+              ) : null}
+
               {error ? <Text style={styles.error}>{error}</Text> : null}
 
               {!isNew ? (
@@ -321,6 +347,14 @@ const styles = StyleSheet.create({
   body: { padding: 20, paddingBottom: 40 },
   label: { color: colors.inkDim, fontSize: 11, fontWeight: "700", letterSpacing: 1, textTransform: "uppercase" },
   labelSpaced: { marginTop: 24 },
+  muteRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    marginTop: 24,
+  },
+  muteLabelGroup: { flex: 1 },
   input: {
     backgroundColor: colors.panel,
     borderColor: colors.line,

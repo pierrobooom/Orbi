@@ -48,9 +48,19 @@ class UserPreference(BaseModel):
     # BCP-47 tag. Drives speech-to-text language, the language the agents
     # reply in, and which locale pack the sanitizer / time extractor use.
     language: str = "en-GB"
-    # BCP-47 tag. Drives speech-to-text language, the language the agents
-    # reply in, and which locale pack the sanitizer / time extractor use.
-    language: str = "en-GB"
+    # Master switch for reminders, independent of the OS permission. The
+    # two answer different questions: the OS one is "may this app notify
+    # me at all", this one is "should Orbi schedule anything".
+    reminders_enabled: bool = True
+    # Before the deadline ("don't forget") and after it ("did you do it?").
+    # Separate because they are different products — plenty of people want
+    # the help and not the accountability, or the reverse.
+    lead_reminders_enabled: bool = True
+    chase_reminders_enabled: bool = True
+    # IANA zone, e.g. "Europe/Lisbon". Required to interpret quiet_hours_*,
+    # which are zone-less times. The client sets it from the device; the
+    # background dispatcher has no request to read a zone from.
+    timezone: str = "UTC"
 
     model_config = {
         "json_schema_extra": {

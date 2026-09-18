@@ -9,7 +9,7 @@ from datetime import datetime, time, timezone
 from typing import Literal, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
 from app.db import device_tokens as device_tokens_db, users as users_db
@@ -17,6 +17,7 @@ from app.models.user import UsageSnapshot, UserPreference, UserProfile
 from app.services.auth import get_current_user, get_current_user_with_tier
 from app.services.locale import get_locale
 from app.services.push import send_push
+from app.services.reminder_dispatcher import resync_user_plans
 from app.services.usage_tracker import get_user_usage
 
 logger = logging.getLogger(__name__)
@@ -125,11 +126,20 @@ class UserPreferenceInput(BaseModel):
     proactivity_level: Optional[int] = Field(default=None, ge=1, le=5)
     preferred_reminder_channel: Optional[str] = None
     language: Optional[str] = None
+    reminders_enabled: Optional[bool] = None
+    lead_reminders_enabled: Optional[bool] = None
+    chase_reminders_enabled: Optional[bool] = None
+    # IANA zone from the device. Not validated here beyond the length the
+    # column allows — services/reminder_schedule.py falls back to UTC on
+    # anything this Python build cannot resolve, which is the behaviour we
+    # want for a stale client anyway.
+    timezone: Optional[str] = None
 
 
 @router.put("/me/preferences", response_model=UserPreference)
 async def set_my_preferences(
     body: UserPreferenceInput,
+    background_tasks: BackgroundTasks,
     user_id: UUID = Depends(get_current_user),
 ):
     """Create or replace the authenticated user's preferences.
@@ -146,6 +156,10 @@ async def set_my_preferences(
         "proactivity_level": 3,
         "preferred_reminder_channel": "push",
         "language": "en-GB",
+        "reminders_enabled": True,
+        "lead_reminders_enabled": True,
+        "chase_reminders_enabled": True,
+        "timezone": "UTC",
     }
     incoming = body.model_dump(mode="json", exclude_none=True)
     payload = {**defaults, **{k: v for k, v in existing.items() if v is not None}, **incoming}
@@ -153,11 +167,27 @@ async def set_my_preferences(
     # Coerce rather than reject: an unsupported tag from a stale client
     # falls back to English instead of 500ing on the DB check constraint.
     payload["language"] = get_locale(payload.get("language")).tag
-    # Coerce rather than reject: an unsupported tag from a stale client
-    # falls back to English instead of 500ing on the DB check constraint.
-    payload["language"] = get_locale(payload.get("language")).tag
 
     row = await users_db.upsert_preferences(payload)
+
+    # Quiet hours, the zone and the reminder switches all change WHEN every
+    # existing plan should fire, not just future ones. Without a replan the
+    # new setting only takes effect on tasks touched afterwards, which reads
+    # as the setting being ignored. Backgrounded — the user is waiting on a
+    # toggle animation, not on a rewrite of their schedule.
+    if any(
+        key in incoming
+        for key in (
+            "quiet_hours_start",
+            "quiet_hours_end",
+            "timezone",
+            "reminders_enabled",
+            "lead_reminders_enabled",
+            "chase_reminders_enabled",
+        )
+    ):
+        background_tasks.add_task(resync_user_plans, user_id)
+
     return row
 
 

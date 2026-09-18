@@ -6,6 +6,7 @@
 // live in the upgrade modal.
 
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import * as Notifications from "expo-notifications";
 import { useRouter, type Href } from "expo-router";
 import React, { useEffect, useState } from "react";
@@ -13,6 +14,7 @@ import {
   ActivityIndicator,
   Alert,
   Linking,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -26,13 +28,16 @@ import { registerPushDevice } from "@/hooks/usePushRegistration";
 import {
   API_BASE_URL,
   ApiError,
+  DEFAULT_PREFERENCES,
   getHealth,
   getMyPreferences,
+  REMINDER_DENSITY,
   sendTestPush,
   setMyPreferences,
   SUPPORTED_LANGUAGES,
   type LanguageTag,
   type UserPreferences,
+  type UserPreferencesPatch,
 } from "@/services/api";
 import { TIER_DISPLAY } from "@/services/tierGate";
 import { useAuthStore } from "@/stores/authStore";
@@ -46,6 +51,37 @@ type HealthStatus =
   | { kind: "loading" }
   | { kind: "ok"; app: string; latencyMs: number }
   | { kind: "error"; message: string };
+
+/** "22:00:00" -> "22:00". The seconds are always zero and only add noise. */
+function toDisplayTime(value: string): string {
+  return (value || "").slice(0, 5);
+}
+
+/** "22:00:00" -> a Date today at that wall-clock time, for the picker. */
+function toPickerDate(value: string): Date {
+  const [hours, minutes] = toDisplayTime(value).split(":").map(Number);
+  const date = new Date();
+  date.setHours(hours || 0, minutes || 0, 0, 0);
+  return date;
+}
+
+function fromPickerDate(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${pad(date.getHours())}:${pad(date.getMinutes())}:00`;
+}
+
+/** The device's IANA zone, or null if the runtime won't say.
+ *
+ * The server needs this to interpret quiet hours: they are stored as
+ * zone-less times, and the background dispatcher has no request to read a
+ * zone from the way the chat endpoints do. */
+function deviceTimezone(): string | null {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || null;
+  } catch {
+    return null;
+  }
+}
 
 export default function SettingsScreen() {
   const t = useT();
@@ -65,6 +101,9 @@ export default function SettingsScreen() {
   const [prefs, setPrefs] = useState<UserPreferences | null>(null);
   const [savingLanguage, setSavingLanguage] = useState<LanguageTag | null>(null);
   const [languageError, setLanguageError] = useState<string | null>(null);
+  const [prefsError, setPrefsError] = useState<string | null>(null);
+  // Which quiet-hours bound the picker is editing, if any.
+  const [editingQuiet, setEditingQuiet] = useState<"start" | "end" | null>(null);
 
   useEffect(() => {
     Notifications.getPermissionsAsync()
@@ -125,20 +164,48 @@ export default function SettingsScreen() {
   useEffect(() => {
     // A user who has never opened preferences has no row yet; the
     // backend 404s rather than auto-creating one, so fall back to the
-    // same defaults the DB column uses.
+    // same defaults the DB columns use.
     getMyPreferences()
-      .then(setPrefs)
+      .then((loaded) => {
+        setPrefs(loaded);
+        // Push the device's zone up if the server is holding a stale one
+        // (or the UTC default). Without it, quiet hours are interpreted in
+        // the wrong zone and reminders land at the wrong hour — and this
+        // screen is the only place that knows where the phone is.
+        const zone = deviceTimezone();
+        if (zone && zone !== loaded.timezone) {
+          setMyPreferences({ timezone: zone })
+            .then(setPrefs)
+            .catch(() => {
+              /* non-fatal — the server falls back to UTC */
+            });
+        }
+      })
       .catch(() => {
         setPrefs({
-          user_id: "",
-          quiet_hours_start: "22:00:00",
-          quiet_hours_end: "08:00:00",
-          proactivity_level: 3,
-          preferred_reminder_channel: "push",
-          language: "en-GB",
+          ...DEFAULT_PREFERENCES,
+          timezone: deviceTimezone() ?? DEFAULT_PREFERENCES.timezone,
         });
       });
   }, []);
+
+  /** Save one or more preference fields, optimistically.
+   *
+   * The row reflects the change immediately and reverts if the save fails,
+   * which matters for switches: a toggle that animates on and then silently
+   * isn't saved is worse than one that visibly snaps back. */
+  const savePrefs = async (patch: UserPreferencesPatch) => {
+    if (!prefs) return;
+    const previous = prefs;
+    setPrefsError(null);
+    setPrefs({ ...prefs, ...patch } as UserPreferences);
+    try {
+      setPrefs(await setMyPreferences(patch));
+    } catch (e) {
+      setPrefs(previous);
+      setPrefsError(e instanceof ApiError ? e.message : String(e));
+    }
+  };
 
   const onSelectLanguage = async (tag: LanguageTag) => {
     if (!prefs || prefs.language === tag) return;
@@ -277,6 +344,151 @@ export default function SettingsScreen() {
               trackColor={{ false: colors.line, true: colors.accent }}
             />
           </View>
+        </Section>
+
+        <Section title={t("Reminders")}>
+          <View style={styles.toggleRow}>
+            <View style={styles.toggleLabelGroup}>
+              <Text style={styles.rowLabel}>{t("Remind me about tasks")}</Text>
+              <Text style={styles.rowHint}>
+                {t("Orbi schedules nudges around each task's deadline.")}
+              </Text>
+            </View>
+            <Switch
+              value={prefs?.reminders_enabled ?? true}
+              onValueChange={(v) => savePrefs({ reminders_enabled: v })}
+              disabled={prefs === null}
+              trackColor={{ false: colors.line, true: colors.accent }}
+            />
+          </View>
+
+          {prefs?.reminders_enabled !== false ? (
+            <>
+              <View style={styles.toggleRow}>
+                <View style={styles.toggleLabelGroup}>
+                  <Text style={styles.rowLabel}>{t("Before the deadline")}</Text>
+                  <Text style={styles.rowHint}>
+                    {t("A heads-up so it doesn't sneak up on you. Important tasks get more warning.")}
+                  </Text>
+                </View>
+                <Switch
+                  value={prefs?.lead_reminders_enabled ?? true}
+                  onValueChange={(v) => savePrefs({ lead_reminders_enabled: v })}
+                  disabled={prefs === null}
+                  trackColor={{ false: colors.line, true: colors.accent }}
+                />
+              </View>
+
+              <View style={styles.toggleRow}>
+                <View style={styles.toggleLabelGroup}>
+                  <Text style={styles.rowLabel}>{t("After the deadline")}</Text>
+                  <Text style={styles.rowHint}>
+                    {t("Asks whether you got it done, so it can be ticked off or postponed.")}
+                  </Text>
+                </View>
+                <Switch
+                  value={prefs?.chase_reminders_enabled ?? true}
+                  onValueChange={(v) => savePrefs({ chase_reminders_enabled: v })}
+                  disabled={prefs === null}
+                  trackColor={{ false: colors.line, true: colors.accent }}
+                />
+              </View>
+
+              <View style={styles.densityBlock}>
+                <Text style={styles.rowLabel}>{t("How much")}</Text>
+                <View style={styles.densityRow}>
+                  {[1, 2, 3, 4, 5].map((level) => {
+                    const active = (prefs?.proactivity_level ?? 3) === level;
+                    return (
+                      <Pressable
+                        key={level}
+                        onPress={() => savePrefs({ proactivity_level: level })}
+                        disabled={prefs === null}
+                        style={[styles.densityPip, active && styles.densityPipActive]}
+                      >
+                        <Text
+                          style={[
+                            styles.densityPipText,
+                            active && styles.densityPipTextActive,
+                          ]}
+                        >
+                          {level}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+                <Text style={styles.rowHint}>
+                  {t("{label} — at most {n} notifications a day. Anything over the limit is dropped, least urgent first.", {
+                    label: t(REMINDER_DENSITY[prefs?.proactivity_level ?? 3].label),
+                    n: REMINDER_DENSITY[prefs?.proactivity_level ?? 3].perDay,
+                  })}
+                </Text>
+              </View>
+
+              <Pressable
+                onPress={() => setEditingQuiet("start")}
+                disabled={prefs === null}
+                style={styles.quietRow}
+              >
+                <Text style={styles.rowLabel}>{t("Quiet from")}</Text>
+                <Text style={styles.quietValue}>
+                  {toDisplayTime(prefs?.quiet_hours_start ?? "22:00:00")}
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => setEditingQuiet("end")}
+                disabled={prefs === null}
+                style={styles.quietRow}
+              >
+                <Text style={styles.rowLabel}>{t("Quiet until")}</Text>
+                <Text style={styles.quietValue}>
+                  {toDisplayTime(prefs?.quiet_hours_end ?? "08:00:00")}
+                </Text>
+              </Pressable>
+              <Text style={styles.rowHint}>
+                {t("Nothing arrives during these hours. A reminder that falls inside waits for the morning rather than being lost.")}
+              </Text>
+
+              {editingQuiet && prefs ? (
+                <DateTimePicker
+                  value={toPickerDate(
+                    editingQuiet === "start"
+                      ? prefs.quiet_hours_start
+                      : prefs.quiet_hours_end,
+                  )}
+                  mode="time"
+                  display={Platform.OS === "ios" ? "spinner" : "default"}
+                  themeVariant="dark"
+                  // Same migration off the deprecated `onChange`
+                  // multiplexer as new-task.tsx and voice-confirm.tsx.
+                  onValueChange={(_event, date) => {
+                    if (Platform.OS === "android") setEditingQuiet(null);
+                    if (!date) return;
+                    savePrefs(
+                      editingQuiet === "start"
+                        ? { quiet_hours_start: fromPickerDate(date) }
+                        : { quiet_hours_end: fromPickerDate(date) },
+                    );
+                  }}
+                  onDismiss={() => setEditingQuiet(null)}
+                />
+              ) : null}
+
+              {Platform.OS === "ios" && editingQuiet ? (
+                <Pressable
+                  onPress={() => setEditingQuiet(null)}
+                  style={styles.quietDoneRow}
+                >
+                  <Text style={styles.linkText}>{t("Done")}</Text>
+                </Pressable>
+              ) : null}
+            </>
+          ) : null}
+
+          {prefsError ? (
+            <Text style={styles.languageError}>{prefsError}</Text>
+          ) : null}
         </Section>
 
         <Section title={t("Language")}>
@@ -503,6 +715,33 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   toggleLabelGroup: { flex: 1 },
+  densityBlock: { paddingVertical: 12, gap: 10 },
+  densityRow: { flexDirection: "row", gap: 8 },
+  densityPip: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 9,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.canvas,
+    alignItems: "center",
+  },
+  densityPipActive: { borderColor: colors.accent, backgroundColor: colors.accent },
+  densityPipText: { color: colors.inkDim, fontSize: 14, fontWeight: "600" },
+  densityPipTextActive: { color: colors.canvas },
+  quietRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 12,
+  },
+  quietValue: {
+    color: colors.accent,
+    fontSize: 15,
+    fontWeight: "700",
+    fontVariant: ["tabular-nums"],
+  },
+  quietDoneRow: { alignItems: "flex-end", paddingVertical: 8 },
   statusRow: {
     flexDirection: "row",
     alignItems: "center",

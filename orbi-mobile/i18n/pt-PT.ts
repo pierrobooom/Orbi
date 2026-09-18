@@ -268,4 +268,31 @@ export const ptPT: Record<string, string> = {
   "Type your email to confirm": "Escreve o teu email para confirmar",
   "Permanently delete my account": "Apagar a minha conta permanentemente",
   "Showing {n} of {total}": "A mostrar {n} de {total}",
+
+  // --- reminders --------------------------------------------------------
+  "Reminders": "Lembretes",
+  "Remind me about tasks": "Lembrar-me das tarefas",
+  "Orbi schedules nudges around each task's deadline.":
+    "O Orbi agenda avisos à volta do prazo de cada tarefa.",
+  "Before the deadline": "Antes do prazo",
+  "A heads-up so it doesn't sneak up on you. Important tasks get more warning.":
+    "Um aviso para não te apanhar desprevenido. As tarefas importantes avisam com mais antecedência.",
+  "After the deadline": "Depois do prazo",
+  "Asks whether you got it done, so it can be ticked off or postponed.":
+    "Pergunta se conseguiste fazer, para poderes marcar como feita ou adiar.",
+  "How much": "Quantidade",
+  "{label} — at most {n} notifications a day. Anything over the limit is dropped, least urgent first.":
+    "{label} — no máximo {n} notificações por dia. O que passar do limite é descartado, a começar pelas menos urgentes.",
+  "Minimal": "Mínimo",
+  "Light": "Leve",
+  "Balanced": "Equilibrado",
+  "Attentive": "Atento",
+  "Insistent": "Insistente",
+  "Quiet from": "Silêncio a partir das",
+  "Quiet until": "Silêncio até às",
+  "Nothing arrives during these hours. A reminder that falls inside waits for the morning rather than being lost.":
+    "Nada chega durante estas horas. Um lembrete que caia neste período espera pela manhã em vez de se perder.",
+  "Mute reminders": "Silenciar lembretes",
+  "No notifications for tasks in this cluster. The tasks stay exactly as they are — only the nudges stop.":
+    "Sem notificações para as tarefas deste grupo. As tarefas ficam exactamente como estão — só os avisos param.",
 };

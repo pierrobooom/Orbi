@@ -13,12 +13,17 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from pydantic import BaseModel
 
 from app.agents.task_updater import parse_voice_update
-from app.db import tasks as tasks_db, users as users_db
+from app.db import (
+    notifications as notifications_db,
+    tasks as tasks_db,
+    users as users_db,
+)
 from app.models.task import TaskBubble, TaskBubbleCreate, TaskBubbleUpdate, TaskStatus
 from app.services.ai_router import AIRateLimited
 from app.services.usage_tracker import ObjectCapExceeded, check_bubble_cap
 from app.services.auth import get_current_user, get_current_user_with_tier
 from app.services.embeddings import generate_embedding
+from app.services.reminder_dispatcher import sync_task_plans
 from app.services.scoring import calculate_pressure_score
 from app.services.task_embedding import regenerate_task_embedding
 from app.services.task_sanitizer import derive_label_from_title
@@ -117,6 +122,9 @@ async def create_task(
     # Generate the search embedding off-thread — we never make the
     # create response wait on an OpenAI round-trip.
     background_tasks.add_task(regenerate_task_embedding, task_id, user_id)
+    # Schedule this task's reminders. Off-thread for the same reason: the
+    # user is waiting on a bubble appearing, not on three rows of INSERT.
+    background_tasks.add_task(sync_task_plans, row, user_id)
     return row
 
 
@@ -194,6 +202,12 @@ async def update_task(
     if any(k in changes for k in ("title", "label", "description")):
         background_tasks.add_task(regenerate_task_embedding, task_id, user_id)
 
+    # Replan unconditionally rather than testing which fields moved. Every
+    # one of due_at, importance, status and parent_cluster_id changes the
+    # schedule, that is most of what PATCH is used for, and a missed replan
+    # is a reminder that fires for a deadline the user already moved.
+    background_tasks.add_task(sync_task_plans, row, user_id)
+
     return row
 
 
@@ -210,6 +224,11 @@ async def delete_task(task_id: UUID, user_id: UUID = Depends(get_current_user)):
             status_code=status.HTTP_404_NOT_FOUND,
             detail=_error("Task not found.", "TASK_NOT_FOUND"),
         )
+
+    # Awaited, not backgrounded: being reminded about something you just
+    # deleted is the single worst failure this feature has, and it is worth
+    # one indexed UPDATE on the response path to make it impossible.
+    await notifications_db.cancel_pending_for_task(task_id)
 
 
 # ---------------------------------------------------------------------------

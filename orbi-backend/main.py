@@ -1,3 +1,5 @@
+import asyncio
+import os
 from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
@@ -9,13 +11,45 @@ load_dotenv()
 from fastapi import FastAPI  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 
-from app.routers import tasks, finance, users, clusters, memory, chat, voice  # noqa: E402
+from app.routers import (  # noqa: E402
+    tasks,
+    finance,
+    users,
+    clusters,
+    memory,
+    chat,
+    voice,
+    notifications,
+)
+from app.services.reminder_dispatcher import run_forever  # noqa: E402
+
+# The in-process reminder loop is the right answer for one instance and the
+# wrong one for several — every replica would send every reminder. Set this
+# to "0" and drive POST /notifications/dispatch from a single external cron
+# instead. Defaults to on, because the alternative default is a feature that
+# silently never fires.
+_RUN_DISPATCHER = os.environ.get("RUN_REMINDER_DISPATCHER", "1") != "0"
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("Orbi API is running")
+
+    dispatcher: asyncio.Task | None = None
+    if _RUN_DISPATCHER:
+        dispatcher = asyncio.create_task(run_forever())
+
     yield
+
+    if dispatcher is not None:
+        # Cancel and await: without the await, shutdown races the loop and
+        # a tick mid-send is torn down with its HTTP call half-finished.
+        dispatcher.cancel()
+        try:
+            await dispatcher
+        except asyncio.CancelledError:
+            pass
+
     print("Orbi API is shutting down")
 
 
@@ -40,6 +74,7 @@ app.include_router(clusters.router, prefix="/api/v1")
 app.include_router(memory.router, prefix="/api/v1")
 app.include_router(chat.router, prefix="/api/v1")
 app.include_router(voice.router, prefix="/api/v1")
+app.include_router(notifications.router, prefix="/api/v1")
 
 
 @app.get("/health")

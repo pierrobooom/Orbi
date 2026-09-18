@@ -7,17 +7,22 @@ a service or db function, and formats the response.
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from pydantic import BaseModel
 from typing import Optional
 
 from app.agents.cluster_manager import propose_organisation
-from app.db import clusters as clusters_db, tasks as tasks_db
+from app.db import (
+    clusters as clusters_db,
+    notifications as notifications_db,
+    tasks as tasks_db,
+)
 from app.models.task import Cluster
 from app.services.usage_tracker import ObjectCapExceeded, check_cluster_cap
 from app.services.auth import get_current_user, get_current_user_with_tier
 from app.services.cluster_apply import apply_organisation
 from app.services.cluster_kind import coerce_kind
+from app.services.reminder_dispatcher import resync_cluster_plans
 
 router = APIRouter(prefix="/clusters", tags=["clusters"])
 
@@ -40,6 +45,10 @@ class ClusterUpdate(BaseModel):
     # renamed cluster turned grey and jumped to canvas centre.
     kind: Optional[str] = None
     parent_cluster_id: Optional[UUID] = None
+    # Silence every reminder for tasks in this cluster. Scoped deliberately:
+    # one noisy area of life is the usual reason people kill notifications
+    # for a whole app, and this is the smaller instrument for that job.
+    notifications_muted: Optional[bool] = None
 
 
 def _error(message: str, error_code: str) -> dict:
@@ -221,6 +230,7 @@ async def get_cluster(cluster_id: UUID, user_id: UUID = Depends(get_current_user
 async def update_cluster(
     cluster_id: UUID,
     body: ClusterUpdate,
+    background_tasks: BackgroundTasks,
     user_id: UUID = Depends(get_current_user),
 ):
     """Partially update a cluster."""
@@ -251,6 +261,16 @@ async def update_cluster(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=_error("Cluster not found.", "CLUSTER_NOT_FOUND"),
         )
+
+    # Muting has to reach reminders that were scheduled before the mute, or
+    # the setting appears not to work for a day. Unmuting has the mirror
+    # problem — those plans are gone and only a replan brings them back.
+    if "notifications_muted" in update_payload:
+        if update_payload["notifications_muted"]:
+            await notifications_db.cancel_pending_for_cluster(user_id, cluster_id)
+        else:
+            background_tasks.add_task(resync_cluster_plans, user_id, cluster_id)
+
     return row
 
 
