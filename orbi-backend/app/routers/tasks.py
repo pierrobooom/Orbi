@@ -238,6 +238,9 @@ async def delete_task(task_id: UUID, user_id: UUID = Depends(get_current_user)):
 class VoiceUpdateRequest(BaseModel):
     transcript: str
     user_timezone: Optional[str] = None
+    # BCP-47 tag. Optional — falls back to the stored preference, then to
+    # English, exactly as the draft path and the chat router do.
+    language: Optional[str] = None
 
 
 class VoiceUpdateResponse(BaseModel):
@@ -277,6 +280,20 @@ async def voice_update_task(
             detail=_error("Transcript is empty.", "TRANSCRIPT_EMPTY"),
         )
 
+    # Without this the Portuguese time patterns never run on this path —
+    # parse_voice_update defaulted language to None, is_portuguese(None)
+    # is False, and "às oito da noite" fell through to the English
+    # patterns, which read it as 08:00. The draft path already did this;
+    # only the edit-an-existing-task path was missing it.
+    language = body.language
+    if not language:
+        try:
+            prefs = await users_db.fetch_preferences(user_id)
+            language = (prefs or {}).get("language")
+        except Exception as exc:  # noqa: BLE001 — never block the edit
+            logger.warning("Could not read language preference: %s", exc)
+            language = None
+
     try:
         result = await parse_voice_update(
             current_task=task,
@@ -284,6 +301,7 @@ async def voice_update_task(
             user_id=user_id,
             user_tier=user_tier,
             user_timezone=body.user_timezone,
+            language=language,
         )
     except AIRateLimited as exc:
         raise HTTPException(

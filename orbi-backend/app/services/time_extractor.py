@@ -67,8 +67,16 @@ _RE_PT_HMIN = re.compile(r"\b(\d{1,2})\s*h\s*(\d{2})\b", re.IGNORECASE)
 # "às": "das 9 da manhã", "pelas 9", "por volta das 9". Accepting only
 # "às/as" meant those fell through to the model's own hour, which is the
 # thing this module exists to stop trusting.
+#
+# The alternation deliberately does NOT include a bare unaccented "a".
+# It used to, as `[àa]s?`, and that turned every "a" followed by a number
+# anywhere in a sentence into a clock time: "daqui a 10 minutos" was read
+# as 10 o'clock and a shower scheduled for 22:22 was stored as 10:00.
+# "ligar a 3 pessoas" would have become 03:00 the same way. The accented
+# "à" is kept because "à uma" is a real way to say one o'clock and the
+# accent makes it unambiguous.
 _RE_PT_AT = re.compile(
-    r"\b(?:[àa]s?|das|pelas|para\s+as)\s+(\d{1,2}|"
+    r"\b(?:[àa]s|à|das|pelas|para\s+as)\s+(\d{1,2}|"
     + "|".join(_PT_NUMBER_WORDS)
     + r")"
     r"(?:\s*[:h]\s*(\d{2}))?"
@@ -175,6 +183,151 @@ def extract_local_clock(
             return (h, 0)
 
     return None
+
+
+# --------------------------------------------------------------------
+# Relative offsets — "daqui a 10 minutos", "in two hours"
+# --------------------------------------------------------------------
+# These were handled by nobody. There is no clock time in "daqui a 10
+# minutos" to extract, so the whole datetime fell through to the model,
+# which is unreliable at exactly this arithmetic — asked at 22:12 for ten
+# minutes' time it produced 09:00 the same morning, a deadline eleven
+# hours in the past, and the task was silently never reminded about
+# because plan_for_task drops triggers that have already been.
+#
+# Unlike the clock and weekday passes, a relative offset determines the
+# DATE AND THE TIME together, so it replaces the model's due_at outright
+# rather than patching a component of it.
+
+_EN_SMALL_NUMBERS = {
+    "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6,
+    "seven": 7, "eight": 8, "nine": 9, "ten": 10, "eleven": 11,
+    "twelve": 12, "fifteen": 15, "twenty": 20, "thirty": 30, "forty": 40,
+    "forty-five": 45, "sixty": 60, "a": 1, "an": 1, "half": 0,
+}
+
+_PT_SMALL_NUMBERS = {
+    "um": 1, "uma": 1, "dois": 2, "duas": 2, "tres": 3, "três": 3,
+    "quatro": 4, "cinco": 5, "seis": 6, "sete": 7, "oito": 8, "nove": 9,
+    "dez": 10, "quinze": 15, "vinte": 20, "trinta": 30, "quarenta": 40,
+    "sessenta": 60, "meia": 0, "meio": 0,
+}
+
+# "daqui a 10 minutos", "dentro de 2 horas", "em 30 minutos",
+# "daqui a uma hora", "passado 10 minutos".
+# The lead-in is REQUIRED: a bare "10 minutos" in "demora 10 minutos"
+# describes how long the task takes, not when it is due.
+_RE_PT_RELATIVE = re.compile(
+    r"\b(?:daqui\s+a|dentro\s+de|passad[oa]s?|d'?aqui\s+a|em)\s+"
+    r"(\d{1,3}|" + "|".join(_PT_SMALL_NUMBERS) + r")?\s*"
+    r"(minutos?|min|horas?|dias?|semanas?)\b",
+    re.IGNORECASE,
+)
+
+# "in 10 minutes", "in two hours", "in half an hour", "in a day".
+_RE_EN_RELATIVE = re.compile(
+    r"\bin\s+(\d{1,3}|" + "|".join(_EN_SMALL_NUMBERS) + r")?\s*"
+    r"(?:an?\s+)?"
+    r"(minutes?|mins?|hours?|hrs?|days?|weeks?)\b",
+    re.IGNORECASE,
+)
+
+_UNIT_TO_MINUTES = {
+    "min": 1, "mins": 1, "minute": 1, "minutes": 1,
+    "minuto": 1, "minutos": 1,
+    "hour": 60, "hours": 60, "hr": 60, "hrs": 60,
+    "hora": 60, "horas": 60,
+    "day": 1440, "days": 1440, "dia": 1440, "dias": 1440,
+    "week": 10080, "weeks": 10080, "semana": 10080, "semanas": 10080,
+}
+
+
+def extract_relative_offset(
+    transcript: str, language: str | None = None
+) -> timedelta | None:
+    """Return how far in the future the user asked for, or None.
+
+    "meia hora" / "half an hour" resolve to 30 minutes rather than zero —
+    the word maps to 0 in the number tables because it means "half of the
+    following unit", which is only meaningful once the unit is known.
+    """
+    if not transcript:
+        return None
+
+    from app.services.locale import is_portuguese
+
+    portuguese = is_portuguese(language)
+    pattern = _RE_PT_RELATIVE if portuguese else _RE_EN_RELATIVE
+    words = _PT_SMALL_NUMBERS if portuguese else _EN_SMALL_NUMBERS
+
+    match = pattern.search(transcript)
+    if match is None:
+        # A Portuguese transcript can still carry an English phrasing and
+        # vice versa; trying the other pattern costs one regex and saves
+        # the fallback to the model's arithmetic.
+        other = _RE_EN_RELATIVE if portuguese else _RE_PT_RELATIVE
+        other_words = _EN_SMALL_NUMBERS if portuguese else _PT_SMALL_NUMBERS
+        match = other.search(transcript)
+        if match is None:
+            return None
+        words = other_words
+
+    raw_count, raw_unit = match.group(1), match.group(2).lower()
+    unit_minutes = _UNIT_TO_MINUTES.get(raw_unit)
+    if unit_minutes is None:
+        return None
+
+    if raw_count is None:
+        # "in an hour", "dentro de horas" — no number said, assume one.
+        count = 1.0
+    elif raw_count.isdigit():
+        count = float(raw_count)
+    else:
+        mapped = words.get(raw_count.lower())
+        if mapped is None:
+            return None
+        # "meia hora" / "half an hour": half of the unit that follows.
+        count = 0.5 if mapped == 0 else float(mapped)
+
+    minutes = count * unit_minutes
+    # Guard against a mis-transcribed "in 999 weeks" landing a task two
+    # decades out. A year is already past any plausible spoken offset.
+    if minutes <= 0 or minutes > 525600:
+        return None
+    return timedelta(minutes=minutes)
+
+
+def override_due_at_relative(
+    llm_due_at: str | None,
+    transcript: str,
+    language: str | None = None,
+    now: datetime | None = None,
+) -> tuple[str | None, bool]:
+    """Resolve "in N minutes" against the clock, ignoring the model.
+
+    Returns (due_at, handled). When `handled` is True the caller must skip
+    the weekday and clock passes: this offset already fixed both halves of
+    the datetime, and letting the clock pass run afterwards would rewrite
+    the hour from some unrelated number elsewhere in the sentence.
+    """
+    offset = extract_relative_offset(transcript, language=language)
+    if offset is None:
+        return llm_due_at, False
+
+    resolved = (now or datetime.now(timezone.utc)) + offset
+    # Seconds are noise on a spoken offset and make the stored value look
+    # machine-generated when the user reads it back.
+    resolved = resolved.replace(second=0, microsecond=0)
+    result = resolved.isoformat().replace("+00:00", "Z")
+
+    logger.warning(
+        "time_extractor: RELATIVE transcript=%s offset=%s llm_due_at=%s -> %s",
+        safe_transcript(transcript),
+        offset,
+        llm_due_at,
+        result,
+    )
+    return result, True
 
 
 def override_due_at_clock(

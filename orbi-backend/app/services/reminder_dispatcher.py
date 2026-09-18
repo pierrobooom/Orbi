@@ -164,6 +164,23 @@ async def preferences_for(user_id: UUID) -> dict:
     return {**_DEFAULT_PREFERENCES, **{k: v for k, v in stored.items() if v is not None}}
 
 
+def _same_schedule(existing: list[dict], planned: list) -> bool:
+    """Do the stored pending plans already match what we just computed?
+
+    Compared as (kind, instant) pairs so a difference in how Postgres and
+    Python spell the same moment — "+00:00" versus "Z", trailing zeros on
+    the seconds — doesn't read as a change and trigger a pointless rewrite.
+    """
+    stored = set()
+    for row in existing:
+        moment = _parse_dt(row.get("trigger_at"))
+        if moment is None:
+            return False
+        stored.add((row.get("kind"), moment))
+    wanted = {(p.kind, p.trigger_at) for p in planned}
+    return stored == wanted
+
+
 async def sync_task_plans(
     task: dict,
     owner_id: UUID,
@@ -191,9 +208,18 @@ async def sync_task_plans(
         cluster = await clusters_db.fetch_cluster_by_id(UUID(str(cluster_id)), owner_id)
         cluster_muted = bool(cluster and cluster.get("notifications_muted"))
 
-    await notifications_db.cancel_pending_for_task(UUID(str(task["id"])))
-
+    task_id = UUID(str(task["id"]))
     planned = plan_for_task(task, prefs, now=now, cluster_muted=cluster_muted)
+
+    # Nothing to do when the schedule hasn't actually moved. Without this
+    # check every settings toggle cancelled and reinserted an identical set
+    # of rows: three tasks had accumulated sixty plans, fifty-one of them
+    # cancelled duplicates, purely from flipping switches in Settings.
+    existing = await notifications_db.fetch_pending_for_task(task_id)
+    if _same_schedule(existing, planned):
+        return []
+
+    await notifications_db.cancel_pending_for_task(task_id)
     if not planned:
         return []
 

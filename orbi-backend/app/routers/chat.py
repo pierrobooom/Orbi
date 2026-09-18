@@ -35,6 +35,7 @@ from app.services.task_resolver import resolve_task, search_tasks_semantic
 from app.services.task_sanitizer import sanitize_parsed_task
 from app.services.time_extractor import (
     override_due_at_clock,
+    override_due_at_relative,
     override_due_at_weekday,
 )
 
@@ -566,20 +567,31 @@ async def chat(
             # belonged to, and stamping every task with the same hour is
             # worse than trusting the per-task due_at the model emitted.
             if len(raw_task_list) == 1:
-                # Weekday first, then clock: the weekday pass owns the
-                # DATE and the clock pass owns the TIME, so running them
-                # in this order means neither undoes the other.
-                parsed["due_at"] = override_due_at_weekday(
+                # Relative offsets first, and exclusively. "daqui a 10
+                # minutos" fixes the date and the time together, so the
+                # other two passes have nothing left to correct — and
+                # letting the clock pass run afterwards would rewrite the
+                # hour from the "10" it just consumed.
+                parsed["due_at"], handled = override_due_at_relative(
                     parsed.get("due_at"),
                     body.message,
-                    body.user_timezone,
-                )
-                parsed["due_at"] = override_due_at_clock(
-                    parsed.get("due_at"),
-                    body.message,
-                    body.user_timezone,
                     language=language,
                 )
+                if not handled:
+                    # Weekday first, then clock: the weekday pass owns the
+                    # DATE and the clock pass owns the TIME, so running them
+                    # in this order means neither undoes the other.
+                    parsed["due_at"] = override_due_at_weekday(
+                        parsed.get("due_at"),
+                        body.message,
+                        body.user_timezone,
+                    )
+                    parsed["due_at"] = override_due_at_clock(
+                        parsed.get("due_at"),
+                        body.message,
+                        body.user_timezone,
+                        language=language,
+                    )
 
             # Resolve the cluster. Without this the mobile always lands
             # voice tasks in Drift, because the embedded data only
