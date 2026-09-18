@@ -27,6 +27,7 @@
 // rather than as a bug — the same code is what a dev build will use.
 
 import * as Notifications from "expo-notifications";
+import { router, useRootNavigationState, type Href } from "expo-router";
 import { useEffect } from "react";
 
 import {
@@ -46,9 +47,29 @@ const CATEGORY_CHASE = "orbi.task.chase";
 
 const ACTION_DONE = "done";
 const ACTION_SNOOZE = "snooze";
+const ACTION_SNOOZE_TOMORROW = "snooze_tomorrow";
+const ACTION_OPEN = "open";
 const ACTION_REPLY = "reply";
 
 const SNOOZE_MINUTES = 60;
+
+// Where "tomorrow" lands. Early enough to be the start of the day, late
+// enough to be outside anyone's default quiet hours.
+const TOMORROW_HOUR = 9;
+
+/** Minutes from now until tomorrow morning, in the device's own zone.
+ *
+ * Computed on the phone rather than the server because the phone is what
+ * knows where it is, and "tomorrow" is a wall-clock idea — 9am where the
+ * user is standing, not 9am UTC. The server clamps this to a week.
+ */
+function minutesUntilTomorrowMorning(): number {
+  const now = new Date();
+  const target = new Date(now);
+  target.setDate(target.getDate() + 1);
+  target.setHours(TOMORROW_HOUR, 0, 0, 0);
+  return Math.max(5, Math.round((target.getTime() - now.getTime()) / 60000));
+}
 
 /** Payload the server attaches to every reminder push. */
 interface ReminderData {
@@ -72,6 +93,19 @@ export async function registerNotificationCategories(): Promise<void> {
     buttonTitle: translate("Snooze 1h"),
     options: { opensAppToForeground: false },
   };
+  const snoozeTomorrow = {
+    identifier: ACTION_SNOOZE_TOMORROW,
+    buttonTitle: translate("Tomorrow"),
+    options: { opensAppToForeground: false },
+  };
+  // The escape hatch from a fixed menu. Two canned delays cover most
+  // cases and nothing covers the rest, so this one deliberately DOES open
+  // the app — straight onto the task, where the date picker lives.
+  const pickTime = {
+    identifier: ACTION_OPEN,
+    buttonTitle: translate("Pick a time"),
+    options: { opensAppToForeground: true },
+  };
   const reply = {
     identifier: ACTION_REPLY,
     buttonTitle: translate("Reply"),
@@ -84,15 +118,34 @@ export async function registerNotificationCategories(): Promise<void> {
     options: { opensAppToForeground: false },
   };
 
+  // Order matters more than the list does: iOS shows only the first two
+  // as buttons on a collapsed notification and hides the rest behind a
+  // long-press, so the two most likely answers go first.
   try {
     await Promise.all([
-      // Before the deadline there is nothing to mark done yet — the task
-      // hasn't come round. Snoozing the warning is the only sane verb.
-      Notifications.setNotificationCategoryAsync(CATEGORY_LEAD, [snooze, done]),
-      Notifications.setNotificationCategoryAsync(CATEGORY_DUE, [done, snooze]),
+      // Before the deadline, "done" is plausible (you did it early) but
+      // postponing the warning is the commoner answer, so it leads.
+      Notifications.setNotificationCategoryAsync(CATEGORY_LEAD, [
+        snooze,
+        done,
+        snoozeTomorrow,
+        pickTime,
+      ]),
+      Notifications.setNotificationCategoryAsync(CATEGORY_DUE, [
+        done,
+        snooze,
+        snoozeTomorrow,
+        pickTime,
+      ]),
       // The chase is the one that asks a question, so it is the one that
       // earns a free-text answer.
-      Notifications.setNotificationCategoryAsync(CATEGORY_CHASE, [done, snooze, reply]),
+      Notifications.setNotificationCategoryAsync(CATEGORY_CHASE, [
+        done,
+        snooze,
+        snoozeTomorrow,
+        pickTime,
+        reply,
+      ]),
     ]);
   } catch (e) {
     // Never fatal. A device that won't take categories still receives
@@ -100,6 +153,42 @@ export async function registerNotificationCategories(): Promise<void> {
     console.warn("Notification categories not registered:", e);
   }
 }
+
+/** Land the user on the task the notification was about.
+ *
+ * Not just "open the app": a reminder that dumps you on whatever screen
+ * you last used has made you go and find the thing yourself, which is the
+ * work the notification was supposed to save.
+ *
+ * Three steps, in order:
+ *   1. the Universe tab, since that is where tasks live;
+ *   2. drill into the task's cluster, so backing out of the detail leaves
+ *      you looking at its bubble among its siblings rather than at the
+ *      top-level cluster view;
+ *   3. open the task itself, which is where the date picker is.
+ *
+ * Hydration comes first because a cold start has an empty store, and
+ * entering a cluster we haven't loaded yet would focus on nothing.
+ */
+async function openTaskInUniverse(taskId: string): Promise<void> {
+  const store = useUniverseStore.getState();
+  try {
+    if (store.serverTasks.length === 0) await store.hydrate();
+  } catch {
+    // Offline or the token expired. Still navigate — the Universe will
+    // show its own error state, which beats silently doing nothing.
+  }
+
+  const task = useUniverseStore.getState().getServerTask(taskId);
+  const clusterId = task?.parent_cluster_id;
+  if (clusterId) {
+    useUniverseStore.getState().enterCluster(clusterId);
+  }
+
+  router.navigate("/(tabs)" as Href);
+  router.push({ pathname: "/task-detail", params: { id: taskId } });
+}
+
 
 /** Act on a button press. Exported so the background task can reuse it. */
 export async function handleNotificationResponse(
@@ -119,6 +208,16 @@ export async function handleNotificationResponse(
       // completing.
     } else if (action === ACTION_SNOOZE) {
       if (planId) await snoozeNotification(planId, SNOOZE_MINUTES);
+    } else if (action === ACTION_SNOOZE_TOMORROW) {
+      if (planId) await snoozeNotification(planId, minutesUntilTomorrowMorning());
+    } else if (
+      action === ACTION_OPEN ||
+      action === Notifications.DEFAULT_ACTION_IDENTIFIER
+    ) {
+      // Tapping the notification body, or choosing "Pick a time". Both
+      // mean the same thing: take me to this task.
+      await openTaskInUniverse(taskId);
+      return;
     } else if (action === ACTION_REPLY) {
       const text = (response as { userText?: string }).userText?.trim();
       if (!text) return;
@@ -133,8 +232,7 @@ export async function handleNotificationResponse(
       }
       if (planId) await markNotificationAnswered(planId);
     } else {
-      // Default action — the user tapped the notification body. Opening
-      // the app is handled by the router; nothing to record.
+      // A dismissal, or an action from a future build we don't know yet.
       return;
     }
 
@@ -166,6 +264,8 @@ async function handleOnce(
 /** Register categories and listen for button presses. */
 export function useNotificationActions() {
   const session = useAuthStore((s) => s.session);
+  // Truthy only once the root navigator exists. See the cold-start effect.
+  const navigationReady = !!useRootNavigationState()?.key;
 
   useEffect(() => {
     // Categories are per-app, not per-user, but registering only once
@@ -191,7 +291,12 @@ export function useNotificationActions() {
     // never completed and the user is told about it again tomorrow. iOS
     // hands the response to the next launch instead, and that is the only
     // chance to honour it.
-    if (!session) return;
+    //
+    // Gated on the navigator existing, because this effect runs from a
+    // component that RENDERS the navigator: on the first pass there is
+    // nothing mounted to navigate, and a tap that should have opened the
+    // task would silently do nothing.
+    if (!session || !navigationReady) return;
     let cancelled = false;
     Notifications.getLastNotificationResponseAsync()
       .then((response) => {

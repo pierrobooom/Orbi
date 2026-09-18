@@ -9,7 +9,7 @@ import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import * as Notifications from "expo-notifications";
 import { useRouter, type Href } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -104,6 +104,16 @@ export default function SettingsScreen() {
   const [prefsError, setPrefsError] = useState<string | null>(null);
   // Which quiet-hours bound the picker is editing, if any.
   const [editingQuiet, setEditingQuiet] = useState<"start" | "end" | null>(null);
+  // Serialises preference writes and identifies the newest one. See
+  // savePrefs for why both are needed.
+  const saveSeq = useRef(0);
+  const saveChain = useRef<Promise<void>>(Promise.resolve());
+  // Mirrors `prefs` for the revert path, which runs inside a chained
+  // callback where the closure's copy is stale by definition.
+  const prefsRef = useRef<UserPreferences | null>(null);
+  useEffect(() => {
+    prefsRef.current = prefs;
+  }, [prefs]);
 
   useEffect(() => {
     Notifications.getPermissionsAsync()
@@ -193,18 +203,46 @@ export default function SettingsScreen() {
    *
    * The row reflects the change immediately and reverts if the save fails,
    * which matters for switches: a toggle that animates on and then silently
-   * isn't saved is worse than one that visibly snaps back. */
-  const savePrefs = async (patch: UserPreferencesPatch) => {
+   * isn't saved is worse than one that visibly snaps back.
+   *
+   * Flipping a switch twice quickly used to leave it stuck on whichever
+   * value happened to reply LAST rather than whichever was pressed last —
+   * two PUTs would be in flight at once, and neither the server's ordering
+   * nor the responses' were guaranteed to match the order of the taps. So:
+   *
+   *   - saves are chained, never concurrent, so the server applies them in
+   *     the order they were pressed and the database ends up on the last
+   *     one;
+   *   - each save carries a sequence number and only the newest is allowed
+   *     to write the response back into state, so a slow earlier reply
+   *     can't overwrite a newer optimistic value;
+   *   - the optimistic update is a functional setState, because `prefs`
+   *     captured in this closure is already stale by the second tap.
+   */
+  const savePrefs = (patch: UserPreferencesPatch) => {
     if (!prefs) return;
-    const previous = prefs;
+    const seq = ++saveSeq.current;
     setPrefsError(null);
-    setPrefs({ ...prefs, ...patch } as UserPreferences);
-    try {
-      setPrefs(await setMyPreferences(patch));
-    } catch (e) {
-      setPrefs(previous);
-      setPrefsError(e instanceof ApiError ? e.message : String(e));
-    }
+    setPrefs((current) =>
+      current ? ({ ...current, ...patch } as UserPreferences) : current,
+    );
+
+    saveChain.current = saveChain.current
+      .then(async () => {
+        const previous = prefsRef.current;
+        try {
+          const saved = await setMyPreferences(patch);
+          if (seq === saveSeq.current) setPrefs(saved);
+        } catch (e) {
+          if (seq === saveSeq.current) {
+            if (previous) setPrefs(previous);
+            setPrefsError(e instanceof ApiError ? e.message : String(e));
+          }
+        }
+      })
+      // The chain must survive a failed link or every later save is
+      // dropped with it.
+      .catch(() => {});
   };
 
   const onSelectLanguage = async (tag: LanguageTag) => {

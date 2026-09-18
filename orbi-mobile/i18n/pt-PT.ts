@@ -297,6 +297,8 @@ export const ptPT: Record<string, string> = {
   "Snooze 1h": "Adiar 1h",
   "Reply": "Responder",
   "Send": "Enviar",
+  "Tomorrow": "Amanhã",
+  "Pick a time": "Escolher hora",
   "What happened?": "O que aconteceu?",
   "Mute reminders": "Silenciar lembretes",
   "No notifications for tasks in this cluster. The tasks stay exactly as they are — only the nudges stop.":
