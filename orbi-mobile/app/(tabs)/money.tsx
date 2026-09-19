@@ -101,7 +101,17 @@ export default function MoneyScreen() {
           <Text style={styles.headerMonth}>{formatMonth(month)}</Text>
           <Text style={styles.headerSubtitle}>{t("Spent this month")}</Text>
         </View>
-        <Text style={styles.headerTotal}>{formatAmount(totalSpend, currency)}</Text>
+        <View style={styles.headerRight}>
+          <Text style={styles.headerTotal}>{formatAmount(totalSpend, currency)}</Text>
+          <Pressable
+            onPress={() => router.push("/accounts" as Href)}
+            hitSlop={10}
+            style={styles.accountsLink}
+            accessibilityLabel="Accounts"
+          >
+            <Text style={styles.accountsLinkText}>{t("Accounts")}</Text>
+          </Pressable>
+        </View>
       </View>
 
       {status === "loading" || status === "idle" ? (
@@ -201,6 +211,9 @@ const styles = StyleSheet.create({
   headerMonth: { color: colors.ink, fontSize: 14, fontWeight: "600" },
   headerSubtitle: { color: colors.inkDim, fontSize: 11, marginTop: 2 },
   headerTotal: { color: colors.ink, fontSize: 26, fontWeight: "700" },
+  headerRight: { alignItems: "flex-end", gap: 4 },
+  accountsLink: { paddingVertical: 2 },
+  accountsLinkText: { color: colors.accent, fontSize: 12, fontWeight: "600" },
   centered: { flex: 1, justifyContent: "center", alignItems: "center", padding: 24 },
   errorTitle: { color: colors.overdue, fontSize: 15, fontWeight: "600", marginBottom: 6 },
   errorBody: { color: colors.inkDim, fontSize: 12, textAlign: "center", marginBottom: 16 },

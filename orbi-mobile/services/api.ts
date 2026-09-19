@@ -312,6 +312,183 @@ export async function getFinanceSummary(month?: string): Promise<FinanceSummary>
   return (await res.json()) as FinanceSummary;
 }
 
+// ---------------------------------------------------------------------------
+// Accounts, recurring rules, bank connections
+// ---------------------------------------------------------------------------
+
+export interface FinanceAccount {
+  id: string;
+  owner_id: string;
+  name: string;
+  /** Display label and the key imported transactions are matched on.
+   *
+   * NOT a credential. An IBAN is the address printed on an invoice — it
+   * says which account, never that anyone agreed to share it. Reading an
+   * account needs the holder to authenticate at their own bank; that flow
+   * produces a connection, not this field. */
+  iban: string | null;
+  currency: string;
+  is_primary: boolean;
+  visible: boolean;
+  include_in_total: boolean;
+  position: number;
+  opening_balance: number;
+  created_at: string;
+}
+
+export interface AccountBalance {
+  account: FinanceAccount;
+  /** Derived server-side from opening_balance + entries, never stored. */
+  balance: number;
+  entry_count: number;
+}
+
+export interface CreateAccountInput {
+  name: string;
+  iban?: string | null;
+  currency?: string;
+  is_primary?: boolean;
+  visible?: boolean;
+  include_in_total?: boolean;
+  opening_balance?: number;
+}
+
+export type UpdateAccountInput = Partial<
+  Omit<CreateAccountInput, "currency">
+> & { position?: number };
+
+export async function listAccounts(): Promise<AccountBalance[]> {
+  const res = await authFetch(`${V1}/finance/accounts`);
+  if (!res.ok) throw await parseError(res);
+  return (await res.json()) as AccountBalance[];
+}
+
+export async function createAccount(
+  input: CreateAccountInput,
+): Promise<FinanceAccount> {
+  const res = await authFetch(`${V1}/finance/accounts`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) throw await parseError(res);
+  return (await res.json()) as FinanceAccount;
+}
+
+export async function updateAccount(
+  id: string,
+  patch: UpdateAccountInput,
+): Promise<FinanceAccount> {
+  const res = await authFetch(`${V1}/finance/accounts/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) throw await parseError(res);
+  return (await res.json()) as FinanceAccount;
+}
+
+export async function deleteAccount(id: string): Promise<void> {
+  const res = await authFetch(`${V1}/finance/accounts/${id}`, { method: "DELETE" });
+  if (!res.ok && res.status !== 404) throw await parseError(res);
+}
+
+export type Cadence = "weekly" | "monthly" | "yearly";
+
+export interface RecurringTransaction {
+  id: string;
+  owner_id: string;
+  account_id: string | null;
+  merchant: string;
+  category: string;
+  amount: number;
+  currency: string;
+  entry_type: "income" | "expense";
+  notes: string | null;
+  cadence: Cadence;
+  interval_count: number;
+  next_run_on: string;
+  last_run_on: string | null;
+  end_on: string | null;
+  active: boolean;
+}
+
+export interface CreateRecurringInput {
+  account_id?: string | null;
+  merchant: string;
+  category: string;
+  amount: number;
+  currency?: string;
+  entry_type?: "income" | "expense";
+  notes?: string | null;
+  cadence?: Cadence;
+  interval_count?: number;
+  next_run_on: string;
+  end_on?: string | null;
+}
+
+export async function listRecurring(): Promise<RecurringTransaction[]> {
+  const res = await authFetch(`${V1}/finance/recurring`);
+  if (!res.ok) throw await parseError(res);
+  return (await res.json()) as RecurringTransaction[];
+}
+
+export async function createRecurring(
+  input: CreateRecurringInput,
+): Promise<RecurringTransaction> {
+  const res = await authFetch(`${V1}/finance/recurring`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) throw await parseError(res);
+  return (await res.json()) as RecurringTransaction;
+}
+
+export async function updateRecurring(
+  id: string,
+  patch: Partial<CreateRecurringInput> & { active?: boolean },
+): Promise<RecurringTransaction> {
+  const res = await authFetch(`${V1}/finance/recurring/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) throw await parseError(res);
+  return (await res.json()) as RecurringTransaction;
+}
+
+export async function deleteRecurring(id: string): Promise<void> {
+  const res = await authFetch(`${V1}/finance/recurring/${id}`, { method: "DELETE" });
+  if (!res.ok && res.status !== 404) throw await parseError(res);
+}
+
+export interface ProviderStatus {
+  provider: string;
+  /** False when no aggregator is configured — nothing will sync, and the
+   * UI should say so rather than offering a Connect button to nowhere. */
+  automatic_import: boolean;
+  note: string;
+}
+
+export async function getProviderStatus(): Promise<ProviderStatus> {
+  const res = await authFetch(`${V1}/finance/provider`);
+  if (!res.ok) throw await parseError(res);
+  return (await res.json()) as ProviderStatus;
+}
+
+export interface FinanceJobResult {
+  recurring_rules: number;
+  recurring_entries: number;
+  sync: { considered: number; imported: number; failed: number };
+}
+
+/** Run the daily finance jobs now.
+ *
+ * Does NOT bypass the per-account sync cooldown, so tapping it repeatedly
+ * cannot run up a provider bill. */
+export async function runFinanceJobs(): Promise<FinanceJobResult> {
+  const res = await authFetch(`${V1}/finance/run-jobs`, { method: "POST" });
+  if (!res.ok) throw await parseError(res);
+  return (await res.json()) as FinanceJobResult;
+}
+
 export interface UpdateFinanceEntryInput {
   amount?: number;
   merchant?: string;

@@ -269,6 +269,102 @@ export const ptPT: Record<string, string> = {
   "Permanently delete my account": "Apagar a minha conta permanentemente",
   "Showing {n} of {total}": "A mostrar {n} de {total}",
 
+  // --- accounts ---------------------------------------------------------
+  "Accounts": "Contas",
+  "No accounts yet": "Ainda não há contas",
+  "Add the accounts your money moves through. Each transaction can then be filed to one, so you can see what's actually in each.":
+    "Adiciona as contas por onde o teu dinheiro passa. Cada movimento pode depois ser associado a uma, para veres o que tens em cada.",
+  "Add an account": "Adicionar uma conta",
+  "Total": "Total",
+  "Across accounts included in the total.": "Nas contas incluídas no total.",
+  "No account number": "Sem número de conta",
+  "{n} transactions": "{n} movimentos",
+  "Not counted in the total": "Não contabilizada no total",
+  "Automatic import is on": "Importação automática activa",
+  "Manual tracking": "Registo manual",
+  "An account number labels an account and files imported transactions to it. It can't fetch anything on its own — banks only release transactions after you sign in with them directly and approve it.":
+    "O número da conta serve para identificar a conta e associar-lhe movimentos importados. Não vai buscar nada sozinho — os bancos só libertam movimentos depois de entrares directamente com eles e autorizares.",
+  "Update now": "Actualizar agora",
+  "Recurring transactions": "Movimentos recorrentes",
+  "Rent, subscriptions, the gym — entered once, created for you every time they're due.":
+    "Renda, subscrições, ginásio — registas uma vez e são criados sempre que se repetem.",
+  "Long-press an account to delete it.": "Mantém premida uma conta para a apagar.",
+  "Delete account?": "Apagar conta?",
+  "Transactions stay in your history — they just stop being assigned to this account.":
+    "Os movimentos ficam no teu histórico — deixam apenas de estar associados a esta conta.",
+  "Could not delete": "Não foi possível apagar",
+  "Could not run": "Não foi possível executar",
+  "Could not save": "Não foi possível guardar",
+  "Finance updated": "Finanças actualizadas",
+  "{n} recurring entries created": "{n} movimentos recorrentes criados",
+  "{n} transactions imported": "{n} movimentos importados",
+  "No bank provider is configured, so nothing was imported.":
+    "Não há nenhum fornecedor bancário configurado, por isso não foi importado nada.",
+
+  // --- account editor ---------------------------------------------------
+  "New account": "Nova conta",
+  "Edit account": "Editar conta",
+  "Account not found": "Conta não encontrada",
+  "Revolut, Caixa, Savings…": "Revolut, Caixa, Poupança…",
+  "Account number (optional)": "Número da conta (opcional)",
+  "That doesn't look like a valid IBAN — check for a missing digit.":
+    "Isto não parece um IBAN válido — verifica se falta algum dígito.",
+  "Used to label this account and to file imported transactions to it. It doesn't connect to your bank on its own — no app can read an account from its number alone.":
+    "Serve para identificar esta conta e associar-lhe movimentos importados. Não liga ao teu banco sozinho — nenhuma aplicação consegue ler uma conta apenas pelo número.",
+  "Currency": "Moeda",
+  "Can't be changed later — it would reinterpret every amount already recorded.":
+    "Não pode ser alterada depois — mudaria o significado de todos os valores já registados.",
+  "Starting balance": "Saldo inicial",
+  "What was in the account when you started tracking. Every transaction you record moves the balance from here.":
+    "O que tinhas na conta quando começaste a registar. Cada movimento que registas move o saldo a partir daqui.",
+  "Primary account": "Conta principal",
+  "The default for new transactions, including ones from a receipt photo.":
+    "A predefinida para novos movimentos, incluindo os criados a partir de uma foto de recibo.",
+  "Include in total": "Incluir no total",
+  "Turn off for an account you track but don't count as yours to spend.":
+    "Desliga para uma conta que acompanhas mas não contas como tua para gastar.",
+  "Visible": "Visível",
+  "Hidden accounts stay in your data but drop out of the list.":
+    "As contas ocultas ficam nos teus dados mas saem da lista.",
+
+  // --- recurring --------------------------------------------------------
+  "Recurring": "Recorrentes",
+  "Netflix, rent, gym…": "Netflix, renda, ginásio…",
+  "How often": "Com que frequência",
+  "Weekly": "Semanal",
+  "Monthly": "Mensal",
+  "Yearly": "Anual",
+  "Account": "Conta",
+  "Add rule": "Adicionar regra",
+  "Starts today. The first entry appears the next time Orbi updates your finances.":
+    "Começa hoje. O primeiro movimento aparece da próxima vez que o Orbi actualizar as tuas finanças.",
+  "Nothing recurring yet": "Ainda não há recorrentes",
+  "Most of a month is the same handful of things. Add them once and they'll record themselves.":
+    "A maior parte de um mês são sempre as mesmas coisas. Adiciona-as uma vez e passam a registar-se sozinhas.",
+  "Add the first one": "Adicionar a primeira",
+  "Every {every}{unit}": "A cada {every}{unit}",
+  "week": "semana",
+  "weeks": "semanas",
+  "month": "mês",
+  "months": "meses",
+  "year": "ano",
+  "years": "anos",
+  "Next: {date}": "Próximo: {date}",
+  "Paused": "Em pausa",
+  "Long-press a rule to delete it.": "Mantém premida uma regra para a apagar.",
+  "Delete this rule?": "Apagar esta regra?",
+  "Entries it already created stay — they're money that actually moved.":
+    "Os movimentos que já criou ficam — é dinheiro que realmente se moveu.",
+  "Subscriptions": "Subscrições",
+  "Groceries": "Supermercado",
+  "Transport": "Transportes",
+  "Health": "Saúde",
+  "Finance": "Finanças",
+  "Dining": "Restauração",
+  "Shopping": "Compras",
+  "Home": "Casa",
+  "Other": "Outro",
+
   // --- reminders --------------------------------------------------------
   "Reminders": "Lembretes",
   "Remind me about tasks": "Lembrar-me das tarefas",

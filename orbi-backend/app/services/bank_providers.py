@@ -117,6 +117,69 @@ class NullProvider:
         return []
 
 
+class SandboxProvider:
+    """Fabricated transactions, for exercising the pipeline. NEVER real data.
+
+    This exists to answer one question — does the machinery work? — without a
+    vendor contract: does a sync claim the connection, honour the cooldown,
+    deduplicate an overlapping window, file to the right account, and run the
+    categoriser. It cannot answer whether a bank would return anything,
+    because it never speaks to one.
+
+    Every transaction it emits is labelled DEMO in the description and its
+    external_id is prefixed `sandbox:`, so fabricated rows can always be told
+    apart from real ones and deleted in a single query. That labelling is not
+    decoration: financial records that cannot be distinguished from real ones
+    are how someone ends up making a decision on invented numbers.
+
+    Off unless BANK_PROVIDER=sandbox is set explicitly.
+    """
+
+    name = "sandbox"
+
+    # Deterministic, so a re-sync of an overlapping window returns the SAME
+    # transactions and the deduplication is actually being tested rather than
+    # being handed fresh ids every time.
+    _PATTERN = [
+        (0, -12.40, "DEMO Continente", "Continente"),
+        (1, -3.20, "DEMO Padaria", "Padaria"),
+        (2, -9.99, "DEMO Netflix", "Netflix"),
+        (3, -24.80, "DEMO Galp", "Galp"),
+        (5, -46.15, "DEMO Pingo Doce", "Pingo Doce"),
+    ]
+
+    async def fetch_transactions(
+        self,
+        *,
+        external_account_id: str | None,
+        consent_reference: str | None,
+        since: date,
+        until: date,
+    ) -> list[BankTransaction]:
+        from datetime import timedelta
+
+        out: list[BankTransaction] = []
+        for offset, amount, description, merchant in self._PATTERN:
+            booked = since + timedelta(days=offset)
+            if booked > until:
+                continue
+            out.append(
+                BankTransaction(
+                    external_id=f"sandbox:{external_account_id or 'acct'}:{booked.isoformat()}:{merchant}",
+                    booked_on=booked,
+                    amount=amount,
+                    currency="EUR",
+                    description=description,
+                    merchant=merchant,
+                )
+            )
+        logger.warning(
+            "SandboxProvider returned %s FABRICATED transactions — not real bank data",
+            len(out),
+        )
+        return out
+
+
 _REGISTRY: dict[str, BankProvider] = {}
 
 
@@ -152,3 +215,5 @@ def configured_provider_name() -> str:
 
 _NULL = NullProvider()
 register(_NULL)
+# Registered but inert unless BANK_PROVIDER names it.
+register(SandboxProvider())

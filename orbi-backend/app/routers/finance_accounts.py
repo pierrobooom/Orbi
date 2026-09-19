@@ -286,7 +286,12 @@ async def provider_status(user_id: UUID = Depends(get_current_user)):
             "No bank provider configured. Transactions arrive from manual "
             "entry, receipts, and recurring rules."
             if name == "manual"
-            else f"Connected accounts sync once per day via {name}."
+            else (
+                "SANDBOX MODE — transactions are fabricated for testing and are "
+                "not from any real account."
+                if name == "sandbox"
+                else f"Connected accounts sync once per day via {name}."
+            )
         ),
     }
 

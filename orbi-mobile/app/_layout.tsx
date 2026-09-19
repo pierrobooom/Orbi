@@ -125,6 +125,18 @@ export default function RootLayout() {
                 name="delete-account"
                 options={{ presentation: "modal", headerShown: false }}
               />
+              <Stack.Screen
+                name="accounts"
+                options={{ presentation: "modal", headerShown: false }}
+              />
+              <Stack.Screen
+                name="account-editor"
+                options={{ presentation: "modal", headerShown: false }}
+              />
+              <Stack.Screen
+                name="recurring"
+                options={{ presentation: "modal", headerShown: false }}
+              />
 
             </Stack>
           </AuthGate>

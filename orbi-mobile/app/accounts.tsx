@@ -1,0 +1,415 @@
+// Accounts — where money lives, and what is actually in each one.
+//
+// Reached from the Money tab. Lists every account with its balance, offers
+// add / edit / delete, and surfaces whether automatic bank import is even
+// possible on this deployment.
+//
+// ON THE "SYNC NOW" BUTTON AND WHAT IT HONESTLY DOES
+// The server reports which bank provider is configured. When that is the null
+// provider — the default, because connecting to a bank needs a licensed
+// aggregator nobody has signed up for yet — this screen says so in plain
+// words instead of showing a Connect button that leads nowhere. Running the
+// jobs still does something real: recurring rules materialise. It just will
+// not invent transactions that no provider returned.
+//
+// Balances come from the server already derived (opening_balance + entries).
+// They are deliberately not computed here: two implementations of the same
+// arithmetic drift, and the one on the phone is the one that would be wrong.
+
+import MaterialIcons from "@expo/vector-icons/MaterialIcons";
+import { useFocusEffect, useRouter, type Href } from "expo-router";
+import React, { useCallback, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+
+import { translate, useT } from "@/i18n";
+import {
+  ApiError,
+  deleteAccount,
+  getProviderStatus,
+  listAccounts,
+  runFinanceJobs,
+  type AccountBalance,
+  type ProviderStatus,
+} from "@/services/api";
+import { colors } from "@/theme/colors";
+
+function formatMoney(amount: number, currency: string): string {
+  const symbol =
+    currency === "EUR" ? "€" : currency === "GBP" ? "£" : currency === "USD" ? "$" : "";
+  return `${symbol}${amount.toFixed(2)}`;
+}
+
+/** Group an IBAN for reading: PT50 0002 0123 … Never for sending. */
+function formatIban(iban: string): string {
+  return iban.replace(/(.{4})/g, "$1 ").trim();
+}
+
+export default function AccountsScreen() {
+  const t = useT();
+  const router = useRouter();
+
+  const [accounts, setAccounts] = useState<AccountBalance[] | null>(null);
+  const [provider, setProvider] = useState<ProviderStatus | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      const [rows, status] = await Promise.all([listAccounts(), getProviderStatus()]);
+      setAccounts(rows);
+      setProvider(status);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : String(e));
+      setAccounts((current) => current ?? []);
+    }
+  }, []);
+
+  // Reload on focus, not just on mount: the editor is a modal, so coming
+  // back from it must show the change without a manual pull.
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+    }, [load]),
+  );
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+  };
+
+  const onSync = async () => {
+    setSyncing(true);
+    try {
+      const result = await runFinanceJobs();
+      await load();
+      const lines = [
+        t("{n} recurring entries created", { n: result.recurring_entries }),
+        t("{n} transactions imported", { n: result.sync.imported }),
+      ];
+      // When no provider is configured, an import of zero is the expected
+      // outcome rather than a failure — say which it is.
+      if (provider && !provider.automatic_import) {
+        lines.push(t("No bank provider is configured, so nothing was imported."));
+      }
+      Alert.alert(translate("Finance updated"), lines.join("\n"));
+    } catch (e) {
+      Alert.alert(
+        translate("Could not run"),
+        e instanceof ApiError ? e.message : String(e),
+      );
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const onDelete = (row: AccountBalance) => {
+    Alert.alert(
+      translate("Delete account?"),
+      translate("Transactions stay in your history — they just stop being assigned to this account."),
+      [
+        { text: translate("Cancel"), style: "cancel" },
+        {
+          text: translate("Delete"),
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await deleteAccount(row.account.id);
+              await load();
+            } catch (e) {
+              Alert.alert(
+                translate("Could not delete"),
+                e instanceof ApiError ? e.message : String(e),
+              );
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const total = (accounts ?? [])
+    .filter((r) => r.account.include_in_total)
+    .reduce((sum, r) => sum + r.balance, 0);
+  const currency = accounts?.[0]?.account.currency ?? "EUR";
+
+  return (
+    <SafeAreaView style={styles.root} edges={["top", "bottom"]}>
+      <View style={styles.header}>
+        <Pressable onPress={() => router.back()} hitSlop={12} style={styles.headerSide}>
+          <MaterialIcons name="chevron-left" size={24} color={colors.inkDim} />
+        </Pressable>
+        <Text style={styles.headerTitle}>{t("Accounts")}</Text>
+        <Pressable
+          onPress={() => router.push("/account-editor?id=new" as Href)}
+          hitSlop={12}
+          style={styles.headerSide}
+          accessibilityLabel="Add account"
+        >
+          <MaterialIcons name="add" size={24} color={colors.accent} />
+        </Pressable>
+      </View>
+
+      <ScrollView
+        contentContainerStyle={styles.body}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.inkDim}
+          />
+        }
+      >
+        {accounts === null ? (
+          <ActivityIndicator color={colors.accent} style={styles.loader} />
+        ) : accounts.length === 0 ? (
+          <View style={styles.empty}>
+            <Text style={styles.emptyTitle}>{t("No accounts yet")}</Text>
+            <Text style={styles.emptyBody}>
+              {t("Add the accounts your money moves through. Each transaction can then be filed to one, so you can see what's actually in each.")}
+            </Text>
+            <Pressable
+              onPress={() => router.push("/account-editor?id=new" as Href)}
+              style={styles.emptyBtn}
+            >
+              <Text style={styles.emptyBtnText}>{t("Add an account")}</Text>
+            </Pressable>
+          </View>
+        ) : (
+          <>
+            <View style={styles.totalCard}>
+              <Text style={styles.totalLabel}>{t("Total")}</Text>
+              <Text style={styles.totalValue}>{formatMoney(total, currency)}</Text>
+              <Text style={styles.totalHint}>
+                {t("Across accounts included in the total.")}
+              </Text>
+            </View>
+
+            {accounts.map((row) => (
+              <Pressable
+                key={row.account.id}
+                onPress={() =>
+                  router.push(`/account-editor?id=${row.account.id}` as Href)
+                }
+                onLongPress={() => onDelete(row)}
+                style={styles.card}
+              >
+                <View style={styles.cardTop}>
+                  <View style={styles.cardNameGroup}>
+                    <Text style={styles.cardName} numberOfLines={1}>
+                      {row.account.name}
+                    </Text>
+                    {row.account.is_primary ? (
+                      <MaterialIcons name="star" size={15} color={colors.finance} />
+                    ) : null}
+                  </View>
+                  <Text
+                    style={[
+                      styles.cardBalance,
+                      row.balance < 0 && styles.cardBalanceNegative,
+                    ]}
+                  >
+                    {formatMoney(row.balance, row.account.currency)}
+                  </Text>
+                </View>
+                <View style={styles.cardBottom}>
+                  <Text style={styles.cardMeta} numberOfLines={1}>
+                    {row.account.iban
+                      ? formatIban(row.account.iban)
+                      : t("No account number")}
+                  </Text>
+                  <Text style={styles.cardMeta}>
+                    {t("{n} transactions", { n: row.entry_count })}
+                  </Text>
+                </View>
+                {!row.account.include_in_total ? (
+                  <Text style={styles.cardExcluded}>{t("Not counted in the total")}</Text>
+                ) : null}
+              </Pressable>
+            ))}
+          </>
+        )}
+
+        {/* Honest about what is and isn't connected. A Connect button that
+            leads nowhere is worse than no button. */}
+        {provider ? (
+          <View style={styles.providerCard}>
+            <View style={styles.providerRow}>
+              <MaterialIcons
+                name={provider.automatic_import ? "sync" : "edit-note"}
+                size={18}
+                color={colors.inkDim}
+              />
+              <Text style={styles.providerTitle}>
+                {provider.automatic_import
+                  ? t("Automatic import is on")
+                  : t("Manual tracking")}
+              </Text>
+            </View>
+            <Text style={styles.providerBody}>{provider.note}</Text>
+            {!provider.automatic_import ? (
+              <Text style={styles.providerBody}>
+                {t("An account number labels an account and files imported transactions to it. It can't fetch anything on its own — banks only release transactions after you sign in with them directly and approve it.")}
+              </Text>
+            ) : null}
+          </View>
+        ) : null}
+
+        <Pressable
+          onPress={onSync}
+          disabled={syncing}
+          style={[styles.syncBtn, syncing && styles.btnBusy]}
+        >
+          {syncing ? (
+            <ActivityIndicator color={colors.ink} />
+          ) : (
+            <Text style={styles.syncBtnText}>{t("Update now")}</Text>
+          )}
+        </Pressable>
+
+        <Pressable
+          onPress={() => router.push("/recurring" as Href)}
+          style={styles.linkRow}
+        >
+          <View style={styles.toggleLabelGroup}>
+            <Text style={styles.rowLabel}>{t("Recurring transactions")}</Text>
+            <Text style={styles.rowHint}>
+              {t("Rent, subscriptions, the gym — entered once, created for you every time they're due.")}
+            </Text>
+          </View>
+          <MaterialIcons name="chevron-right" size={22} color={colors.inkDim} />
+        </Pressable>
+
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+        <Text style={styles.footHint}>{t("Long-press an account to delete it.")}</Text>
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: colors.canvas },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderBottomColor: colors.line,
+    borderBottomWidth: 1,
+  },
+  headerSide: { minWidth: 40, alignItems: "center" },
+  headerTitle: { color: colors.ink, fontSize: 15, fontWeight: "600" },
+  body: { padding: 16, paddingBottom: 48, gap: 12 },
+  loader: { marginTop: 40 },
+  empty: { alignItems: "center", paddingVertical: 48, gap: 10 },
+  emptyTitle: { color: colors.ink, fontSize: 16, fontWeight: "700" },
+  emptyBody: {
+    color: colors.inkDim,
+    fontSize: 13,
+    lineHeight: 19,
+    textAlign: "center",
+    paddingHorizontal: 12,
+  },
+  emptyBtn: {
+    marginTop: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 22,
+    borderRadius: 10,
+    backgroundColor: colors.accent,
+  },
+  emptyBtnText: { color: colors.canvas, fontSize: 14, fontWeight: "700" },
+  totalCard: {
+    backgroundColor: colors.panel,
+    borderColor: colors.line,
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 16,
+  },
+  totalLabel: {
+    color: colors.inkDim,
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 1,
+    textTransform: "uppercase",
+  },
+  totalValue: {
+    color: colors.ink,
+    fontSize: 30,
+    fontWeight: "800",
+    marginTop: 4,
+    fontVariant: ["tabular-nums"],
+  },
+  totalHint: { color: colors.inkDim, fontSize: 11, marginTop: 4 },
+  card: {
+    backgroundColor: colors.panel,
+    borderColor: colors.line,
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 14,
+    gap: 8,
+  },
+  cardTop: { flexDirection: "row", justifyContent: "space-between", gap: 12 },
+  cardNameGroup: { flexDirection: "row", alignItems: "center", gap: 6, flexShrink: 1 },
+  cardName: { color: colors.ink, fontSize: 15, fontWeight: "600", flexShrink: 1 },
+  cardBalance: {
+    color: colors.ink,
+    fontSize: 16,
+    fontWeight: "700",
+    fontVariant: ["tabular-nums"],
+  },
+  cardBalanceNegative: { color: colors.overdue },
+  cardBottom: { flexDirection: "row", justifyContent: "space-between", gap: 12 },
+  cardMeta: { color: colors.inkDim, fontSize: 11, flexShrink: 1 },
+  cardExcluded: { color: colors.inkDim, fontSize: 11, fontStyle: "italic" },
+  providerCard: {
+    backgroundColor: colors.panel,
+    borderColor: colors.line,
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 14,
+    gap: 8,
+    marginTop: 4,
+  },
+  providerRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  providerTitle: { color: colors.ink, fontSize: 13, fontWeight: "700" },
+  providerBody: { color: colors.inkDim, fontSize: 12, lineHeight: 18 },
+  syncBtn: {
+    paddingVertical: 13,
+    borderRadius: 10,
+    borderColor: colors.line,
+    borderWidth: 1,
+    backgroundColor: colors.panel,
+    alignItems: "center",
+  },
+  btnBusy: { opacity: 0.6 },
+  syncBtnText: { color: colors.ink, fontSize: 14, fontWeight: "600" },
+  linkRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    backgroundColor: colors.panel,
+    borderColor: colors.line,
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 14,
+  },
+  toggleLabelGroup: { flex: 1 },
+  rowLabel: { color: colors.ink, fontSize: 14, fontWeight: "500" },
+  rowHint: { color: colors.inkDim, fontSize: 11, marginTop: 6, lineHeight: 16 },
+  error: { color: colors.overdue, fontSize: 12 },
+  footHint: { color: colors.inkDim, fontSize: 11, textAlign: "center", marginTop: 4 },
+});
