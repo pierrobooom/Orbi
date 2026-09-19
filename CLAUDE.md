@@ -413,15 +413,28 @@ RUN\_REMINDER\_DISPATCHER=1
 
 NOTIFICATIONS\_DISPATCH\_SECRET=
 
+RUN\_FINANCE\_SCHEDULER=1
+
+BANK\_PROVIDER=manual
+
 ```
 
-The last two control reminder delivery. `RUN_REMINDER_DISPATCHER=1` (the
-default) runs the schedule loop inside the API process, which is correct for
-a single instance and wrong for several — every replica would send every
-reminder. Past one instance, set it to `0` and have a single external cron
-POST `/api/v1/notifications/dispatch` with an `X-Dispatch-Secret` header
-matching `NOTIFICATIONS_DISPATCH_SECRET`. That endpoint returns 503 while the
-secret is unset, so it cannot be left accidentally open.
+`RUN_REMINDER_DISPATCHER=1` and `RUN_FINANCE_SCHEDULER=1` (both the default)
+run their background loops inside the API process, which is correct for a
+single instance and wrong for several — every replica would send every
+reminder and sync every bank account, multiplying the provider bill by the
+replica count. Past one instance, set them to `0` and drive the work from a
+single external cron: POST `/api/v1/notifications/dispatch` with an
+`X-Dispatch-Secret` header matching `NOTIFICATIONS_DISPATCH_SECRET`. That
+endpoint returns 503 while the secret is unset, so it cannot be left
+accidentally open.
+
+`BANK_PROVIDER` selects the bank-data aggregator adapter in
+services/bank_providers.py. `manual` (the default) is the null provider: it
+fetches nothing, so no automatic import happens and transactions arrive only
+from manual entry, receipts and recurring rules. Setting it to a real
+provider requires that provider's credentials — see the finance section below
+for why an IBAN alone is not one.
 
 
 
@@ -779,14 +792,32 @@ enforced at routers/tasks.py, weekday parsing was fixed, and the Chat tab
 shipped). Verify before trusting this list again.
 
 \- Groq Developer tier — the free tier's 200k tokens/day cannot serve one Pro user
-\- FINANCE INTELLIGENCE is sold and not built. Pro's "weekly + monthly
+\- FINANCE INTELLIGENCE is still sold and not built. Pro's "weekly + monthly
   reports, AI insights, anomaly detection" and Genius's "daily reports,
   proactive insights, cross-month patterns" have no implementation:
-  agents/finance_agent.py's generate_insights is called by nothing, the
-  finance_insights table has no db helper touching it, and budgets have
-  endpoints but no mobile surface. The Money tab is entry logging and a
-  monthly total. This is the largest gap between the pricing page and the
-  product.
+  agents/finance_agent.py's generate_insights is called by nothing and the
+  finance_insights table has no db helper touching it. Migration 0012 built
+  the STRUCTURE underneath it (accounts with derived balances, recurring
+  rules, bank-sync seam) but nothing yet generates an insight.
+\- Finance has no mobile surface for any of 0012. The Money tab is still
+  entry logging and a monthly total: no account list, no balances, no
+  recurring-rule editor, no connection status. Backend is complete and
+  tested; the client has not caught up.
+\- BANK SYNC IS A SEAM, NOT AN INTEGRATION. services/bank_sync.py and the
+  daily scheduler are built and tested against a fake provider, and
+  BANK_PROVIDER defaults to a null adapter that fetches nothing. No
+  aggregator is configured, because none can be without a licence.
+  An IBAN is a LABEL, not a credential. finance_accounts.iban exists to
+  match imported transactions to the right account — it cannot fetch
+  anything, from anyone. Reading an account requires the holder to
+  authenticate at their own bank and consent to a licensed AISP, which
+  returns a token; bank_connections.consent_reference is where that token's
+  handle goes. Do not add an adapter that takes an IBAN and expects data.
+  Vendor state as of 2026-09-19: GoCardless/Nordigen (the free default) is
+  closed to new signups; Enable Banking is the current self-serve route with
+  a free Restricted Production mode against your own accounts. Pricing is
+  per connected account per month and unpublished — price it BEFORE
+  building, the way the ElevenLabs decision should have been.
 \- Reminder actions are built but UNVERIFIED. The Done / Snooze / Tomorrow
   / Pick-a-time / Reply buttons exist (hooks/useNotificationActions.ts) and
   categories are registered at runtime, which MAY work in Expo Go on iOS

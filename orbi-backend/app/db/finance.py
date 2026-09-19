@@ -3,9 +3,12 @@
 All functions interact directly with Supabase. No business logic lives here.
 """
 
+import logging
 from uuid import UUID
 
 from app.db.client import get_client
+
+logger = logging.getLogger(__name__)
 
 
 async def fetch_entries_for_user(
@@ -119,3 +122,39 @@ def _next_month(month: str) -> str:
     if month_num == 12:
         return f"{year + 1}-01-01"
     return f"{year}-{month_num + 1:02d}-01"
+
+
+async def existing_external_ids(user_id: UUID, external_ids: list[str]) -> set[str]:
+    """Which of these provider transaction ids are already stored.
+
+    Read in one query rather than probed per transaction: a sync window is a
+    handful of rows, but the per-row alternative is a query per transaction per
+    account per day, which looks free until there are a thousand users.
+    """
+    if not external_ids:
+        return set()
+    response = (
+        get_client().table("finance_entries")
+        .select("external_id")
+        .eq("user_id", str(user_id))
+        .in_("external_id", external_ids)
+        .execute()
+    )
+    return {row["external_id"] for row in (response.data or []) if row.get("external_id")}
+
+
+async def insert_entries(rows: list[dict]) -> int:
+    """Bulk-insert entries. Returns how many landed.
+
+    Tolerates the unique index on (user_id, external_id) rejecting the batch:
+    a concurrent sync writing the same transaction first is the index doing its
+    job, not an error worth propagating to a background scheduler.
+    """
+    if not rows:
+        return 0
+    try:
+        response = get_client().table("finance_entries").insert(rows).execute()
+        return len(response.data or [])
+    except Exception as exc:  # noqa: BLE001
+        logger.info("Bulk entry insert rejected (likely a duplicate): %s", exc)
+        return 0

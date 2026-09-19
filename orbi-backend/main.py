@@ -20,8 +20,10 @@ from app.routers import (  # noqa: E402
     chat,
     voice,
     notifications,
+    finance_accounts,
 )
 from app.services.reminder_dispatcher import run_forever  # noqa: E402
+from app.services import finance_scheduler  # noqa: E402
 
 # The in-process reminder loop is the right answer for one instance and the
 # wrong one for several — every replica would send every reminder. Set this
@@ -35,18 +37,21 @@ _RUN_DISPATCHER = os.environ.get("RUN_REMINDER_DISPATCHER", "1") != "0"
 async def lifespan(app: FastAPI):
     print("Orbi API is running")
 
-    dispatcher: asyncio.Task | None = None
+    background: list[asyncio.Task] = []
     if _RUN_DISPATCHER:
-        dispatcher = asyncio.create_task(run_forever())
+        background.append(asyncio.create_task(run_forever()))
+    if finance_scheduler.RUN_IN_PROCESS:
+        background.append(asyncio.create_task(finance_scheduler.run_forever()))
 
     yield
 
-    if dispatcher is not None:
+    for task in background:
         # Cancel and await: without the await, shutdown races the loop and
         # a tick mid-send is torn down with its HTTP call half-finished.
-        dispatcher.cancel()
+        task.cancel()
+    for task in background:
         try:
-            await dispatcher
+            await task
         except asyncio.CancelledError:
             pass
 
@@ -75,6 +80,7 @@ app.include_router(memory.router, prefix="/api/v1")
 app.include_router(chat.router, prefix="/api/v1")
 app.include_router(voice.router, prefix="/api/v1")
 app.include_router(notifications.router, prefix="/api/v1")
+app.include_router(finance_accounts.router, prefix="/api/v1")
 
 
 @app.get("/health")
