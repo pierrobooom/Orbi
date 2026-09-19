@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import HTMLResponse
 
 from app.db import finance as finance_db, finance_accounts as accounts_db
 from app.models.finance_account import (
@@ -303,6 +304,145 @@ async def provider_status(user_id: UUID = Depends(get_current_user)):
             )
         ),
     }
+
+
+@router.get("/callback", response_class=HTMLResponse)
+async def bank_callback(code: str | None = None, state: str | None = None,
+                        error: str | None = None):
+    """Where the user's bank sends them back after approving.
+
+    NOT an authenticated API call. A browser lands here, redirected from the
+    bank, so there is no JWT and no `get_current_user` — the only thing tying
+    the request to a user is `state`, which begin_connection set to the
+    account id. That is safe enough here because the account id is an
+    unguessable UUID, the authorisation code is single-use and short-lived,
+    and the code is worthless without the application's private key.
+
+    Returns HTML rather than JSON because a human is looking at it. They have
+    just been bounced through two apps and need to be told, in words, that it
+    worked and they can go back.
+    """
+    if error:
+        logger.warning("Bank callback returned an error: %s", error)
+        return HTMLResponse(_callback_page(ok=False, detail=error), status_code=400)
+    if not code or not state:
+        return HTMLResponse(
+            _callback_page(ok=False, detail="Missing code or state."),
+            status_code=400,
+        )
+
+    try:
+        connection = await accounts_db.find_pending_connection_for_account(state)
+        if connection is None:
+            return HTMLResponse(
+                _callback_page(ok=False, detail="No pending connection found."),
+                status_code=404,
+            )
+
+        provider = get_provider(connection.get("provider"))
+        complete = getattr(provider, "complete_connection", None)
+        if complete is None:
+            return HTMLResponse(
+                _callback_page(ok=False, detail="Provider cannot complete a session."),
+                status_code=501,
+            )
+
+        session = await complete(code=code)
+        account = await accounts_db.fetch_account(
+            UUID(str(connection["account_id"])), UUID(str(connection["owner_id"]))
+        )
+
+        external_account_id = _match_account(session, account)
+        if not external_account_id:
+            # Authorised, but we cannot tell WHICH of the approved accounts is
+            # the one they meant. Left pending with the reason rather than
+            # activated against a guess — filing someone's transactions to the
+            # wrong account is worse than not filing them.
+            await accounts_db.update_connection(
+                UUID(str(connection["id"])),
+                {
+                    "status": "error",
+                    "last_error": "Could not match the approved account. "
+                    "Add the account's IBAN in Orbi and reconnect.",
+                },
+            )
+            return HTMLResponse(
+                _callback_page(
+                    ok=False,
+                    detail="Approved, but we could not tell which account. "
+                    "Add its IBAN in Orbi and try again.",
+                ),
+                status_code=409,
+            )
+
+        await accounts_db.update_connection(
+            UUID(str(connection["id"])),
+            {
+                "status": "active",
+                "external_account_id": external_account_id,
+                "consent_reference": str(session.get("session_id") or ""),
+                # Claimable immediately, so the first sync does not wait a day.
+                "next_sync_after": datetime.now(timezone.utc).isoformat(),
+                "last_error": None,
+            },
+        )
+        return HTMLResponse(_callback_page(ok=True))
+
+    except Exception as exc:  # noqa: BLE001 — a browser must never see a traceback
+        logger.error("Bank callback failed: %s", exc)
+        return HTMLResponse(
+            _callback_page(ok=False, detail="Something went wrong completing the link."),
+            status_code=500,
+        )
+
+
+def _match_account(session: dict, account: dict | None) -> str | None:
+    """Pick which approved account corresponds to the user's Orbi account.
+
+    By IBAN first — this is the one job the IBAN field genuinely does, and
+    the payoff for having asked for it. When only one account was approved,
+    that is unambiguous regardless. Otherwise nothing is guessed.
+    """
+    approved = session.get("accounts") or []
+    if not approved:
+        return None
+
+    stored_iban = accounts_db.normalise_iban((account or {}).get("iban"))
+    if stored_iban:
+        for candidate in approved:
+            identification = (candidate.get("account_id") or {}).get("iban")
+            if accounts_db.normalise_iban(identification) == stored_iban:
+                return str(candidate.get("uid") or candidate.get("id") or "") or None
+
+    if len(approved) == 1:
+        only = approved[0]
+        return str(only.get("uid") or only.get("id") or "") or None
+
+    return None
+
+
+def _callback_page(*, ok: bool, detail: str = "") -> str:
+    """A plain page for a human who has just been bounced between two apps."""
+    title = "Account connected" if ok else "Couldn't connect"
+    body = (
+        "Your transactions will start appearing in Orbi shortly. "
+        "You can close this page and go back to the app."
+        if ok
+        else detail or "Please try again from Orbi."
+    )
+    tint = "#4ade80" if ok else "#ff4d6d"
+    return f"""<!doctype html>
+<html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{title}</title></head>
+<body style="margin:0;min-height:100vh;display:flex;align-items:center;
+justify-content:center;background:#0e0e14;color:#f2f2f7;
+font:16px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+<div style="max-width:22rem;padding:2rem;text-align:center">
+<div style="font-size:2.5rem;margin-bottom:1rem;color:{tint}">{'&#10003;' if ok else '&#33;'}</div>
+<h1 style="font-size:1.25rem;margin:0 0 .75rem">{title}</h1>
+<p style="margin:0;color:#9b9ba5">{body}</p>
+</div></body></html>"""
 
 
 @router.post("/accounts/{account_id}/import", response_model=ImportResult)

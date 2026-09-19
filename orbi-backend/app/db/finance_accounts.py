@@ -305,3 +305,23 @@ async def expiring_connections(before: datetime) -> list[dict]:
         .execute()
     )
     return response.data or []
+
+
+async def find_pending_connection_for_account(account_id: str) -> dict | None:
+    """The still-unfinished connection for an account, if there is one.
+
+    Used by the bank callback, which arrives as an unauthenticated browser
+    redirect carrying only the `state` it was given. That state is the account
+    id, so this is the lookup that turns it back into a connection.
+    """
+    response = (
+        get_client().table("bank_connections")
+        .select("*")
+        .eq("account_id", str(account_id))
+        .eq("status", "pending")
+        .order("created_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+    rows = response.data or []
+    return rows[0] if rows else None
