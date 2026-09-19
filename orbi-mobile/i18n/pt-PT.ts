@@ -301,6 +301,39 @@ export const ptPT: Record<string, string> = {
   "No bank provider is configured, so nothing was imported.":
     "Não há nenhum fornecedor bancário configurado, por isso não foi importado nada.",
 
+  // --- connect bank (consent explainer) ---------------------------------
+  "Automatic updates": "Actualizações automáticas",
+  "Connect {name} so your spending appears on its own.":
+    "Liga a conta {name} para os teus gastos aparecerem sozinhos.",
+  "Connect your account so your spending appears on its own.":
+    "Liga a tua conta para os teus gastos aparecerem sozinhos.",
+  "You'll go to your bank": "Vais ao teu banco",
+  "We open your bank's own website so you can sign in there. Orbi never sees your password or your security code.":
+    "Abrimos o site do teu banco para entrares lá. O Orbi nunca vê a tua palavra-passe nem o teu código de segurança.",
+  "You approve what we can see": "Autorizas o que podemos ver",
+  "Your bank asks whether to share this account with Orbi. You decide, and your bank keeps the record.":
+    "O teu banco pergunta se queres partilhar esta conta com o Orbi. Decides tu, e o registo fica com o banco.",
+  "Then it updates itself": "Depois actualiza-se sozinho",
+  "Once a day Orbi checks for new transactions and sorts them into categories. Nothing to press.":
+    "Uma vez por dia o Orbi procura novos movimentos e organiza-os por categoria. Não tens de carregar em nada.",
+  "What Orbi can and can't do": "O que o Orbi pode e não pode fazer",
+  "Can see: your transactions and balance, so it can sort your spending.":
+    "Pode ver: os teus movimentos e saldo, para organizar os teus gastos.",
+  "Cannot move money. Access is read-only — no payments, no transfers.":
+    "Não pode mover dinheiro. O acesso é só de leitura — sem pagamentos, sem transferências.",
+  "Never sees your login. You type it on your bank's site, not here.":
+    "Nunca vê os teus dados de acesso. Escreve-los no site do banco, não aqui.",
+  "Expires after about 90 days. Your bank asks you to approve again — we'll remind you a week before.":
+    "Expira ao fim de cerca de 90 dias. O banco pede-te para autorizares de novo — avisamos-te uma semana antes.",
+  "Stop any time. Disconnect here or at your bank. Transactions already saved stay yours.":
+    "Podes parar quando quiseres. Desliga aqui ou no teu banco. Os movimentos já guardados continuam a ser teus.",
+  "Orbi reaches your bank through a licensed open-banking provider — the same rules every banking app follows. Your finance data is never shared with anyone.":
+    "O Orbi chega ao teu banco através de um fornecedor de open banking licenciado — as mesmas regras que qualquer aplicação bancária segue. Os teus dados financeiros nunca são partilhados com ninguém.",
+  "Continue to my bank": "Continuar para o meu banco",
+  "Not now": "Agora não",
+  "Prefer not to connect? You can import a statement from your bank instead — it works the same way, just manually.":
+    "Preferes não ligar? Podes importar um extracto do teu banco — funciona da mesma forma, só que manualmente.",
+
   "Import a statement": "Importar um extracto",
   "Statement imported": "Extracto importado",
   "Could not import": "Não foi possível importar",

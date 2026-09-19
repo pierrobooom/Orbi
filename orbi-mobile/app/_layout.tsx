@@ -137,6 +137,10 @@ export default function RootLayout() {
                 name="recurring"
                 options={{ presentation: "modal", headerShown: false }}
               />
+              <Stack.Screen
+                name="connect-bank"
+                options={{ presentation: "modal", headerShown: false }}
+              />
 
             </Stack>
           </AuthGate>

@@ -24,7 +24,6 @@ import React, { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  Linking,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -37,7 +36,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { translate, useT } from "@/i18n";
 import {
   ApiError,
-  connectAccount,
   deleteAccount,
   disconnectBank,
   getProviderStatus,
@@ -72,7 +70,6 @@ export default function AccountsScreen() {
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [syncing, setSyncing] = useState(false);
-  const [connecting, setConnecting] = useState<string | null>(null);
   const [importing, setImporting] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -101,35 +98,18 @@ export default function AccountsScreen() {
       (c) => c.account_id === accountId && ["pending", "active"].includes(c.status),
     );
 
-  const onConnect = async (accountId: string) => {
-    setConnecting(accountId);
-    try {
-      const result = await connectAccount(accountId);
-      await load();
-      if (result.authorization_url) {
-        // Every real provider lands here: the user has to go to their own
-        // bank, authenticate, and approve. Nothing the app holds can stand
-        // in for that trip.
-        Alert.alert(
-          translate("Approve with your bank"),
-          result.message,
-          [
-            { text: translate("Cancel"), style: "cancel" },
-            {
-              text: translate("Continue"),
-              onPress: () => Linking.openURL(result.authorization_url as string),
-            },
-          ],
-        );
-      } else {
-        Alert.alert(translate("Connected"), result.message);
-      }
-    } catch (e) {
-      const message = e instanceof ApiError ? e.message : String(e);
-      Alert.alert(translate("Could not connect"), message);
-    } finally {
-      setConnecting(null);
-    }
+  /** Explain before redirecting, rather than after.
+   *
+   * Connecting throws the user out of the app onto a bank login page. An
+   * alert fired mid-redirect is the wrong place to learn what is about to
+   * happen — by then they are deciding under pressure, and the honest
+   * reaction to a surprise bank prompt is to back out. The explainer screen
+   * owns the decision and the API call.
+   */
+  const onConnect = (account: AccountBalance["account"]) => {
+    router.push(
+      `/connect-bank?id=${account.id}&name=${encodeURIComponent(account.name)}` as Href,
+    );
   };
 
   /** Import a statement the user exported from their own bank.
@@ -422,17 +402,12 @@ export default function AccountsScreen() {
                   if (!provider?.automatic_import) return null;
                   return (
                     <Pressable
-                      onPress={() => onConnect(row.account.id)}
-                      disabled={connecting !== null}
-                      style={[styles.connectBtn, connecting && styles.btnBusy]}
+                      onPress={() => onConnect(row.account)}
+                      style={styles.connectBtn}
                     >
-                      {connecting === row.account.id ? (
-                        <ActivityIndicator color={colors.accent} size="small" />
-                      ) : (
-                        <Text style={styles.connectBtnText}>
-                          {t("Connect for automatic import")}
-                        </Text>
-                      )}
+                      <Text style={styles.connectBtnText}>
+                        {t("Connect for automatic import")}
+                      </Text>
                     </Pressable>
                   );
                 })()}
