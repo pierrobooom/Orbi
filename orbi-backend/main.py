@@ -20,6 +20,7 @@ from app.routers import (  # noqa: E402
     chat,
     voice,
     notifications,
+    legal,
     finance_accounts,
 )
 from app.services.reminder_dispatcher import run_forever  # noqa: E402
@@ -81,6 +82,9 @@ app.include_router(chat.router, prefix="/api/v1")
 app.include_router(voice.router, prefix="/api/v1")
 app.include_router(notifications.router, prefix="/api/v1")
 app.include_router(finance_accounts.router, prefix="/api/v1")
+# No /api/v1 prefix: these are public pages people open in a browser, and the
+# URLs are registered with third parties, so they must be short and stable.
+app.include_router(legal.router)
 
 
 @app.get("/health")
