@@ -284,6 +284,10 @@ def configured_provider_name() -> str:
     return os.environ.get("BANK_PROVIDER", "manual").strip() or "manual"
 
 
+# Adapters self-register on import. Imported at the bottom so the registry
+# and the base types exist first.
+from app.services import bank_provider_enablebanking  # noqa: E402,F401
+
 _NULL = NullProvider()
 register(_NULL)
 # Registered but inert unless BANK_PROVIDER names it.
