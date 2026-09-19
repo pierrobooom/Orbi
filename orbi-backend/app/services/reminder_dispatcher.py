@@ -471,6 +471,10 @@ async def _dispatch_for_owner(
     cluster_names = await _cluster_names_for(owner_id)
 
     sent_ids: list[str] = []
+    # Plans whose push Expo refused. Deliberately NOT marked sent: they stay
+    # pending so the next tick tries again, rather than a rejected reminder
+    # being recorded as delivered and never mentioned again.
+    failed_ids: list[str] = []
     for plan in winners:
         task = plan.get("task_bubbles") or {}
         kind = plan["kind"]
@@ -479,7 +483,7 @@ async def _dispatch_for_owner(
         cluster = cluster_names.get(str(cluster_id)) if cluster_id else None
         body = _BODY[lang_key].get(kind) or cluster or _NO_CLUSTER[lang_key]
 
-        await send_push(
+        tickets = await send_push(
             tokens,
             title=task.get("title") or "",
             subtitle=_countdown(_parse_dt(task.get("due_at")), now, language),
@@ -492,7 +496,25 @@ async def _dispatch_for_owner(
                 "taskId": str(plan["task_id"]),
             },
         )
-        sent_ids.append(plan["id"])
+
+        # Only call it sent if Expo actually accepted it for at least one
+        # device. The tickets used to be discarded, so a rejected push — a
+        # malformed payload, a stale token, an Expo outage — was recorded as
+        # 'sent' exactly like a delivered one. The database then said the user
+        # had been told about something they never heard about, which is the
+        # one thing a reminder system must not get wrong: it also means the
+        # plan is never retried, and the budget is spent on nothing.
+        if any(t.get("status") == "ok" for t in tickets):
+            sent_ids.append(plan["id"])
+        else:
+            reasons = {str(t.get("message"))[:120] for t in tickets if t.get("message")}
+            logger.error(
+                "Push rejected for plan %s (%s): %s",
+                plan["id"],
+                kind,
+                "; ".join(reasons) or "no ticket returned",
+            )
+            failed_ids.append(plan["id"])
 
     await notifications_db.mark_state(sent_ids, "sent")
 
@@ -501,6 +523,11 @@ async def _dispatch_for_owner(
     # advance would mean cancelling it almost every time.
     if prefs.get("chase_reminders_enabled", True):
         await _schedule_escalations(owner_id, winners, prefs, now)
+
+    if failed_ids:
+        logger.warning(
+            "%s reminder(s) left pending after a rejected push", len(failed_ids)
+        )
 
     return {"sent": len(sent_ids), "skipped": len(losers), "postponed": 0}
 
