@@ -112,6 +112,26 @@ export default function AccountsScreen() {
     );
   };
 
+  /** Restart an approval that was never finished.
+   *
+   * The half-finished connection is dropped first rather than reused. Its
+   * authorisation is single-use and short-lived, so resuming it would send
+   * the user to a bank page that has already expired — and the unique index
+   * refuses a second live connection on the same account anyway.
+   */
+  const onResume = async (
+    account: AccountBalance["account"],
+    link: BankConnection,
+  ) => {
+    try {
+      await disconnectBank(link.id);
+      await load();
+    } catch {
+      // Non-fatal: the connect screen will surface a real conflict.
+    }
+    onConnect(account);
+  };
+
   /** Import a statement the user exported from their own bank.
    *
    * The only route to real transactions that needs no licence and no
@@ -379,21 +399,40 @@ export default function AccountsScreen() {
                     between a sync importing something and importing zero. */}
                 {(() => {
                   const link = connectionFor(row.account.id);
+
+                  // A pending connection used to be a dead end: it said
+                  // "waiting for your bank" and offered no way to actually go
+                  // and approve. Anyone who closed the bank page, or lost the
+                  // link, was stuck with a connection that would never
+                  // complete and a sync that silently did nothing.
+                  if (link && link.status === "pending") {
+                    return (
+                      <View style={styles.connectRow}>
+                        <MaterialIcons name="schedule" size={15} color={colors.inkDim} />
+                        <Text style={styles.connectText}>
+                          {t("Not approved yet")}
+                        </Text>
+                        <Pressable onPress={() => onResume(row.account, link)}>
+                          <Text style={styles.resumeText}>{t("Finish")}</Text>
+                        </Pressable>
+                        <Pressable onPress={() => onDisconnect(link)}>
+                          <Text style={styles.disconnectText}>{t("Cancel")}</Text>
+                        </Pressable>
+                      </View>
+                    );
+                  }
+
                   if (link) {
                     return (
                       <Pressable
                         onPress={() => onDisconnect(link)}
                         style={styles.connectRow}
                       >
-                        <MaterialIcons
-                          name={link.status === "active" ? "link" : "schedule"}
-                          size={15}
-                          color={link.status === "active" ? colors.health : colors.inkDim}
-                        />
+                        <MaterialIcons name="link" size={15} color={colors.health} />
                         <Text style={styles.connectText}>
-                          {link.status === "active"
+                          {link.last_synced_at
                             ? t("Connected · syncs daily")
-                            : t("Waiting for your bank's approval")}
+                            : t("Connected · first sync pending")}
                         </Text>
                         <Text style={styles.disconnectText}>{t("Disconnect")}</Text>
                       </Pressable>
@@ -581,6 +620,7 @@ const styles = StyleSheet.create({
   },
   connectText: { color: colors.inkDim, fontSize: 11, flex: 1 },
   disconnectText: { color: colors.overdue, fontSize: 11, fontWeight: "600" },
+  resumeText: { color: colors.accent, fontSize: 11, fontWeight: "700" },
   providerCard: {
     backgroundColor: colors.panel,
     borderColor: colors.line,
