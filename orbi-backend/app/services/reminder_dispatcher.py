@@ -65,11 +65,15 @@ _MAX_PER_TICK = 200
 # Without the entitlement (which only a real build has) iOS silently treats
 # timeSensitive as active, so this is correct today and louder later with no
 # further change.
+# NOTE the spelling. Expo's PUSH API takes 'time-sensitive'; expo-notifications'
+# local API takes 'timeSensitive'. Sending the camelCase form here fails the
+# whole request with a 400 and no notification goes out at all — which is how
+# it was found.
 _INTERRUPTION = {
     "lead": "active",
-    "due": "timeSensitive",
-    "chase": "timeSensitive",
-    "escalate": "timeSensitive",
+    "due": "time-sensitive",
+    "chase": "time-sensitive",
+    "escalate": "time-sensitive",
 }
 
 # iOS/Android notification categories, which the client registers to get

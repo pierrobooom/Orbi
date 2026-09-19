@@ -106,8 +106,25 @@ async def send_push(
                             ticket.get("details"),
                         )
                 tickets.extend(batch_tickets)
+            except httpx.HTTPStatusError as exc:
+                # Log the RESPONSE BODY, not just the status. A 400 from Expo
+                # is a payload validation failure and the body names the
+                # offending field and its allowed values — without it, a
+                # one-character mistake in an enum ('timeSensitive' where the
+                # push API wants 'time-sensitive') silently kills every
+                # notification and reads only as "400 Bad Request".
+                detail = ""
+                try:
+                    detail = exc.response.text[:500]
+                except Exception:  # noqa: BLE001
+                    pass
+                logger.error("Expo push rejected (%s): %s", exc.response.status_code, detail)
+                tickets.extend(
+                    [{"status": "error", "message": detail or str(exc)} for _ in batch]
+                )
+                continue
             except httpx.HTTPError as exc:
-                logger.error("Expo push HTTP error: %s", exc)
+                logger.error("Expo push transport error: %s", exc)
                 # Synthesise an error ticket per token so the caller sees
                 # the failure shape rather than thinking the call worked.
                 tickets.extend(

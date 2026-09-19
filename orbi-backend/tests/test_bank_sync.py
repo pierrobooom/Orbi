@@ -236,3 +236,24 @@ def test_consent_warning_lands_before_the_feed_dies():
     assert CONSENT_WARNING_DAYS >= 3
     warn_at = datetime.now(timezone.utc) + timedelta(days=CONSENT_WARNING_DAYS)
     assert warn_at > datetime.now(timezone.utc)
+
+
+# ---------------------------------------------------------------------------
+# Push payload enums
+# ---------------------------------------------------------------------------
+
+def test_interruption_levels_match_the_push_api_spelling():
+    """Expo's PUSH API accepts 'active' | 'critical' | 'passive' |
+    'time-sensitive'. expo-notifications' LOCAL api spells the third one
+    'timeSensitive', and sending that camelCase form to the push endpoint
+    fails the entire request with a 400 — every notification in the batch
+    silently dies. Verified against the live API when it happened."""
+    from app.services.reminder_dispatcher import _INTERRUPTION
+
+    allowed = {"active", "critical", "passive", "time-sensitive"}
+    assert set(_INTERRUPTION.values()) <= allowed, (
+        f"invalid interruption level(s): {set(_INTERRUPTION.values()) - allowed}"
+    )
+    # Reminders must never use 'critical' — Apple grants that entitlement case
+    # by case for safety alerts, and it overrides the silent switch.
+    assert "critical" not in _INTERRUPTION.values()
