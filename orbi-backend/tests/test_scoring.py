@@ -42,29 +42,46 @@ class TestDeadlineWeight:
     def test_no_due_date_returns_zero(self):
         assert _deadline_weight(None) == 0.0
 
-    def test_overdue_returns_ten(self):
-        past = datetime.now(timezone.utc) - timedelta(days=1)
-        assert _deadline_weight(past) == 10.0
+    def test_overdue_scores_high_and_escalates_with_age(self):
+        """Being late escalates, but tops out: three days late and three
+        weeks late are both simply late, and letting age dominate would bury
+        genuinely urgent new work."""
+        now = datetime.now(timezone.utc)
+        just = _deadline_weight(now - timedelta(minutes=5))
+        a_day = _deadline_weight(now - timedelta(days=1))
+        a_week = _deadline_weight(now - timedelta(days=7))
 
-    def test_one_day_away_returns_eight(self):
-        soon = datetime.now(timezone.utc) + timedelta(hours=20)
-        assert _deadline_weight(soon) == 8.0
+        assert 8.0 <= just < a_day < 10.0
+        assert a_week == 10.0
 
-    def test_three_days_away_returns_five(self):
-        close = datetime.now(timezone.utc) + timedelta(days=2)
-        assert _deadline_weight(close) == 5.0
+    def test_weight_decreases_smoothly_as_the_deadline_recedes(self):
+        """The property that matters, and the one the old step function did
+        not have: moving a deadline ALWAYS moves the score. It used to be a
+        flat 8 from one minute to twenty-three hours, so postponing did
+        nothing observable and the bubble kept screaming."""
+        now = datetime.now(timezone.utc)
+        weights = [
+            _deadline_weight(now + timedelta(hours=h))
+            for h in (1, 3, 12, 24, 72, 168, 336)
+        ]
+        assert weights == sorted(weights, reverse=True)
+        assert len(set(weights)) == len(weights), "no two horizons may tie"
 
-    def test_seven_days_away_returns_two(self):
-        week = datetime.now(timezone.utc) + timedelta(days=5)
-        assert _deadline_weight(week) == 2.0
+    def test_roughly_tracks_the_old_steps_at_the_old_boundaries(self):
+        """Existing tasks should stay ranked about where their owner expects,
+        so the curve is tuned to pass near the previous values."""
+        now = datetime.now(timezone.utc)
+        assert 6.0 < _deadline_weight(now + timedelta(days=1)) < 7.0   # was 8
+        assert 3.5 < _deadline_weight(now + timedelta(days=3)) < 4.5   # was 5
+        assert 1.2 < _deadline_weight(now + timedelta(days=7)) < 2.2   # was 2
 
-    def test_beyond_seven_days_returns_zero(self):
-        far = datetime.now(timezone.utc) + timedelta(days=30)
-        assert _deadline_weight(far) == 0.0
+    def test_distant_deadline_approaches_zero(self):
+        far = datetime.now(timezone.utc) + timedelta(days=60)
+        assert _deadline_weight(far) < 0.1
 
     def test_naive_datetime_is_handled(self):
         # Naive datetimes should not raise — treated as UTC
-        past = datetime.utcnow() - timedelta(days=1)
+        past = datetime.now() - timedelta(days=7)
         assert _deadline_weight(past) == 10.0
 
 
@@ -131,13 +148,34 @@ class TestAttentionDecay:
 # ---------------------------------------------------------------------------
 
 class TestCalculatePressureScore:
-    def test_score_is_clamped_to_ten(self):
-        # Overdue + max importance + many deps + stale = would exceed 10
-        overdue = datetime.now(timezone.utc) - timedelta(days=1)
+    def test_score_never_exceeds_ten(self):
+        """Soft saturation replaced a hard clamp. The clamp destroyed
+        information — an ordinary task due tomorrow already summed past 10 and
+        so scored identically to the worst thing in the universe, and any
+        change below the ceiling moved nothing."""
+        overdue = datetime.now(timezone.utc) - timedelta(days=7)
         stale = datetime.now(timezone.utc) - timedelta(days=20)
         task = make_task(due_at=overdue, importance=10, updated_at=stale)
         score = calculate_pressure_score(task, dependency_count=5)
-        assert score == 10.0
+        assert 9.0 < score <= 10.0
+
+    def test_every_component_still_moves_the_score_near_the_top(self):
+        """The reason for the change. Under the old clamp these two were both
+        exactly 10, so de-prioritising a task did nothing visible."""
+        overdue = datetime.now(timezone.utc) - timedelta(days=2)
+        urgent = make_task(due_at=overdue, importance=10)
+        milder = make_task(due_at=overdue, importance=4)
+        assert calculate_pressure_score(urgent) > calculate_pressure_score(milder)
+
+    def test_postponing_always_lowers_the_score(self):
+        """What a user means by "postpone". An hour is a nudge, a day is
+        visible — but neither is ever zero change."""
+        now = datetime.now(timezone.utc)
+        overdue = calculate_pressure_score(make_task(due_at=now - timedelta(hours=2)))
+        in_an_hour = calculate_pressure_score(make_task(due_at=now + timedelta(hours=1)))
+        tomorrow = calculate_pressure_score(make_task(due_at=now + timedelta(days=1)))
+        next_week = calculate_pressure_score(make_task(due_at=now + timedelta(days=7)))
+        assert overdue > in_an_hour > tomorrow > next_week
 
     def test_score_is_never_negative(self):
         task = make_task(importance=1)
@@ -147,8 +185,11 @@ class TestCalculatePressureScore:
     def test_no_pressure_on_fresh_low_importance_task(self):
         task = make_task(importance=1)
         score = calculate_pressure_score(task, dependency_count=0)
-        # Only importance_weight contributes: 1/2 = 0.5
-        assert score == 0.5
+        # Only importance_weight contributes (1/2 = 0.5), which soft
+        # saturation maps to a small positive number rather than passing
+        # through unchanged. What matters is that a fresh, unimportant,
+        # undated task sits near the bottom of the universe.
+        assert 0.0 < score < 1.5
 
     def test_dependency_count_default_is_zero(self):
         task = make_task(importance=4)
