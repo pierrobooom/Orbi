@@ -151,3 +151,16 @@ class FinanceJobResult(BaseModel):
     recurring_rules: int
     recurring_entries: int
     sync: SyncResult
+
+
+class ConnectResponse(BaseModel):
+    """Result of starting a bank connection.
+
+    `authorization_url` is present whenever the provider needs the user to go
+    to their own bank and approve access — which is every real provider. It
+    is absent only for the sandbox, which speaks to no bank.
+    """
+
+    connection: BankConnection
+    authorization_url: Optional[str] = None
+    message: str

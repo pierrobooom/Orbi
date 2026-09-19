@@ -22,6 +22,7 @@ import React, { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Linking,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -34,11 +35,15 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { translate, useT } from "@/i18n";
 import {
   ApiError,
+  connectAccount,
   deleteAccount,
+  disconnectBank,
   getProviderStatus,
   listAccounts,
+  listBankConnections,
   runFinanceJobs,
   type AccountBalance,
+  type BankConnection,
   type ProviderStatus,
 } from "@/services/api";
 import { colors } from "@/theme/colors";
@@ -60,21 +65,93 @@ export default function AccountsScreen() {
 
   const [accounts, setAccounts] = useState<AccountBalance[] | null>(null);
   const [provider, setProvider] = useState<ProviderStatus | null>(null);
+  const [connections, setConnections] = useState<BankConnection[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [connecting, setConnecting] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
-      const [rows, status] = await Promise.all([listAccounts(), getProviderStatus()]);
+      const [rows, status, links] = await Promise.all([
+        listAccounts(),
+        getProviderStatus(),
+        listBankConnections(),
+      ]);
       setAccounts(rows);
       setProvider(status);
+      setConnections(links);
       setError(null);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : String(e));
       setAccounts((current) => current ?? []);
     }
   }, []);
+
+  /** The live link for an account, if it has one.
+   *
+   * An account with no connection is a label, not a feed — which is exactly
+   * why a sync over accounts alone imports nothing. */
+  const connectionFor = (accountId: string) =>
+    connections.find(
+      (c) => c.account_id === accountId && ["pending", "active"].includes(c.status),
+    );
+
+  const onConnect = async (accountId: string) => {
+    setConnecting(accountId);
+    try {
+      const result = await connectAccount(accountId);
+      await load();
+      if (result.authorization_url) {
+        // Every real provider lands here: the user has to go to their own
+        // bank, authenticate, and approve. Nothing the app holds can stand
+        // in for that trip.
+        Alert.alert(
+          translate("Approve with your bank"),
+          result.message,
+          [
+            { text: translate("Cancel"), style: "cancel" },
+            {
+              text: translate("Continue"),
+              onPress: () => Linking.openURL(result.authorization_url as string),
+            },
+          ],
+        );
+      } else {
+        Alert.alert(translate("Connected"), result.message);
+      }
+    } catch (e) {
+      const message = e instanceof ApiError ? e.message : String(e);
+      Alert.alert(translate("Could not connect"), message);
+    } finally {
+      setConnecting(null);
+    }
+  };
+
+  const onDisconnect = (connection: BankConnection) => {
+    Alert.alert(
+      translate("Disconnect?"),
+      translate("Transactions already imported stay. This only stops new ones arriving."),
+      [
+        { text: translate("Cancel"), style: "cancel" },
+        {
+          text: translate("Disconnect"),
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await disconnectBank(connection.id);
+              await load();
+            } catch (e) {
+              Alert.alert(
+                translate("Could not disconnect"),
+                e instanceof ApiError ? e.message : String(e),
+              );
+            }
+          },
+        },
+      ],
+    );
+  };
 
   // Reload on focus, not just on mount: the editor is a modal, so coming
   // back from it must show the change without a manual pull.
@@ -237,6 +314,49 @@ export default function AccountsScreen() {
                 {!row.account.include_in_total ? (
                   <Text style={styles.cardExcluded}>{t("Not counted in the total")}</Text>
                 ) : null}
+
+                {/* Connection state per account. Without a connection an
+                    account is only a label, so this row is the difference
+                    between a sync importing something and importing zero. */}
+                {(() => {
+                  const link = connectionFor(row.account.id);
+                  if (link) {
+                    return (
+                      <Pressable
+                        onPress={() => onDisconnect(link)}
+                        style={styles.connectRow}
+                      >
+                        <MaterialIcons
+                          name={link.status === "active" ? "link" : "schedule"}
+                          size={15}
+                          color={link.status === "active" ? colors.health : colors.inkDim}
+                        />
+                        <Text style={styles.connectText}>
+                          {link.status === "active"
+                            ? t("Connected · syncs daily")
+                            : t("Waiting for your bank's approval")}
+                        </Text>
+                        <Text style={styles.disconnectText}>{t("Disconnect")}</Text>
+                      </Pressable>
+                    );
+                  }
+                  if (!provider?.automatic_import) return null;
+                  return (
+                    <Pressable
+                      onPress={() => onConnect(row.account.id)}
+                      disabled={connecting !== null}
+                      style={[styles.connectBtn, connecting && styles.btnBusy]}
+                    >
+                      {connecting === row.account.id ? (
+                        <ActivityIndicator color={colors.accent} size="small" />
+                      ) : (
+                        <Text style={styles.connectBtnText}>
+                          {t("Connect for automatic import")}
+                        </Text>
+                      )}
+                    </Pressable>
+                  );
+                })()}
               </Pressable>
             ))}
           </>
@@ -374,6 +494,26 @@ const styles = StyleSheet.create({
   cardBottom: { flexDirection: "row", justifyContent: "space-between", gap: 12 },
   cardMeta: { color: colors.inkDim, fontSize: 11, flexShrink: 1 },
   cardExcluded: { color: colors.inkDim, fontSize: 11, fontStyle: "italic" },
+  connectBtn: {
+    marginTop: 4,
+    paddingVertical: 10,
+    borderRadius: 9,
+    borderWidth: 1,
+    borderColor: colors.accent,
+    alignItems: "center",
+  },
+  connectBtnText: { color: colors.accent, fontSize: 13, fontWeight: "600" },
+  connectRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 4,
+    paddingTop: 8,
+    borderTopColor: colors.line,
+    borderTopWidth: 1,
+  },
+  connectText: { color: colors.inkDim, fontSize: 11, flex: 1 },
+  disconnectText: { color: colors.overdue, fontSize: 11, fontWeight: "600" },
   providerCard: {
     backgroundColor: colors.panel,
     borderColor: colors.line,

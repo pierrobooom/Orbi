@@ -62,10 +62,53 @@ class BankTransaction:
     merchant: str | None = None
 
 
+@dataclass(frozen=True)
+class ConnectionDraft:
+    """What a provider gives back when a user starts connecting an account.
+
+    `authorization_url` is the heart of it, and the reason connecting can
+    never be a field on a form: for any real provider the user has to be sent
+    to their OWN BANK, authenticate there with their own credentials and 2FA,
+    and approve a named provider for a named scope. Only then does a token
+    come back. A draft with no URL means the provider needs no such trip —
+    true only for the sandbox, which speaks to nobody.
+
+    `status` is 'pending' while that trip is outstanding and 'active' once
+    there is something usable to sync with.
+    """
+
+    external_account_id: str | None = None
+    consent_reference: str | None = None
+    consent_expires_at: str | None = None
+    authorization_url: str | None = None
+    status: str = "pending"
+    institution_id: str | None = None
+
+
+class ProviderNotConfigured(Exception):
+    """No aggregator is set up, so there is nothing to connect to.
+
+    Raised rather than returning an empty draft so the caller is forced to
+    tell the user plainly instead of creating a connection that will silently
+    never produce anything.
+    """
+
+
 class BankProvider(Protocol):
     """What the sync loop needs from any aggregator."""
 
     name: str
+
+    async def begin_connection(
+        self, *, account: dict, redirect_uri: str | None = None
+    ) -> ConnectionDraft:
+        """Start linking one account. Raises ProviderNotConfigured if it can't.
+
+        `account` carries the user's own record — including the IBAN they
+        typed, which a real adapter may pass to the provider to preselect an
+        account. It is a hint for the UI, never the thing that grants access.
+        """
+        ...
 
     async def fetch_transactions(
         self,
@@ -115,6 +158,14 @@ class NullProvider:
         until: date,
     ) -> list[BankTransaction]:
         return []
+
+    async def begin_connection(
+        self, *, account: dict, redirect_uri: str | None = None
+    ) -> ConnectionDraft:
+        raise ProviderNotConfigured(
+            "No bank provider is configured, so accounts cannot be connected. "
+            "Transactions come from manual entry, receipts and recurring rules."
+        )
 
 
 class SandboxProvider:
@@ -178,6 +229,26 @@ class SandboxProvider:
             len(out),
         )
         return out
+
+    async def begin_connection(
+        self, *, account: dict, redirect_uri: str | None = None
+    ) -> ConnectionDraft:
+        """Connect immediately, with no authorisation trip.
+
+        The sandbox is the only provider that can do this, precisely because
+        it talks to no bank. Every real one returns an authorization_url and
+        sits at 'pending' until the user has been to their bank and back.
+        """
+        logger.warning(
+            "SandboxProvider connected account %s — FABRICATED data, no bank involved",
+            account.get("id"),
+        )
+        return ConnectionDraft(
+            external_account_id=f"sandbox-{str(account.get('id'))[:8]}",
+            consent_reference="sandbox-no-consent-needed",
+            status="active",
+            institution_id="sandbox",
+        )
 
 
 _REGISTRY: dict[str, BankProvider] = {}

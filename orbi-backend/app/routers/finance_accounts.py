@@ -14,6 +14,7 @@ from app.db import finance as finance_db, finance_accounts as accounts_db
 from app.models.finance_account import (
     AccountBalance,
     BankConnection,
+    ConnectResponse,
     FinanceAccount,
     FinanceAccountCreate,
     FinanceAccountUpdate,
@@ -25,7 +26,11 @@ from app.models.finance_account import (
 )
 from app.services import finance_scheduler
 from app.services.auth import get_current_user
-from app.services.bank_providers import configured_provider_name
+from app.services.bank_providers import (
+    ProviderNotConfigured,
+    configured_provider_name,
+    get_provider,
+)
 from app.services.bank_sync import connections_needing_attention
 
 logger = logging.getLogger(__name__)
@@ -294,6 +299,84 @@ async def provider_status(user_id: UUID = Depends(get_current_user)):
             )
         ),
     }
+
+
+@router.post("/accounts/{account_id}/connect", response_model=ConnectResponse)
+async def connect_account(
+    account_id: UUID,
+    user_id: UUID = Depends(get_current_user),
+):
+    """Start linking an account to the configured bank provider.
+
+    This is the step that was missing, and its absence is instructive: an
+    account and a connection are different things. Typing an IBAN creates an
+    ACCOUNT — a label to file transactions against. Syncing iterates
+    CONNECTIONS, which only exist once a provider has been asked to link one,
+    and for any real provider that means the user going to their own bank and
+    approving it.
+
+    For a real provider the response carries an authorization_url and the
+    connection sits at 'pending' until the user returns. The sandbox is the
+    only one that can come back 'active' immediately, because it speaks to no
+    bank at all.
+    """
+    account = await accounts_db.fetch_account(account_id, user_id)
+    if account is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_error("Account not found.", "ACCOUNT_NOT_FOUND"),
+        )
+
+    existing = [
+        c
+        for c in await accounts_db.list_connections(user_id)
+        if str(c.get("account_id")) == str(account_id)
+        and c.get("status") in {"pending", "active"}
+    ]
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=_error(
+                "That account is already connected.", "ALREADY_CONNECTED"
+            ),
+        )
+
+    provider_name = configured_provider_name()
+    provider = get_provider(provider_name)
+    try:
+        draft = await provider.begin_connection(account=account)
+    except ProviderNotConfigured as exc:
+        # 501 rather than 400: the request was fine, the capability is absent.
+        raise HTTPException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail=_error(str(exc), "PROVIDER_NOT_CONFIGURED"),
+        )
+
+    payload = {
+        "id": str(uuid4()),
+        "owner_id": str(user_id),
+        "account_id": str(account_id),
+        "provider": provider_name,
+        "institution_id": draft.institution_id,
+        "external_account_id": draft.external_account_id,
+        "consent_reference": draft.consent_reference,
+        "consent_expires_at": draft.consent_expires_at,
+        "status": draft.status,
+        # Claimable by the scheduler straight away, so a freshly connected
+        # account shows something without waiting a day for the first tick.
+        "next_sync_after": datetime.now(timezone.utc).isoformat(),
+    }
+    connection = await accounts_db.insert_connection(payload)
+
+    return ConnectResponse(
+        connection=BankConnection(**connection),
+        authorization_url=draft.authorization_url,
+        message=(
+            "Connected. Transactions will sync once a day."
+            if draft.status == "active"
+            else "Open the link to sign in with your bank and approve access."
+        ),
+    )
 
 
 @router.delete("/connections/{connection_id}", status_code=status.HTTP_204_NO_CONTENT)

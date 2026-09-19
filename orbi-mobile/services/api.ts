@@ -473,6 +473,56 @@ export async function getProviderStatus(): Promise<ProviderStatus> {
   return (await res.json()) as ProviderStatus;
 }
 
+export interface BankConnection {
+  id: string;
+  owner_id: string;
+  account_id: string;
+  provider: string;
+  institution_id: string | null;
+  status: "pending" | "active" | "expired" | "revoked" | "error";
+  consent_expires_at: string | null;
+  last_synced_at: string | null;
+  next_sync_after: string | null;
+  last_error: string | null;
+}
+
+export interface ConnectResponse {
+  connection: BankConnection;
+  /** Where the user must go to sign in with their bank and approve access.
+   *
+   * Present for every real provider — that trip is what produces the token
+   * syncing needs, and an account number can never substitute for it. Absent
+   * only for the sandbox, which talks to no bank. */
+  authorization_url: string | null;
+  message: string;
+}
+
+export async function listBankConnections(): Promise<BankConnection[]> {
+  const res = await authFetch(`${V1}/finance/connections`);
+  if (!res.ok) throw await parseError(res);
+  return (await res.json()) as BankConnection[];
+}
+
+/** Start linking an account to the configured bank provider.
+ *
+ * An account and a connection are different things: an account is a label to
+ * file transactions against, a connection is permission to fetch them.
+ * Syncing iterates connections, so an account alone never produces anything. */
+export async function connectAccount(accountId: string): Promise<ConnectResponse> {
+  const res = await authFetch(`${V1}/finance/accounts/${accountId}/connect`, {
+    method: "POST",
+  });
+  if (!res.ok) throw await parseError(res);
+  return (await res.json()) as ConnectResponse;
+}
+
+export async function disconnectBank(connectionId: string): Promise<void> {
+  const res = await authFetch(`${V1}/finance/connections/${connectionId}`, {
+    method: "DELETE",
+  });
+  if (!res.ok && res.status !== 404) throw await parseError(res);
+}
+
 export interface FinanceJobResult {
   recurring_rules: number;
   recurring_entries: number;

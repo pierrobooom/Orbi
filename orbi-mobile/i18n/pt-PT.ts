@@ -301,6 +301,19 @@ export const ptPT: Record<string, string> = {
   "No bank provider is configured, so nothing was imported.":
     "Não há nenhum fornecedor bancário configurado, por isso não foi importado nada.",
 
+  "Connect for automatic import": "Ligar para importação automática",
+  "Connected · syncs daily": "Ligada · sincroniza diariamente",
+  "Waiting for your bank's approval": "À espera da aprovação do teu banco",
+  "Connected": "Ligada",
+  "Could not connect": "Não foi possível ligar",
+  "Could not disconnect": "Não foi possível desligar",
+  "Disconnect": "Desligar",
+  "Disconnect?": "Desligar?",
+  "Transactions already imported stay. This only stops new ones arriving.":
+    "Os movimentos já importados ficam. Isto só impede a chegada de novos.",
+  "Approve with your bank": "Aprovar com o teu banco",
+  "Continue": "Continuar",
+
   // --- account editor ---------------------------------------------------
   "New account": "Nova conta",
   "Edit account": "Editar conta",
