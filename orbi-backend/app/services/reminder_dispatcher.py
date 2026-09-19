@@ -57,6 +57,21 @@ DISPATCH_INTERVAL_SECONDS = 60
 # drains over several ticks instead of one enormous fan-out.
 _MAX_PER_TICK = 200
 
+# How loudly each kind is allowed to arrive. A deadline passing is exactly
+# the case Apple designed timeSensitive for — it breaks through Focus and Do
+# Not Disturb, the way a WhatsApp or Teams message does. A lead is a heads-up
+# and does not earn that, so it arrives normally.
+#
+# Without the entitlement (which only a real build has) iOS silently treats
+# timeSensitive as active, so this is correct today and louder later with no
+# further change.
+_INTERRUPTION = {
+    "lead": "active",
+    "due": "timeSensitive",
+    "chase": "timeSensitive",
+    "escalate": "timeSensitive",
+}
+
 # iOS/Android notification categories, which the client registers to get
 # action buttons (Done / Snooze / Reply). Sent now so no backend change is
 # needed once the dev build lands and categories start being honoured;
@@ -466,6 +481,7 @@ async def _dispatch_for_owner(
             subtitle=_countdown(_parse_dt(task.get("due_at")), now, language),
             body=body,
             category_id=_CATEGORIES.get(kind, _CATEGORIES["due"]),
+            interruption_level=_INTERRUPTION.get(kind, "active"),
             data={
                 "kind": kind,
                 "planId": plan["id"],

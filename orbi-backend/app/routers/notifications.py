@@ -12,7 +12,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 
-from app.db import notifications as notifications_db
+from app.db import notifications as notifications_db, tasks as tasks_db
 from app.models.notification import (
     DispatchResponse,
     NotificationPlan,
@@ -22,7 +22,9 @@ from app.models.notification import (
 )
 from app.services.auth import get_current_user
 from app.services.reminder_dispatcher import dispatch_due, resync_user_plans
+from app.models.task import TaskBubble
 from app.services.reminder_schedule import daily_budget
+from app.services.scoring import calculate_pressure_score
 from app.services import reminder_dispatcher
 
 logger = logging.getLogger(__name__)
@@ -72,12 +74,28 @@ async def snooze_plan(
     body: SnoozeRequest,
     user_id: UUID = Depends(get_current_user),
 ):
-    """Push one reminder back and let it fire again.
+    """Postpone the TASK, not just the reminder.
 
-    Snoozing re-arms the plan rather than creating a new one, so snooze_count
-    keeps climbing on the same row. That count is the honest signal that a
-    task is being avoided rather than done, and it is lost the moment each
-    snooze becomes a fresh record.
+    This used to re-arm the notification and leave the task alone, which made
+    the app contradict itself: a task postponed to tomorrow still showed a
+    deadline of today, still scored 10/10 pressure, and still rendered as a
+    huge red bubble screaming that it was overdue. Pressure is derived from
+    due_at (services/scoring.py), so the only way "postpone" can mean anything
+    is to move due_at.
+
+    So a snooze now:
+      1. moves the task's deadline to the new time,
+      2. recalculates pressure, which shrinks the bubble,
+      3. and replans every reminder from the new deadline.
+
+    Step 3 supersedes re-arming this particular row: the plans are rebuilt
+    relative to the new due_at, so the "due" reminder lands when the task is
+    actually due rather than at an arbitrary offset from when the button was
+    pressed.
+
+    snooze_count still climbs on the task's live plan, because "this has been
+    pushed back six times" is the honest signal that something is being
+    avoided rather than done.
     """
     rows = await notifications_db.fetch_for_user(user_id, limit=200)
     plan = next((r for r in rows if str(r["id"]) == str(plan_id)), None)
@@ -87,12 +105,49 @@ async def snooze_plan(
             detail=_error("Reminder not found.", "PLAN_NOT_FOUND"),
         )
 
-    updated = await notifications_db.snooze(
-        plan_id,
-        trigger_at=datetime.now(timezone.utc) + timedelta(minutes=body.minutes),
-        snooze_count=int(plan.get("snooze_count") or 0) + 1,
+    task = await tasks_db.fetch_task_by_id(UUID(str(plan["task_id"])), user_id)
+    if task is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_error("Task not found.", "TASK_NOT_FOUND"),
+        )
+
+    new_due = datetime.now(timezone.utc) + timedelta(minutes=body.minutes)
+    merged = TaskBubble(**{**task, "due_at": new_due})
+
+    updated_task = await tasks_db.update_task(
+        UUID(str(task["id"])),
+        user_id,
+        {
+            "due_at": new_due.isoformat(),
+            "pressure_score": calculate_pressure_score(merged),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        },
     )
-    return updated
+
+    previous_snoozes = int(plan.get("snooze_count") or 0) + 1
+    await reminder_dispatcher.sync_task_plans(updated_task or task, user_id)
+
+    # Carry the count onto whichever plan now represents this task, so it
+    # survives the replan rather than resetting every time.
+    live = await notifications_db.fetch_pending_for_task(UUID(str(task["id"])))
+    if live:
+        return await notifications_db.snooze(
+            UUID(str(live[0]["id"])),
+            trigger_at=_parse_trigger(live[0]["trigger_at"]),
+            snooze_count=previous_snoozes,
+        )
+
+    # No reminder survives — the new deadline is far enough out, or reminders
+    # are off. The task still moved, which was the point.
+    await notifications_db.mark_state([str(plan_id)], "answered")
+    return {**plan, "state": "answered", "snooze_count": previous_snoozes}
+
+
+def _parse_trigger(value) -> datetime:
+    if isinstance(value, datetime):
+        return value
+    return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
 
 
 @router.post("/{plan_id}/answered", response_model=NotificationPlan)

@@ -30,6 +30,7 @@ async def send_push(
     data: dict | None = None,
     subtitle: str | None = None,
     category_id: str | None = None,
+    interruption_level: str | None = None,
 ) -> list[dict]:
     """Fan out a push to every token. Returns the list of tickets Expo returned.
 
@@ -43,6 +44,20 @@ async def send_push(
     originally passed inside `data`, where Expo never looks for it, so the
     buttons silently never appeared on a notification that otherwise
     worked perfectly.
+
+    `interruption_level` is how loud iOS is allowed to be:
+      passive       — no sound, no screen, straight to the list
+      active        — the default: sound, screen lights up
+      timeSensitive — also breaks through Focus and Do Not Disturb, which is
+                      what WhatsApp and Teams use for messages
+      critical      — overrides the silent switch; needs a special
+                      entitlement Apple grants case by case, and is for
+                      safety alerts, not reminders. Never used here.
+
+    timeSensitive needs the com.apple.developer.usernotifications.time-sensitive
+    entitlement, which only exists in a real build of the app — not in Expo
+    Go. Sending it anyway is safe: without the entitlement iOS quietly treats
+    it as `active`, so this is correct now and louder later with no change.
     """
     token_list = [t for t in tokens if t]
     if not token_list:
@@ -61,6 +76,11 @@ async def send_push(
                     "sound": "default",
                     **({"subtitle": subtitle} if subtitle else {}),
                     **({"categoryId": category_id} if category_id else {}),
+                    **(
+                        {"interruptionLevel": interruption_level}
+                        if interruption_level
+                        else {}
+                    ),
                 }
                 for tok in batch
             ]
