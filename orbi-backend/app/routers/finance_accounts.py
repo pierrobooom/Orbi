@@ -19,9 +19,11 @@ from app.models.finance_account import (
     FinanceAccountCreate,
     FinanceAccountUpdate,
     FinanceJobResult,
+    ImportResult,
     RecurringCreate,
     RecurringTransaction,
     RecurringUpdate,
+    StatementImportRequest,
     SyncResult,
 )
 from app.services import finance_scheduler
@@ -32,6 +34,8 @@ from app.services.bank_providers import (
     get_provider,
 )
 from app.services.bank_sync import connections_needing_attention
+from app.services.finance_categorizer import categorize_merchant
+from app.services.statement_import import StatementFormatError, parse_statement
 
 logger = logging.getLogger(__name__)
 
@@ -299,6 +303,72 @@ async def provider_status(user_id: UUID = Depends(get_current_user)):
             )
         ),
     }
+
+
+@router.post("/accounts/{account_id}/import", response_model=ImportResult)
+async def import_statement(
+    account_id: UUID,
+    body: StatementImportRequest,
+    user_id: UUID = Depends(get_current_user),
+):
+    """Import transactions from a statement the user exported themselves.
+
+    The route to real data that needs no licence and no aggregator: the user
+    already has the file, and hands it over deliberately. Revolut, CGD,
+    Millennium, Novo Banco and Wise all export CSV in a few taps.
+
+    Safe to run twice. Transaction ids are a hash of date, amount and
+    description, so re-importing an overlapping statement writes each one
+    once — the same guarantee, through the same unique index, that the daily
+    sync relies on.
+    """
+    account = await accounts_db.fetch_account(account_id, user_id)
+    if account is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_error("Account not found.", "ACCOUNT_NOT_FOUND"),
+        )
+
+    try:
+        report = parse_statement(body.content, account_id=str(account_id))
+    except StatementFormatError as exc:
+        # 422 with the reason: "could not find a date column, saw X, Y, Z" is
+        # actionable, where a bare "invalid file" sends the user back to guess.
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=_error(str(exc), "STATEMENT_FORMAT"),
+        )
+
+    known = await finance_db.existing_external_ids(
+        user_id, [r.external_id for r in report.rows]
+    )
+    fresh = [r for r in report.rows if r.external_id not in known]
+
+    rows = [
+        {
+            "user_id": str(user_id),
+            "account_id": str(account_id),
+            "amount": abs(r.amount),
+            "currency": r.currency or account.get("currency") or "EUR",
+            "merchant": r.description[:200],
+            "category": categorize_merchant(r.description),
+            "entry_type": "expense" if r.amount < 0 else "income",
+            "entry_date": r.booked_on.isoformat(),
+            "source_type": "import",
+            "external_id": r.external_id,
+            "raw_description": r.description,
+        }
+        for r in fresh
+    ]
+    written = await finance_db.insert_entries(rows)
+
+    return ImportResult(
+        parsed=report.parsed,
+        imported=written,
+        duplicates=len(report.rows) - len(fresh),
+        skipped_pending=report.skipped_pending,
+        skipped_unreadable=report.skipped_unparseable,
+    )
 
 
 @router.post("/accounts/{account_id}/connect", response_model=ConnectResponse)

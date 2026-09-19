@@ -301,6 +301,13 @@ export const ptPT: Record<string, string> = {
   "No bank provider is configured, so nothing was imported.":
     "Não há nenhum fornecedor bancário configurado, por isso não foi importado nada.",
 
+  "Import a statement": "Importar um extracto",
+  "Statement imported": "Extracto importado",
+  "Could not import": "Não foi possível importar",
+  "Could not read the file": "Não foi possível ler o ficheiro",
+  "{n} transactions added": "{n} movimentos adicionados",
+  "{n} were already there": "{n} já lá estavam",
+  "{n} still pending, skipped": "{n} ainda pendentes, ignorados",
   "Connect for automatic import": "Ligar para importação automática",
   "Connected · syncs daily": "Ligada · sincroniza diariamente",
   "Waiting for your bank's approval": "À espera da aprovação do teu banco",

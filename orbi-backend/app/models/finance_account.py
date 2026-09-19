@@ -164,3 +164,26 @@ class ConnectResponse(BaseModel):
     connection: BankConnection
     authorization_url: Optional[str] = None
     message: str
+
+
+class StatementImportRequest(BaseModel):
+    """Raw CSV text from a statement the user exported from their own bank."""
+
+    # Sent as text rather than a multipart upload: the client reads the file
+    # it picked, and a JSON body keeps the auth and error handling identical
+    # to every other endpoint. Capped so a mis-picked video cannot be parsed
+    # as a spreadsheet.
+    content: str = Field(min_length=1, max_length=2_000_000)
+
+
+class ImportResult(BaseModel):
+    """What an import actually did, broken down so a low number is explainable."""
+
+    parsed: int
+    imported: int
+    # Already present. Expected and good on a re-import, not a failure.
+    duplicates: int
+    # Not settled yet — importing these would show spending that may never
+    # happen, and would import again at a different amount once it does.
+    skipped_pending: int
+    skipped_unreadable: int

@@ -17,6 +17,8 @@
 // arithmetic drift, and the one on the phone is the one that would be wrong.
 
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
+import * as DocumentPicker from "expo-document-picker";
+import { File } from "expo-file-system";
 import { useFocusEffect, useRouter, type Href } from "expo-router";
 import React, { useCallback, useState } from "react";
 import {
@@ -39,6 +41,7 @@ import {
   deleteAccount,
   disconnectBank,
   getProviderStatus,
+  importStatement,
   listAccounts,
   listBankConnections,
   runFinanceJobs,
@@ -70,6 +73,7 @@ export default function AccountsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [connecting, setConnecting] = useState<string | null>(null);
+  const [importing, setImporting] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -125,6 +129,57 @@ export default function AccountsScreen() {
       Alert.alert(translate("Could not connect"), message);
     } finally {
       setConnecting(null);
+    }
+  };
+
+  /** Import a statement the user exported from their own bank.
+   *
+   * The only route to real transactions that needs no licence and no
+   * aggregator. They already have the file; picking it is them handing it
+   * over, which is a completely different act from granting an app standing
+   * permission to read their account.
+   */
+  const onImport = async (accountId: string) => {
+    let content: string;
+    try {
+      const picked = await DocumentPicker.getDocumentAsync({
+        // Deliberately broad: iOS reports CSVs as text/csv, text/comma-
+        // separated-values, public.comma-separated-values-text or plain
+        // octet-stream depending on where the file came from, and a narrow
+        // filter greys out the very file the user just exported.
+        type: ["text/csv", "text/comma-separated-values", "text/plain", "*/*"],
+        copyToCacheDirectory: true,
+      });
+      if (picked.canceled || !picked.assets?.[0]) return;
+
+      setImporting(accountId);
+      content = await new File(picked.assets[0].uri).text();
+    } catch (e) {
+      setImporting(null);
+      Alert.alert(translate("Could not read the file"), String(e));
+      return;
+    }
+
+    try {
+      const result = await importStatement(accountId, content);
+      await load();
+      const lines = [t("{n} transactions added", { n: result.imported })];
+      // A small number is usually duplicates, not a failure — say so, or a
+      // correct re-import looks broken.
+      if (result.duplicates > 0) {
+        lines.push(t("{n} were already there", { n: result.duplicates }));
+      }
+      if (result.skipped_pending > 0) {
+        lines.push(t("{n} still pending, skipped", { n: result.skipped_pending }));
+      }
+      Alert.alert(translate("Statement imported"), lines.join("\n"));
+    } catch (e) {
+      Alert.alert(
+        translate("Could not import"),
+        e instanceof ApiError ? e.message : String(e),
+      );
+    } finally {
+      setImporting(null);
     }
   };
 
@@ -315,6 +370,30 @@ export default function AccountsScreen() {
                   <Text style={styles.cardExcluded}>{t("Not counted in the total")}</Text>
                 ) : null}
 
+                {/* The import route: no licence, no aggregator, real data.
+                    Offered on every account regardless of provider, because
+                    it never depended on one. */}
+                <Pressable
+                  onPress={() => onImport(row.account.id)}
+                  disabled={importing !== null}
+                  style={[styles.importBtn, importing && styles.btnBusy]}
+                >
+                  {importing === row.account.id ? (
+                    <ActivityIndicator color={colors.ink} size="small" />
+                  ) : (
+                    <>
+                      <MaterialIcons
+                        name="upload-file"
+                        size={15}
+                        color={colors.ink}
+                      />
+                      <Text style={styles.importBtnText}>
+                        {t("Import a statement")}
+                      </Text>
+                    </>
+                  )}
+                </Pressable>
+
                 {/* Connection state per account. Without a connection an
                     account is only a label, so this row is the difference
                     between a sync importing something and importing zero. */}
@@ -503,6 +582,19 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   connectBtnText: { color: colors.accent, fontSize: 13, fontWeight: "600" },
+  importBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    marginTop: 4,
+    paddingVertical: 10,
+    borderRadius: 9,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.canvas,
+  },
+  importBtnText: { color: colors.ink, fontSize: 13, fontWeight: "600" },
   connectRow: {
     flexDirection: "row",
     alignItems: "center",

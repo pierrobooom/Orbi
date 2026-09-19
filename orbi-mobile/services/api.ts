@@ -523,6 +523,33 @@ export async function disconnectBank(connectionId: string): Promise<void> {
   if (!res.ok && res.status !== 404) throw await parseError(res);
 }
 
+export interface ImportResult {
+  parsed: number;
+  imported: number;
+  /** Already present. Expected on a re-import, not a failure. */
+  duplicates: number;
+  skipped_pending: number;
+  skipped_unreadable: number;
+}
+
+/** Import transactions from a statement the user exported from their bank.
+ *
+ * The route to real data that needs no licence and no aggregator — the user
+ * already has the file and hands it over deliberately. Safe to run twice:
+ * transaction ids are a hash of date, amount and description, so an
+ * overlapping export writes each transaction once. */
+export async function importStatement(
+  accountId: string,
+  content: string,
+): Promise<ImportResult> {
+  const res = await authFetch(`${V1}/finance/accounts/${accountId}/import`, {
+    method: "POST",
+    body: JSON.stringify({ content }),
+  });
+  if (!res.ok) throw await parseError(res);
+  return (await res.json()) as ImportResult;
+}
+
 export interface FinanceJobResult {
   recurring_rules: number;
   recurring_entries: number;
