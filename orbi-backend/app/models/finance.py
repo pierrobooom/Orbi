@@ -31,6 +31,13 @@ class FinanceEntry(BaseModel):
     linked_bubble_id: Optional[UUID] = None
     notes: Optional[str] = None
     created_at: datetime
+    # Ordering token, never a timestamp and never displayed. Bank feeds carry
+    # a date but no time, so this preserves the provider's own transaction
+    # order — without it, five transfers made the same afternoon shuffle on
+    # every refresh. Null for manual entries; clients sort it last.
+    sort_key: Optional[int] = None
+    # Which account the money moved through, when known.
+    account_id: Optional[UUID] = None
 
 
 class FinanceEntryCreate(BaseModel):

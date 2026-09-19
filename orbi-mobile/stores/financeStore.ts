@@ -34,6 +34,39 @@ interface FinanceState {
   getEntry: (entryId: string) => ServerFinanceEntry | undefined;
 }
 
+/** Newest first, and stable.
+ *
+ * Bank feeds carry a date but no time, so a day's worth of transactions used
+ * to fall back to created_at — which is identical to the second across a whole
+ * sync batch. With every key tied, the order came out however Postgres
+ * returned it and changed between refreshes. Five identical "€5 to Lucas
+ * Cassiano" rows rearranging themselves is indistinguishable from a bug.
+ *
+ * sort_key carries the provider's own ordering and settles it. Manual entries
+ * have none and fall back to created_at, then to id so the comparison is total
+ * and the list can never shuffle.
+ */
+export function compareEntries(
+  a: ServerFinanceEntry,
+  b: ServerFinanceEntry,
+): number {
+  if (a.entry_date !== b.entry_date) {
+    return b.entry_date.localeCompare(a.entry_date);
+  }
+  if (a.sort_key != null && b.sort_key != null && a.sort_key !== b.sort_key) {
+    return b.sort_key - a.sort_key;
+  }
+  // An entry with a provider order outranks one without on the same day: the
+  // synced one is a real transaction, the manual one an estimate of when.
+  if ((a.sort_key == null) !== (b.sort_key == null)) {
+    return a.sort_key == null ? 1 : -1;
+  }
+  if (a.created_at !== b.created_at) {
+    return b.created_at.localeCompare(a.created_at);
+  }
+  return a.id.localeCompare(b.id);
+}
+
 export const useFinanceStore = create<FinanceState>((set, get) => ({
   status: "idle",
   errorMessage: null,
@@ -49,15 +82,7 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
         listFinanceEntries(month),
         getFinanceSummary(month),
       ]);
-      // Backend returns entries unordered; sort by date desc, then by
-      // created_at desc as a tiebreaker so the latest entry of the day
-      // sits at the top.
-      const sorted = [...entries].sort((a, b) => {
-        if (a.entry_date === b.entry_date) {
-          return b.created_at.localeCompare(a.created_at);
-        }
-        return b.entry_date.localeCompare(a.entry_date);
-      });
+      const sorted = [...entries].sort(compareEntries);
       set({
         status: "ready",
         errorMessage: null,

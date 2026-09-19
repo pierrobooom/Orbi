@@ -298,6 +298,8 @@ export const ptPT: Record<string, string> = {
   "Finance updated": "Finanças actualizadas",
   "{n} recurring entries created": "{n} movimentos recorrentes criados",
   "{n} transactions imported": "{n} movimentos importados",
+  "Already up to date — checked moments ago.": "Já está actualizado — verificado há momentos.",
+  "No new transactions since the last check.": "Sem movimentos novos desde a última verificação.",
   "No bank provider is configured, so nothing was imported.":
     "Não há nenhum fornecedor bancário configurado, por isso não foi importado nada.",
 

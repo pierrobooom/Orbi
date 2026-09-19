@@ -51,12 +51,64 @@ SYNC_INTERVAL_HOURS = 24
 # short enough that a transient outage doesn't cost a day of data.
 RETRY_INTERVAL_HOURS = 3
 
+# The floor for a refresh the user ASKED for, as opposed to the daily
+# background one.
+#
+# These were the same number, and that was wrong. Someone who has just spent
+# money, opened the app and pressed Update expects to see it; telling them to
+# come back in twenty-two hours is not a cost control, it is a broken button.
+# The daily cadence exists to bound the BACKGROUND cost, which nobody asked
+# for. A deliberate tap is a different thing and gets its own, much shorter
+# floor — still bounded, so holding the button down cannot run up a bill, and
+# still far below any provider's rate limit.
+MANUAL_REFRESH_MINUTES = 5
+
 # Warn this far ahead of a consent expiring. PSD2 re-authentication is a trip
 # to the banking app, so it needs to be asked for before the feed dies, not
 # after — a stopped feed looks exactly like a month of not spending.
 CONSENT_WARNING_DAYS = 7
 
 _MAX_PER_TICK = 50
+
+
+async def sync_user_now(owner_id: UUID, now: datetime | None = None) -> dict:
+    """Sync this user's connections on demand, using the short manual floor.
+
+    The background loop's daily cadence bounds a cost nobody asked for. A tap
+    on Update is a request, and it gets MANUAL_REFRESH_MINUTES instead — still
+    bounded, so repeated tapping cannot run up a provider bill, but responsive
+    enough that a purchase made a minute ago shows up.
+    """
+    now = now or datetime.now(timezone.utc)
+    floor = now - timedelta(minutes=MANUAL_REFRESH_MINUTES)
+
+    connections = [
+        c
+        for c in await accounts_db.list_connections(owner_id)
+        if c.get("status") == "active"
+        and (
+            not c.get("last_synced_at")
+            or str(c["last_synced_at"]) <= floor.isoformat()
+        )
+    ]
+    if not connections:
+        return {"considered": 0, "imported": 0, "failed": 0, "throttled": True}
+
+    imported = 0
+    failed = 0
+    for connection in connections:
+        try:
+            imported += await sync_connection(connection, now=now)
+        except Exception as exc:  # noqa: BLE001 — one account must not stop the rest
+            failed += 1
+            logger.error("Manual sync failed for %s: %s", connection.get("id"), exc)
+
+    return {
+        "considered": len(connections),
+        "imported": imported,
+        "failed": failed,
+        "throttled": False,
+    }
 
 
 async def sync_due_accounts(now: datetime | None = None) -> dict:
@@ -170,11 +222,20 @@ async def _store(
         owner_id, [t.external_id for t in transactions]
     )
 
+    # Providers return transactions newest-first, and bank feeds carry no
+    # time — so this list order is the ONLY intra-day ordering that exists.
+    # Reversing it means position 0 is the oldest, which makes a larger
+    # sort_key mean "more recent", matching how the list is read.
+    base = int(datetime.now(timezone.utc).timestamp() * 1000) * 1000
+    ordered = list(reversed(transactions))
+
     rows = []
-    for transaction in transactions:
+    for position, transaction in enumerate(ordered):
         if transaction.external_id in known:
             continue
-        rows.append(_to_entry(transaction, owner_id=owner_id, account_id=account_id))
+        entry = _to_entry(transaction, owner_id=owner_id, account_id=account_id)
+        entry["sort_key"] = base + position
+        rows.append(entry)
 
     if not rows:
         return 0

@@ -47,6 +47,7 @@ import {
   type BankConnection,
   type ProviderStatus,
 } from "@/services/api";
+import { useFinanceStore } from "@/stores/financeStore";
 import { colors } from "@/theme/colors";
 
 function formatMoney(amount: number, currency: string): string {
@@ -227,14 +228,30 @@ export default function AccountsScreen() {
     try {
       const result = await runFinanceJobs();
       await load();
-      const lines = [
-        t("{n} recurring entries created", { n: result.recurring_entries }),
-        t("{n} transactions imported", { n: result.sync.imported }),
-      ];
-      // When no provider is configured, an import of zero is the expected
-      // outcome rather than a failure — say which it is.
-      if (provider && !provider.automatic_import) {
-        lines.push(t("No bank provider is configured, so nothing was imported."));
+      // The Money tab keeps its own copy of the entries. Without this it
+      // still shows the pre-sync list until the app is restarted, which is
+      // exactly how "the expenses don't show up immediately" happens.
+      await useFinanceStore.getState().hydrate();
+
+      // "0 imported" reads as a failure. Distinguish the three reasons it can
+      // legitimately be zero, so a working sync never looks broken.
+      let lines: string[];
+      if (result.throttled) {
+        lines = [t("Already up to date — checked moments ago.")];
+      } else if (provider && !provider.automatic_import) {
+        lines = [t("No bank provider is configured, so nothing was imported.")];
+      } else if (result.sync.imported === 0 && result.recurring_entries === 0) {
+        lines = [t("No new transactions since the last check.")];
+      } else {
+        lines = [];
+        if (result.sync.imported > 0) {
+          lines.push(t("{n} transactions imported", { n: result.sync.imported }));
+        }
+        if (result.recurring_entries > 0) {
+          lines.push(
+            t("{n} recurring entries created", { n: result.recurring_entries }),
+          );
+        }
       }
       Alert.alert(translate("Finance updated"), lines.join("\n"));
     } catch (e) {

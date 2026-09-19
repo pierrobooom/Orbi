@@ -248,6 +248,14 @@ export interface ServerFinanceEntry {
   linked_bubble_id: string | null;
   notes: string | null;
   created_at: string;
+  /** Ordering token — never a timestamp, never displayed.
+   *
+   * Bank feeds carry a date but no time, so this preserves the order the
+   * provider returned. Without it, several transfers made on the same day
+   * have nothing to sort by and shuffle between refreshes. Null for manual
+   * entries: sort those last and fall back to created_at. */
+  sort_key: number | null;
+  account_id: string | null;
 }
 
 export async function listFinanceEntries(month?: string): Promise<ServerFinanceEntry[]> {
@@ -554,6 +562,11 @@ export interface FinanceJobResult {
   recurring_rules: number;
   recurring_entries: number;
   sync: { considered: number; imported: number; failed: number };
+  /** Every connection was checked too recently to ask again.
+   *
+   * Reported so the client can say "already up to date" rather than
+   * "0 imported", which reads as a failure. */
+  throttled: boolean;
 }
 
 /** Run the daily finance jobs now.

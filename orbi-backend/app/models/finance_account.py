@@ -151,6 +151,10 @@ class FinanceJobResult(BaseModel):
     recurring_rules: int
     recurring_entries: int
     sync: SyncResult
+    # True when every connection was synced too recently to ask again. The
+    # client says "already up to date" rather than "0 imported", which reads
+    # as a failure.
+    throttled: bool = False
 
 
 class ConnectResponse(BaseModel):

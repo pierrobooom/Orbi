@@ -4,8 +4,8 @@
 // Per CLAUDE.md: weekly + monthly reports and budget anomaly detection
 // land in Pro+; this view stays simple and ledger-shaped for every tier.
 
-import { useRouter, type Href } from "expo-router";
-import React, { useCallback, useEffect, useState } from "react";
+import { useFocusEffect, useRouter, type Href } from "expo-router";
+import React, { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -77,9 +77,18 @@ export default function MoneyScreen() {
 
   const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    hydrate();
-  }, [hydrate]);
+  // Refetch whenever the tab is focused, not just once on mount.
+  //
+  // A tab screen stays mounted for the life of the app, so a plain useEffect
+  // fired exactly once and never again. Anything that arrived afterwards — a
+  // bank sync, a recurring rule, an entry added from another screen — was
+  // invisible until the whole app was restarted, which is precisely how it
+  // was reported.
+  useFocusEffect(
+    useCallback(() => {
+      void hydrate();
+    }, [hydrate]),
+  );
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);

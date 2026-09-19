@@ -37,7 +37,7 @@ from app.services.bank_providers import (
     configured_provider_name,
     get_provider,
 )
-from app.services.bank_sync import connections_needing_attention
+from app.services.bank_sync import connections_needing_attention, sync_user_now
 from app.services.finance_categorizer import categorize_merchant
 from app.services.statement_import import StatementFormatError, parse_statement
 
@@ -666,9 +666,20 @@ async def run_jobs(user_id: UUID = Depends(get_current_user)):
     until its day is up, so no amount of tapping refresh can run up a provider
     bill.
     """
-    result = await finance_scheduler.run_once(datetime.now(timezone.utc))
+    now = datetime.now(timezone.utc)
+    recurring = await finance_scheduler.materialise_recurring(now.date())
+    # The USER'S connections, on the manual floor — not the background sweep.
+    # Using the daily cadence here made Update a button that did nothing for
+    # twenty-two hours after the first sync.
+    sync = await sync_user_now(user_id, now)
+
     return FinanceJobResult(
-        recurring_rules=result["recurring"]["rules"],
-        recurring_entries=result["recurring"]["entries"],
-        sync=SyncResult(**result["bank_sync"]),
+        recurring_rules=recurring["rules"],
+        recurring_entries=recurring["entries"],
+        sync=SyncResult(
+            considered=sync["considered"],
+            imported=sync["imported"],
+            failed=sync["failed"],
+        ),
+        throttled=sync.get("throttled", False),
     )
