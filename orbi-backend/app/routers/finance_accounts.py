@@ -8,7 +8,10 @@ import logging
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
+from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, Field
 from fastapi.responses import HTMLResponse
 
 from app.db import finance as finance_db, finance_accounts as accounts_db
@@ -511,9 +514,54 @@ async def import_statement(
     )
 
 
+@router.get("/institutions")
+async def list_institutions(
+    country: str = "PT",
+    user_id: UUID = Depends(get_current_user),
+):
+    """Banks the user can connect to, for the picker.
+
+    Users do not all bank in the same place. The institution was originally a
+    deployment-wide environment variable, which silently sent everyone to one
+    bank — fine for a single-developer test, wrong the moment there is a
+    second person.
+
+    Fetched live rather than hardcoded: providers add and remove banks
+    continuously, and a stale list offers people an institution they cannot
+    actually connect to.
+    """
+    provider = get_provider(configured_provider_name())
+    lister = getattr(provider, "list_institutions", None)
+    if lister is None:
+        return {"country": country.upper(), "institutions": []}
+    try:
+        return {"country": country.upper(), "institutions": await lister(country)}
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Could not list institutions: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=_error(
+                "Could not load the list of banks. Try again shortly.",
+                "INSTITUTIONS_UNAVAILABLE",
+            ),
+        )
+
+
+class ConnectRequest(BaseModel):
+    """Which bank to connect this account to.
+
+    Optional so a single-user deployment can keep relying on the environment
+    default, but a multi-user one must always send it.
+    """
+
+    institution: Optional[str] = None
+    country: Optional[str] = Field(default=None, min_length=2, max_length=2)
+
+
 @router.post("/accounts/{account_id}/connect", response_model=ConnectResponse)
 async def connect_account(
     account_id: UUID,
+    body: ConnectRequest | None = None,
     user_id: UUID = Depends(get_current_user),
 ):
     """Start linking an account to the configured bank provider.
@@ -554,7 +602,11 @@ async def connect_account(
     provider_name = configured_provider_name()
     provider = get_provider(provider_name)
     try:
-        draft = await provider.begin_connection(account=account)
+        draft = await provider.begin_connection(
+            account=account,
+            institution=(body.institution if body else None),
+            country=(body.country if body else None),
+        )
     except ProviderNotConfigured as exc:
         # 501 rather than 400: the request was fine, the capability is absent.
         raise HTTPException(

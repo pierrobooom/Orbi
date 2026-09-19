@@ -190,8 +190,47 @@ class EnableBankingProvider:
 
     name = "enablebanking"
 
+    async def list_institutions(self, country: str = "PT") -> list[dict]:
+        """Banks available in a country, for the picker.
+
+        Fetched live rather than hardcoded: Enable Banking adds and removes
+        banks continuously, and a stale list shows people an institution they
+        cannot actually connect to.
+        """
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+            response = await client.get(
+                f"{_BASE_URL}/aspsps",
+                params={"country": country.upper()},
+                headers=_headers(),
+            )
+            if response.status_code >= 400:
+                raise RuntimeError(
+                    f"Enable Banking /aspsps failed ({response.status_code}): "
+                    f"{response.text[:200]}"
+                )
+            aspsps = response.json().get("aspsps") or []
+
+        # Only what a picker needs. `psu_types` matters because a bank listed
+        # for business customers only will fail at the bank's own login with
+        # a confusing error rather than a useful one.
+        return [
+            {
+                "name": a.get("name"),
+                "country": a.get("country"),
+                "logo": a.get("logo"),
+                "psu_types": a.get("psu_types") or [],
+            }
+            for a in aspsps
+            if a.get("name") and "personal" in (a.get("psu_types") or ["personal"])
+        ]
+
     async def begin_connection(
-        self, *, account: dict, redirect_uri: str | None = None
+        self,
+        *,
+        account: dict,
+        redirect_uri: str | None = None,
+        institution: str | None = None,
+        country: str | None = None,
     ) -> ConnectionDraft:
         """Ask Enable Banking for an authorisation URL.
 
@@ -204,8 +243,20 @@ class EnableBankingProvider:
         if not redirect:
             raise ProviderNotConfigured("ENABLE_BANKING_REDIRECT_URL is not set.")
 
-        aspsp_name = os.environ.get("ENABLE_BANKING_ASPSP", "Revolut").strip()
-        aspsp_country = os.environ.get("ENABLE_BANKING_COUNTRY", "PT").strip()
+        # Which bank, per connection — NOT a global setting.
+        #
+        # This was originally read straight from the environment, which works
+        # for exactly one user: whoever the deployment was configured for.
+        # Every other person would be sent to that same bank no matter who
+        # they actually bank with. The institution now travels with the
+        # connection, and the env values survive only as the fallback for a
+        # single-user deployment that never presents a picker.
+        aspsp_name = (institution or os.environ.get("ENABLE_BANKING_ASPSP", "")).strip()
+        aspsp_country = (country or os.environ.get("ENABLE_BANKING_COUNTRY", "PT")).strip()
+        if not aspsp_name:
+            raise ProviderNotConfigured(
+                "No bank chosen. Pick one from GET /finance/institutions."
+            )
 
         payload = {
             "access": {

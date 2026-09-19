@@ -100,13 +100,22 @@ class BankProvider(Protocol):
     name: str
 
     async def begin_connection(
-        self, *, account: dict, redirect_uri: str | None = None
+        self,
+        *,
+        account: dict,
+        redirect_uri: str | None = None,
+        institution: str | None = None,
+        country: str | None = None,
     ) -> ConnectionDraft:
-        """Start linking one account. Raises ProviderNotConfigured if it can't.
+        """Start linking one account. Raises ProviderNotConfigured if it cannot.
+
+        `institution` is WHICH BANK, chosen per connection rather than set
+        globally: users do not all bank in the same place, and a deployment-
+        wide default silently sends everyone to one institution.
 
         `account` carries the user's own record — including the IBAN they
-        typed, which a real adapter may pass to the provider to preselect an
-        account. It is a hint for the UI, never the thing that grants access.
+        typed, which is used afterwards to match the approved account. It is
+        never the thing that grants access.
         """
         ...
 
@@ -160,7 +169,8 @@ class NullProvider:
         return []
 
     async def begin_connection(
-        self, *, account: dict, redirect_uri: str | None = None
+        self, *, account: dict, redirect_uri: str | None = None,
+        institution: str | None = None, country: str | None = None,
     ) -> ConnectionDraft:
         raise ProviderNotConfigured(
             "No bank provider is configured, so accounts cannot be connected. "
@@ -231,7 +241,8 @@ class SandboxProvider:
         return out
 
     async def begin_connection(
-        self, *, account: dict, redirect_uri: str | None = None
+        self, *, account: dict, redirect_uri: str | None = None,
+        institution: str | None = None, country: str | None = None,
     ) -> ConnectionDraft:
         """Connect immediately, with no authorisation trip.
 
