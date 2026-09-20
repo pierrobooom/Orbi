@@ -1306,3 +1306,79 @@ export async function createTask(input: CreateTaskInput): Promise<ServerTask> {
   if (!res.ok) throw await parseError(res);
   return (await res.json()) as ServerTask;
 }
+
+export interface SpendingInsight {
+  /** Deterministic rules are computed per request and have no row behind
+   * them, so they have no id and cannot be dismissed. Only the AI-generated
+   * ones are stored. */
+  id?: string;
+  insight_text: string;
+  category: string;
+  subject: string | null;
+  severity: "info" | "warning" | "alert";
+  period?: string | null;
+  created_at?: string;
+}
+
+export interface InsightsResponse {
+  month: string;
+  insights: SpendingInsight[];
+  /** False on Spark. The deterministic half still arrives — the screen says
+   * what the tier adds rather than looking broken. */
+  ai_available: boolean;
+  ai_generated: boolean;
+  entry_count: number;
+}
+
+/** Observations about this month's spending.
+ *
+ * `refresh` asks for regeneration and is still subject to the server's
+ * once-a-day window, so a user leaning on the button cannot run up a bill. */
+export async function getInsights(refresh = false): Promise<InsightsResponse> {
+  const res = await authFetch(
+    `${V1}/finance/insights${refresh ? "?refresh=true" : ""}`,
+  );
+  if (!res.ok) throw await parseError(res);
+  return (await res.json()) as InsightsResponse;
+}
+
+export async function dismissInsight(id: string): Promise<void> {
+  const res = await authFetch(`${V1}/finance/insights/${id}/dismiss`, {
+    method: "POST",
+  });
+  if (!res.ok && res.status !== 404) throw await parseError(res);
+}
+
+export interface BreakdownVendor {
+  name: string;
+  amount: number;
+  count: number;
+  category: string | null;
+}
+
+export interface BreakdownCategory {
+  category: string;
+  amount: number;
+  count: number;
+}
+
+export interface SpendingBreakdown {
+  month: string;
+  vendors: BreakdownVendor[];
+  categories: BreakdownCategory[];
+  total: number;
+}
+
+/** Every vendor and every category for a month, not just the top few.
+ *
+ * The dashboard summarises; this is the full list, for when the question is
+ * "how much have I actually spent at X". */
+export async function getSpendingBreakdown(
+  month?: string,
+): Promise<SpendingBreakdown> {
+  const res = await authFetch(
+    `${V1}/finance/breakdown${month ? `?month=${month}` : ""}`,
+  );
+  if (!res.ok) throw await parseError(res);
+  return (await res.json()) as SpendingBreakdown;
+}

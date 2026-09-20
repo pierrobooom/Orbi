@@ -387,6 +387,25 @@ export default function AccountsScreen() {
                   <Text style={styles.cardExcluded}>{t("Not counted in the total")}</Text>
                 ) : null}
 
+                {/* An account is only meaningful next to what moved through
+                    it. Tapping the card edits the account; this goes to the
+                    ledger filtered to it, which is the thing people actually
+                    come here to see. */}
+                <Pressable
+                  onPress={() =>
+                    router.push({
+                      pathname: "/movements",
+                      params: { account: row.account.id },
+                    })
+                  }
+                  style={styles.importBtn}
+                >
+                  <MaterialIcons name="receipt-long" size={15} color={colors.ink} />
+                  <Text style={styles.importBtnText}>
+                    {t("Movements")}
+                  </Text>
+                </Pressable>
+
                 {/* The import route: no licence, no aggregator, real data.
                     Offered on every account regardless of provider, because
                     it never depended on one. */}

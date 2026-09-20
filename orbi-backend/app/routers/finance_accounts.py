@@ -31,7 +31,7 @@ from app.models.finance_account import (
     SyncResult,
 )
 from app.services import finance_scheduler
-from app.services.auth import get_current_user
+from app.services.auth import get_current_user, get_current_user_with_tier
 from app.services.bank_providers import (
     ProviderNotConfigured,
     configured_provider_name,
@@ -40,6 +40,12 @@ from app.services.bank_providers import (
 from app.services.bank_sync import connections_needing_attention, sync_user_now
 from app.services.finance_categorizer import categorize_merchant
 from app.services.finance_dashboard import build_dashboard
+from app.services.finance_insights import (
+    build_rows,
+    deterministic_insights,
+    generate_ai_insights,
+    should_regenerate,
+)
 from app.services.statement_import import StatementFormatError, parse_statement
 
 logger = logging.getLogger(__name__)
@@ -513,6 +519,124 @@ async def import_statement(
         skipped_pending=report.skipped_pending,
         skipped_unreadable=report.skipped_unparseable,
     )
+
+
+@router.get("/insights")
+async def list_insights(
+    refresh: bool = False,
+    auth: dict = Depends(get_current_user_with_tier),
+):
+    """What is worth noticing about this month's spending.
+
+    Two sources, and the order matters. Deterministic rules run on every read
+    — they are free, they cannot be wrong, and they are what a free-tier user
+    gets. The model adds to that list rather than replacing it, so an outage
+    or a rate limit degrades this screen to fewer insights instead of none.
+
+    The AI half runs at most once a day per user, and only for tiers that pay
+    for it. `refresh` asks for a regeneration and is still subject to that
+    window: a button that spent an AI call per tap would be the largest line
+    on the bill.
+    """
+    user_id = auth["user_id"]
+    tier = auth["tier"]
+    month = datetime.now(timezone.utc).strftime("%Y-%m")
+
+    entries = await finance_db.fetch_entries_for_user(user_id)
+    dashboard = build_dashboard(entries, month)
+    limits = (await list_limits(user_id))["limits"]
+
+    stored = await finance_db.fetch_insights(user_id, month)
+    ai_eligible = tier in ("pro", "premium")
+
+    generated = False
+    if ai_eligible:
+        last = await finance_db.latest_insight_time(user_id, month)
+        if refresh or should_regenerate(last):
+            ai = await generate_ai_insights(dashboard, limits, user_id, tier)
+            if ai:
+                await finance_db.replace_insights(
+                    user_id, month, build_rows(ai, user_id)
+                )
+                stored = await finance_db.fetch_insights(user_id, month)
+                generated = True
+
+    # Computed fresh every time rather than stored: they are cheap, and
+    # persisting them would mean a limit changed this morning still showing
+    # yesterday's remaining balance.
+    rules = deterministic_insights(dashboard, limits)
+
+    return {
+        "month": month,
+        "insights": rules + list(stored),
+        "ai_available": ai_eligible,
+        "ai_generated": generated,
+        # So the client can explain a short list rather than looking empty.
+        "entry_count": dashboard.get("entry_count", 0),
+    }
+
+
+@router.post("/insights/{insight_id}/dismiss", status_code=status.HTTP_204_NO_CONTENT)
+async def dismiss_insight(insight_id: UUID, user_id: UUID = Depends(get_current_user)):
+    """Hide an insight the user has read.
+
+    Kept rather than deleted: which observations get dismissed immediately is
+    the clearest signal about which are worth generating at all.
+    """
+    if not await finance_db.dismiss_insight(insight_id, user_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_error("Insight not found.", "INSIGHT_NOT_FOUND"),
+        )
+
+
+@router.get("/breakdown")
+async def spending_breakdown(
+    month: str | None = None,
+    user_id: UUID = Depends(get_current_user),
+):
+    """Every vendor and every category, with what was spent at each.
+
+    The dashboard shows the top few because a summary that lists everything
+    is not a summary. This is the other half: the full list, for when the
+    question is "how much have I actually spent at X".
+    """
+    if month is None:
+        month = datetime.now(timezone.utc).strftime("%Y-%m")
+
+    entries = [
+        e
+        for e in await finance_db.fetch_entries_for_user(user_id, month=month)
+        if e.get("entry_type") == "expense"
+    ]
+
+    vendors: dict[str, dict] = {}
+    categories: dict[str, dict] = {}
+    for entry in entries:
+        amount = float(entry.get("amount") or 0)
+        name = (entry.get("merchant") or "").strip() or "Unknown"
+        slot = vendors.setdefault(
+            name, {"name": name, "amount": 0.0, "count": 0, "category": entry.get("category")}
+        )
+        slot["amount"] += amount
+        slot["count"] += 1
+
+        key = entry.get("category") or "uncategorized"
+        cat = categories.setdefault(key, {"category": key, "amount": 0.0, "count": 0})
+        cat["amount"] += amount
+        cat["count"] += 1
+
+    def _clean(rows):
+        for row in rows:
+            row["amount"] = round(row["amount"], 2)
+        return sorted(rows, key=lambda r: r["amount"], reverse=True)
+
+    return {
+        "month": month,
+        "vendors": _clean(list(vendors.values())),
+        "categories": _clean(list(categories.values())),
+        "total": round(sum(float(e.get("amount") or 0) for e in entries), 2),
+    }
 
 
 @router.get("/limits")

@@ -501,4 +501,40 @@ export const ptPT: Record<string, string> = {
   "Mute reminders": "Silenciar lembretes",
   "No notifications for tasks in this cluster. The tasks stay exactly as they are — only the nudges stop.":
     "Sem notificações para as tarefas deste grupo. As tarefas ficam exactamente como estão — só os avisos param.",
+
+  // Money hub — the tab is a menu of blocks now, not a ledger.
+  "Across accounts": "Nas contas",
+  "Spent in {month}": "Gasto em {month}",
+  "vs usual": "vs habitual",
+  "Insights": "Análises",
+  "Vendors": "Comerciantes",
+  "Categories": "Categorias",
+  "Memberships": "Subscrições",
+  "All movements": "Todos os movimentos",
+  "Balances and movements": "Saldos e movimentos",
+  "What's worth noticing": "O que vale a pena notar",
+  "Where the money went": "Para onde foi o dinheiro",
+  "Spend by shop and category": "Gastos por loja e categoria",
+  "Subscriptions and repeats": "Subscrições e pagamentos repetidos",
+  "Ceilings per category": "Tectos por categoria",
+  "Every transaction this month": "Todos os movimentos deste mês",
+  "Log an expense": "Registar uma despesa",
+  // Movements
+  "Spent this month · {account}": "Gasto este mês · {account}",
+  "Nothing here yet": "Ainda não há nada aqui",
+  "No movements on this account this month.":
+    "Sem movimentos nesta conta este mês.",
+  // Insights
+  "Nothing unusual this month": "Nada de invulgar este mês",
+  "A few more transactions and there will be something to compare against.":
+    "Mais alguns movimentos e haverá com que comparar.",
+  "Your spending looks like it usually does. This fills up when something stands out.":
+    "Os teus gastos estão como de costume. Isto enche-se quando algo se destaca.",
+  "Written insights are on Pro": "As análises escritas são do Pro",
+  "The observations above are computed from your totals. Pro adds written analysis of patterns across the month.":
+    "As observações acima são calculadas a partir dos teus totais. O Pro acrescenta análise escrita dos padrões do mês.",
+  // Breakdown
+  "Nothing spent this month": "Nada gasto este mês",
+  "Movements you log or import will be broken down here.":
+    "Os movimentos que registares ou importares são detalhados aqui.",
 };

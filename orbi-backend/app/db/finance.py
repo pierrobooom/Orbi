@@ -170,3 +170,71 @@ async def delete_budget(budget_id: UUID, user_id: UUID) -> bool:
         .execute()
     )
     return bool(response.data)
+
+
+# ---------------------------------------------------------------------------
+# Insights
+# ---------------------------------------------------------------------------
+
+async def fetch_insights(user_id: UUID, period: str) -> list[dict]:
+    """Undismissed insights for a month, newest first."""
+    response = (
+        get_client().table("finance_insights")
+        .select("*")
+        .eq("user_id", str(user_id))
+        .eq("period", period)
+        .is_("dismissed_at", "null")
+        .order("created_at", desc=True)
+        .execute()
+    )
+    return response.data or []
+
+
+async def latest_insight_time(user_id: UUID, period: str) -> str | None:
+    """When insights for this month were last generated, dismissed or not.
+
+    Reads dismissed rows too: dismissing an observation is not a request for
+    a fresh AI call, and ignoring them would let someone regenerate on demand
+    by clearing the list.
+    """
+    response = (
+        get_client().table("finance_insights")
+        .select("created_at")
+        .eq("user_id", str(user_id))
+        .eq("period", period)
+        .order("created_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+    rows = response.data or []
+    return rows[0]["created_at"] if rows else None
+
+
+async def replace_insights(user_id: UUID, period: str, rows: list[dict]) -> int:
+    """Swap a month's insights for a freshly generated set.
+
+    Replace rather than append: appending turns the list into a growing pile
+    of observations about the same month, most of them superseded.
+    """
+    client = get_client()
+    client.table("finance_insights").delete().eq("user_id", str(user_id)).eq(
+        "period", period
+    ).execute()
+    if not rows:
+        return 0
+    response = client.table("finance_insights").insert(rows).execute()
+    return len(response.data or [])
+
+
+async def dismiss_insight(insight_id: UUID, user_id: UUID) -> bool:
+    """Hide one insight. Kept rather than deleted — see migration 0015."""
+    from datetime import datetime as _dt, timezone as _tz
+
+    response = (
+        get_client().table("finance_insights")
+        .update({"dismissed_at": _dt.now(_tz.utc).isoformat()})
+        .eq("id", str(insight_id))
+        .eq("user_id", str(user_id))
+        .execute()
+    )
+    return bool(response.data)

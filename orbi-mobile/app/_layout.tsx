@@ -146,6 +146,22 @@ export default function RootLayout() {
                 name="connect-bank"
                 options={{ presentation: "modal", headerShown: false }}
               />
+              <Stack.Screen
+                name="movements"
+                options={{ presentation: "modal", headerShown: false }}
+              />
+              <Stack.Screen
+                name="spending"
+                options={{ presentation: "modal", headerShown: false }}
+              />
+              <Stack.Screen
+                name="insights"
+                options={{ presentation: "modal", headerShown: false }}
+              />
+              <Stack.Screen
+                name="breakdown"
+                options={{ presentation: "modal", headerShown: false }}
+              />
 
             </Stack>
           </AuthGate>
