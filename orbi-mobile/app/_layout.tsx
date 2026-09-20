@@ -21,6 +21,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import "react-native-reanimated";
 
 import { useNotificationActions } from "@/hooks/useNotificationActions";
+import { useRefreshOnForeground } from "@/hooks/useRefreshOnForeground";
 import { usePushRegistration } from "@/hooks/usePushRegistration";
 // Importing the authStore here ensures supabase.auth.onAuthStateChange is
 // subscribed before any screen reads from it.
@@ -166,6 +167,10 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   // mounted at the root: a response can arrive while the app is cold, and
   // a listener living on a screen isn't there to hear it.
   useNotificationActions();
+  // Re-fetch when the app returns to the foreground. Screen focus does not
+  // fire on background-to-foreground, so a notification action taken while
+  // the app was away left the canvas showing a stale snapshot until reload.
+  useRefreshOnForeground();
   // Seed UI language from the server-side preference once signed in.
   // Failure is silent and leaves English — a missing preferences row
   // is the normal state for a new user, not an error worth surfacing.

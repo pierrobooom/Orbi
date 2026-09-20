@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   Pressable,
   RefreshControl,
+  ScrollView,
   SectionList,
   StyleSheet,
   Text,
@@ -18,9 +19,10 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { translate, useT } from "@/i18n";
+import { formatCategory, isUncategorized } from "@/services/categories";
 import { useFinanceStore } from "@/stores/financeStore";
 import { colors } from "@/theme/colors";
-import type { ServerFinanceEntry } from "@/services/api";
+import { listAccounts, type AccountBalance, type ServerFinanceEntry } from "@/services/api";
 
 interface Section {
   title: string;
@@ -76,6 +78,10 @@ export default function MoneyScreen() {
   const hydrate = useFinanceStore((s) => s.hydrate);
 
   const [refreshing, setRefreshing] = useState(false);
+  const [accounts, setAccounts] = useState<AccountBalance[]>([]);
+  // null means "every account". Kept local: it is a way of looking at the
+  // data, not a setting worth persisting to the server.
+  const [accountFilter, setAccountFilter] = useState<string | null>(null);
 
   // Refetch whenever the tab is focused, not just once on mount.
   //
@@ -87,6 +93,13 @@ export default function MoneyScreen() {
   useFocusEffect(
     useCallback(() => {
       void hydrate();
+      // Balances live on the accounts endpoint, not in the entries store,
+      // and the filter row needs them to label each account with what is
+      // actually in it. Failure is silent: no accounts just means no filter
+      // row, which is the correct look for someone who never made one.
+      listAccounts()
+        .then(setAccounts)
+        .catch(() => setAccounts([]));
     }, [hydrate]),
   );
 
@@ -99,9 +112,20 @@ export default function MoneyScreen() {
     }
   }, [hydrate]);
 
-  const sections = groupByDay(entries);
-  const totalSpend = summary?.total_spend ?? 0;
-  const currency = entries[0]?.currency ?? "GBP";
+  const visible = accountFilter
+    ? entries.filter((e) => e.account_id === accountFilter)
+    : entries;
+  const sections = groupByDay(visible);
+
+  // With a filter on, the month total has to be recomputed from the visible
+  // rows — the server's summary covers every account, so showing it beside a
+  // single account's list would caption the wrong number.
+  const totalSpend = accountFilter
+    ? visible
+        .filter((e) => e.entry_type === "expense")
+        .reduce((sum, e) => sum + e.amount, 0)
+    : summary?.total_spend ?? 0;
+  const currency = visible[0]?.currency ?? accounts[0]?.account.currency ?? "EUR";
 
   return (
     <SafeAreaView style={styles.root} edges={["top"]}>
@@ -122,6 +146,50 @@ export default function MoneyScreen() {
           </Pressable>
         </View>
       </View>
+
+      {/* Which account these entries belong to.
+          The header total is money SPENT this month, which is a different
+          number from what is IN an account — and with several accounts the
+          list silently mixed them, so neither figure described anything the
+          user could point at. Filtering makes the question explicit. */}
+      {accounts.length > 1 ? (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filterRow}
+        >
+          <Pressable
+            onPress={() => setAccountFilter(null)}
+            style={[styles.filterPip, accountFilter === null && styles.filterPipActive]}
+          >
+            <Text
+              style={[
+                styles.filterText,
+                accountFilter === null && styles.filterTextActive,
+              ]}
+            >
+              {t("All accounts")}
+            </Text>
+          </Pressable>
+          {accounts.map((row) => {
+            const active = accountFilter === row.account.id;
+            return (
+              <Pressable
+                key={row.account.id}
+                onPress={() => setAccountFilter(row.account.id)}
+                style={[styles.filterPip, active && styles.filterPipActive]}
+              >
+                <Text style={[styles.filterText, active && styles.filterTextActive]}>
+                  {row.account.name}
+                </Text>
+                <Text style={[styles.filterBalance, active && styles.filterTextActive]}>
+                  {formatAmount(row.balance, row.account.currency)}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      ) : null}
 
       {status === "loading" || status === "idle" ? (
         <View style={styles.centered}>
@@ -189,13 +257,19 @@ export default function MoneyScreen() {
 
 function EntryRow({ entry, onPress }: { entry: ServerFinanceEntry; onPress: () => void }) {
   const isExpense = entry.entry_type === "expense";
+  const needsCategory = isUncategorized(entry.category);
   return (
     <Pressable onPress={onPress} style={styles.row} android_ripple={{ color: colors.line }}>
       <View style={styles.rowLeft}>
         <Text style={styles.merchant} numberOfLines={1}>
           {entry.merchant}
         </Text>
-        <Text style={styles.category}>{entry.category}</Text>
+        {/* An uncategorised entry is a prompt, not a category. Styling it as
+            a tappable hint rather than a label stops it reading as a bug and
+            tells the user the one thing they can do about it. */}
+        <Text style={[styles.category, needsCategory && styles.categoryMissing]}>
+          {needsCategory ? translate("Tap to categorise") : formatCategory(entry.category)}
+        </Text>
       </View>
       <Text style={[styles.amount, !isExpense && styles.income]}>
         {isExpense ? "-" : "+"}
@@ -223,6 +297,21 @@ const styles = StyleSheet.create({
   headerRight: { alignItems: "flex-end", gap: 4 },
   accountsLink: { paddingVertical: 2 },
   accountsLinkText: { color: colors.accent, fontSize: 12, fontWeight: "600" },
+  filterRow: { paddingHorizontal: 18, paddingBottom: 10, gap: 8 },
+  filterPip: {
+    paddingVertical: 7,
+    paddingHorizontal: 13,
+    borderRadius: 9,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.panel,
+    alignItems: "flex-start",
+  },
+  filterPipActive: { borderColor: colors.accent, backgroundColor: colors.accent },
+  filterText: { color: colors.ink, fontSize: 12, fontWeight: "600" },
+  filterBalance: { color: colors.inkDim, fontSize: 10, marginTop: 2, fontVariant: ["tabular-nums"] },
+  filterTextActive: { color: colors.canvas },
+  categoryMissing: { color: colors.accent, fontStyle: "italic" },
   centered: { flex: 1, justifyContent: "center", alignItems: "center", padding: 24 },
   errorTitle: { color: colors.overdue, fontSize: 15, fontWeight: "600", marginBottom: 6 },
   errorBody: { color: colors.inkDim, fontSize: 12, textAlign: "center", marginBottom: 16 },

@@ -271,6 +271,8 @@ export const ptPT: Record<string, string> = {
 
   // --- accounts ---------------------------------------------------------
   "Accounts": "Contas",
+  "All accounts": "Todas as contas",
+  "Tap to categorise": "Toca para categorizar",
   "No accounts yet": "Ainda não há contas",
   "Add the accounts your money moves through. Each transaction can then be filed to one, so you can see what's actually in each.":
     "Adiciona as contas por onde o teu dinheiro passa. Cada movimento pode depois ser associado a uma, para veres o que tens em cada.",
