@@ -67,6 +67,11 @@ export function compareEntries(
   return a.id.localeCompare(b.id);
 }
 
+// Monotonic across every hydrate. Same reasoning as universeStore: two
+// overlapping fetches must be resolved by which STARTED last, not which
+// replied last, or a slow stale response silently overwrites fresh data.
+let hydrateSeq = 0;
+
 export const useFinanceStore = create<FinanceState>((set, get) => ({
   status: "idle",
   errorMessage: null,
@@ -75,6 +80,7 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
   summary: null,
 
   hydrate: async () => {
+    const seq = ++hydrateSeq;
     if (get().status === "idle") set({ status: "loading" });
     try {
       const month = currentMonthKey();
@@ -82,6 +88,7 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
         listFinanceEntries(month),
         getFinanceSummary(month),
       ]);
+      if (seq !== hydrateSeq) return;
       const sorted = [...entries].sort(compareEntries);
       set({
         status: "ready",
@@ -91,6 +98,7 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
         summary,
       });
     } catch (e) {
+      if (seq !== hydrateSeq) return;
       const msg = e instanceof Error ? e.message : String(e);
       set({ status: "error", errorMessage: msg });
     }

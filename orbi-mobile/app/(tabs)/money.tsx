@@ -5,7 +5,7 @@
 // land in Pro+; this view stays simple and ledger-shaped for every tier.
 
 import { useFocusEffect, useRouter, type Href } from "expo-router";
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -22,7 +22,14 @@ import { translate, useT } from "@/i18n";
 import { formatCategory, isUncategorized } from "@/services/categories";
 import { useFinanceStore } from "@/stores/financeStore";
 import { colors } from "@/theme/colors";
-import { listAccounts, type AccountBalance, type ServerFinanceEntry } from "@/services/api";
+import {
+  getFinanceDashboard,
+  listAccounts,
+  type AccountBalance,
+  type FinanceDashboard,
+  type ServerFinanceEntry,
+} from "@/services/api";
+import { Dashboard } from "@/components/finance/Dashboard";
 
 interface Section {
   title: string;
@@ -82,6 +89,8 @@ export default function MoneyScreen() {
   // null means "every account". Kept local: it is a way of looking at the
   // data, not a setting worth persisting to the server.
   const [accountFilter, setAccountFilter] = useState<string | null>(null);
+  const [section, setSection] = useState<"movements" | "dashboard">("movements");
+  const [dashboard, setDashboard] = useState<FinanceDashboard | null>(null);
 
   // Refetch whenever the tab is focused, not just once on mount.
   //
@@ -102,6 +111,23 @@ export default function MoneyScreen() {
         .catch(() => setAccounts([]));
     }, [hydrate]),
   );
+
+  // Fetched separately from the entries, and re-fetched when the account
+  // filter changes: the dashboard compares against several months of
+  // history, which the month-scoped entries store does not hold.
+  useEffect(() => {
+    let cancelled = false;
+    getFinanceDashboard(undefined, accountFilter)
+      .then((d) => {
+        if (!cancelled) setDashboard(d);
+      })
+      .catch(() => {
+        if (!cancelled) setDashboard(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [accountFilter, entries.length]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -191,7 +217,44 @@ export default function MoneyScreen() {
         </ScrollView>
       ) : null}
 
-      {status === "loading" || status === "idle" ? (
+      {/* Movements and Dashboard answer different questions about the same
+          data — "what happened" versus "what does it add up to" — and a
+          single scrolling ledger was being asked to do both. */}
+      <View style={styles.sectionRow}>
+        {(["movements", "dashboard"] as const).map((key) => {
+          const active = section === key;
+          return (
+            <Pressable
+              key={key}
+              onPress={() => setSection(key)}
+              style={[styles.sectionTab, active && styles.sectionTabActive]}
+            >
+              <Text style={[styles.sectionText, active && styles.sectionTextActive]}>
+                {key === "movements" ? t("Movements") : t("Dashboard")}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      {section === "dashboard" ? (
+        <ScrollView
+          contentContainerStyle={styles.dashboardScroll}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={colors.accent}
+            />
+          }
+        >
+          <Dashboard
+            data={dashboard}
+            currency={currency}
+            loading={status === "loading"}
+          />
+        </ScrollView>
+      ) : status === "loading" || status === "idle" ? (
         <View style={styles.centered}>
           <ActivityIndicator color={colors.accent} />
         </View>
@@ -298,6 +361,19 @@ const styles = StyleSheet.create({
   accountsLink: { paddingVertical: 2 },
   accountsLinkText: { color: colors.accent, fontSize: 12, fontWeight: "600" },
   filterRow: { paddingHorizontal: 18, paddingBottom: 10, gap: 8 },
+  sectionRow: { flexDirection: "row", paddingHorizontal: 18, gap: 8, paddingBottom: 12 },
+  sectionTab: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 9,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.panel,
+  },
+  sectionTabActive: { borderColor: colors.accent, backgroundColor: colors.accent },
+  sectionText: { color: colors.inkDim, fontSize: 13, fontWeight: "600" },
+  sectionTextActive: { color: colors.canvas },
+  dashboardScroll: { paddingBottom: 90 },
   filterPip: {
     paddingVertical: 7,
     paddingHorizontal: 13,

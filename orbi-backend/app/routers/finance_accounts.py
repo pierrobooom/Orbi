@@ -39,6 +39,7 @@ from app.services.bank_providers import (
 )
 from app.services.bank_sync import connections_needing_attention, sync_user_now
 from app.services.finance_categorizer import categorize_merchant
+from app.services.finance_dashboard import build_dashboard
 from app.services.statement_import import StatementFormatError, parse_statement
 
 logger = logging.getLogger(__name__)
@@ -512,6 +513,41 @@ async def import_statement(
         skipped_pending=report.skipped_pending,
         skipped_unreadable=report.skipped_unparseable,
     )
+
+
+@router.get("/dashboard")
+async def finance_dashboard(
+    month: str | None = None,
+    account_id: UUID | None = None,
+    user_id: UUID = Depends(get_current_user),
+):
+    """Spending for one month, against the months before it.
+
+    Every figure is a sum over the user's own rows — no AI. Asking a model to
+    total a column costs tokens to do arithmetic and occasionally gets it
+    wrong; the AI's job is reading these numbers, not producing them.
+
+    Optionally scoped to one account, because "what did I spend" and "what did
+    I spend on this card" are different questions and the tab lets the user
+    pick which one they are asking.
+    """
+    if month is None:
+        month = datetime.now(timezone.utc).strftime("%Y-%m")
+    if len(month) != 7:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=_error("month must be in YYYY-MM format.", "INVALID_MONTH_FORMAT"),
+        )
+
+    # One fetch covering the month AND its comparison window; the service
+    # slices it rather than the router issuing a query per month.
+    entries = await finance_db.fetch_entries_for_user(user_id)
+    if account_id is not None:
+        entries = [
+            e for e in entries if str(e.get("account_id") or "") == str(account_id)
+        ]
+
+    return build_dashboard(entries, month)
 
 
 @router.get("/institutions")

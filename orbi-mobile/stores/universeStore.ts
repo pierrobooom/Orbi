@@ -50,6 +50,10 @@ interface UniverseState {
   clearSearch: () => void;
 }
 
+// Monotonic across every hydrate. Module scope rather than store state: it
+// is bookkeeping for concurrent requests, not something any screen renders.
+let hydrateSeq = 0;
+
 export const useUniverseStore = create<UniverseState>((set, get) => ({
   status: "idle",
   errorMessage: null,
@@ -62,9 +66,19 @@ export const useUniverseStore = create<UniverseState>((set, get) => ({
   searchQuery: null,
 
   hydrate: async () => {
+    // Only the newest fetch may write. Two hydrates often overlap — the
+    // foreground refresh and a notification action's follow-up fire together
+    // on app open — and without this, whichever RESPONDS last wins rather
+    // than whichever STARTED last. The foreground one begins before the
+    // action's API call has even landed, so a slow reply from it would
+    // overwrite the fresh state with data fetched before the change: the
+    // task moved on the server, and the bubble kept the old time and kept
+    // pulsing red. Intermittently, which is the worst kind.
+    const seq = ++hydrateSeq;
     set({ status: "loading", errorMessage: null });
     try {
       const [tasks, clusters] = await Promise.all([listTasks(), listClusters()]);
+      if (seq !== hydrateSeq) return;
       const { activeClusterId, searchResults } = get();
       const layout = layoutUniverse(clusters, tasks, new Date(), activeClusterId, searchResults);
       set({
@@ -76,6 +90,7 @@ export const useUniverseStore = create<UniverseState>((set, get) => ({
         serverClusters: clusters,
       });
     } catch (e) {
+      if (seq !== hydrateSeq) return;
       const msg = e instanceof Error ? e.message : String(e);
       set({
         status: "error",

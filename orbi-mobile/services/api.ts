@@ -467,6 +467,49 @@ export async function deleteRecurring(id: string): Promise<void> {
   if (!res.ok && res.status !== 404) throw await parseError(res);
 }
 
+export interface DashboardCategory {
+  category: string;
+  amount: number;
+  share_pct: number;
+  /** Null when there is no history to compare against — which is a different
+   * answer from "unchanged" and must render differently. */
+  average: number | null;
+  change_pct: number | null;
+}
+
+export interface FinanceDashboard {
+  month: string;
+  total_spend: number;
+  total_income: number;
+  net: number;
+  average_spend: number | null;
+  spend_change_pct: number | null;
+  months_compared: number;
+  categories: DashboardCategory[];
+  top_merchants: { merchant: string; amount: number; count: number }[];
+  daily: { date: string; amount: number }[];
+  entry_count: number;
+  uncategorised_count: number;
+}
+
+/** Spending for a month, against the months before it.
+ *
+ * Every figure is computed server-side from the user's own rows. Scoped to
+ * one account when given, because "what did I spend" and "what did I spend
+ * on this card" are different questions. */
+export async function getFinanceDashboard(
+  month?: string,
+  accountId?: string | null,
+): Promise<FinanceDashboard> {
+  const params = new URLSearchParams();
+  if (month) params.set("month", month);
+  if (accountId) params.set("account_id", accountId);
+  const qs = params.toString();
+  const res = await authFetch(`${V1}/finance/dashboard${qs ? `?${qs}` : ""}`);
+  if (!res.ok) throw await parseError(res);
+  return (await res.json()) as FinanceDashboard;
+}
+
 export interface ProviderStatus {
   provider: string;
   /** False when no aggregator is configured — nothing will sync, and the

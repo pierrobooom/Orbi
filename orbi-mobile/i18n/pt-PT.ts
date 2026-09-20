@@ -272,6 +272,27 @@ export const ptPT: Record<string, string> = {
   // --- accounts ---------------------------------------------------------
   "Accounts": "Contas",
   "All accounts": "Todas as contas",
+  "Movements": "Movimentos",
+  "Dashboard": "Resumo",
+  "Nothing to show yet": "Ainda não há nada para mostrar",
+  "Once this month has some transactions, you'll see where the money went and whether that's unusual for you.":
+    "Assim que este mês tiver movimentos, vais ver para onde foi o dinheiro e se isso é invulgar para ti.",
+  "Came in": "Entrou",
+  "Left over": "Sobrou",
+  "Where it went": "Para onde foi",
+  "Most spent with": "Onde gastaste mais",
+  "Day by day": "Dia a dia",
+  "no history yet": "ainda sem histórico",
+  "about usual": "como é habitual",
+  "more than usual": "mais do que o habitual",
+  "less than usual": "menos do que o habitual",
+  "Usually {amount} by now": "Habitualmente {amount} a esta altura",
+  "once": "uma vez",
+  "{n} times": "{n} vezes",
+  "1st": "dia 1",
+  "Peak {amount}": "Máximo {amount}",
+  "{n} transactions have no category. Tap one in Movements to sort it — the rest of this gets sharper as you do.":
+    "{n} movimentos não têm categoria. Toca num em Movimentos para a definir — o resto fica mais preciso à medida que o fazes.",
   "Tap to categorise": "Toca para categorizar",
   "No accounts yet": "Ainda não há contas",
   "Add the accounts your money moves through. Each transaction can then be filed to one, so you can see what's actually in each.":
