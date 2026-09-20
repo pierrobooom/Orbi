@@ -158,3 +158,15 @@ async def insert_entries(rows: list[dict]) -> int:
     except Exception as exc:  # noqa: BLE001
         logger.info("Bulk entry insert rejected (likely a duplicate): %s", exc)
         return 0
+
+
+async def delete_budget(budget_id: UUID, user_id: UUID) -> bool:
+    """Remove a spending limit. Returns True if a row was deleted."""
+    response = (
+        get_client().table("finance_budgets")
+        .delete()
+        .eq("id", str(budget_id))
+        .eq("user_id", str(user_id))
+        .execute()
+    )
+    return bool(response.data)

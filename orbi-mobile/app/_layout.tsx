@@ -139,6 +139,10 @@ export default function RootLayout() {
                 options={{ presentation: "modal", headerShown: false }}
               />
               <Stack.Screen
+                name="limits"
+                options={{ presentation: "modal", headerShown: false }}
+              />
+              <Stack.Screen
                 name="connect-bank"
                 options={{ presentation: "modal", headerShown: false }}
               />

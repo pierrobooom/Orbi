@@ -515,6 +515,122 @@ async def import_statement(
     )
 
 
+@router.get("/limits")
+async def list_limits(user_id: UUID = Depends(get_current_user)):
+    """Spending limits with how much of each has actually been used.
+
+    Spend is summed from entries rather than read from finance_budgets.
+    current_spend, which has been on that table since 0001 and is left
+    deliberately unused: a stored running total drifts the moment an entry is
+    edited or deleted, and nothing about the row admits it. Same reasoning as
+    account balances.
+    """
+    month = datetime.now(timezone.utc).strftime("%Y-%m")
+    budgets = await finance_db.fetch_budgets_for_user(user_id)
+    entries = await finance_db.fetch_entries_for_user(user_id, month=month)
+
+    spent: dict[str, float] = {}
+    for entry in entries:
+        if entry.get("entry_type") != "expense":
+            continue
+        key = entry.get("category") or "uncategorized"
+        spent[key] = spent.get(key, 0.0) + float(entry.get("amount") or 0)
+
+    out = []
+    for budget in budgets:
+        limit = float(budget.get("monthly_limit") or 0)
+        used = round(spent.get(budget["category"], 0.0), 2)
+        out.append(
+            {
+                "id": budget["id"],
+                "category": budget["category"],
+                "monthly_limit": limit,
+                "alert_threshold": float(budget.get("alert_threshold") or 0.8),
+                "alerts_enabled": bool(budget.get("alerts_enabled", True)),
+                "spent": used,
+                "remaining": round(limit - used, 2),
+                "fraction": round(used / limit, 4) if limit > 0 else None,
+            }
+        )
+    out.sort(key=lambda b: (b["fraction"] is None, -(b["fraction"] or 0)))
+    return {"month": month, "limits": out}
+
+
+class LimitInput(BaseModel):
+    """Set a ceiling on a category.
+
+    Deliberately not the full FinanceBudget model. That one requires an id, a
+    user_id and a period the client has no business inventing, which forced
+    callers to fabricate values the server then overwrote — and a fabricated
+    primary key is a real hazard, not just noise.
+    """
+
+    category: str = Field(min_length=1, max_length=40)
+    monthly_limit: float = Field(gt=0)
+    # Where the first warning fires, as a fraction of the limit. Default 80%:
+    # early enough that there is still something to decide.
+    alert_threshold: float = Field(default=0.8, ge=0.1, le=1.0)
+    alerts_enabled: bool = True
+
+
+@router.put("/limits")
+async def set_limit(
+    body: LimitInput,
+    user_id: UUID = Depends(get_current_user),
+):
+    """Create or update the ceiling for one category.
+
+    Upserts on (user_id, category), so a client never has to check whether a
+    limit already exists before setting one.
+
+    Raising a limit clears the alert state for the month. Otherwise someone
+    who was warned at 80% of 200, then decided 300 was the real number, would
+    never hear about 80% of 300 — the app would have gone quiet precisely
+    because they engaged with it.
+    """
+    month = datetime.now(timezone.utc).strftime("%Y-%m")
+    existing = {
+        b["category"]: b for b in await finance_db.fetch_budgets_for_user(user_id)
+    }
+    previous = existing.get(body.category)
+
+    start = datetime.now(timezone.utc).date().replace(day=1)
+    from calendar import monthrange
+
+    end = start.replace(day=monthrange(start.year, start.month)[1])
+
+    payload = {
+        "user_id": str(user_id),
+        "category": body.category,
+        "monthly_limit": body.monthly_limit,
+        "alert_threshold": body.alert_threshold,
+        "alerts_enabled": body.alerts_enabled,
+        "period_start": start.isoformat(),
+        "period_end": end.isoformat(),
+    }
+    if previous:
+        payload["id"] = previous["id"]
+        raised = body.monthly_limit > float(previous.get("monthly_limit") or 0)
+        if raised:
+            payload["notified_level"] = None
+            payload["notified_period"] = None
+    else:
+        payload["id"] = str(uuid4())
+        payload["current_spend"] = 0
+
+    return await finance_db.upsert_budget(payload)
+
+
+@router.delete("/limits/{budget_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_limit(budget_id: UUID, user_id: UUID = Depends(get_current_user)):
+    """Remove a spending limit. The transactions it watched are untouched."""
+    if not await finance_db.delete_budget(budget_id, user_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_error("Limit not found.", "LIMIT_NOT_FOUND"),
+        )
+
+
 @router.get("/dashboard")
 async def finance_dashboard(
     month: str | None = None,

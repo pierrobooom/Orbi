@@ -410,6 +410,27 @@ export const ptPT: Record<string, string> = {
 
   // --- recurring --------------------------------------------------------
   "Recurring": "Recorrentes",
+  "Spending limits": "Limites de gastos",
+  "A ceiling per category. Orbi tells you as you approach one — once, not every hour.":
+    "Um tecto por categoria. O Orbi avisa-te quando te aproximares — uma vez, não de hora a hora.",
+  "Monthly limit": "Limite mensal",
+  "Set limit": "Definir limite",
+  "No limits set": "Sem limites definidos",
+  "Put a ceiling on a category and Orbi will tell you as you approach it — once, not every hour.":
+    "Define um tecto para uma categoria e o Orbi avisa-te quando te aproximares — uma vez, não de hora a hora.",
+  "Set the first one": "Definir o primeiro",
+  "You'll be told once when you reach 80%, and once if you go over. Never more than that.":
+    "Serás avisado uma vez ao chegar aos 80% e uma vez se ultrapassares. Nunca mais do que isso.",
+  "{amount} left": "faltam {amount}",
+  "{amount} over": "{amount} acima",
+  "Alerts": "Avisos",
+  "Remove this limit?": "Remover este limite?",
+  "Your transactions stay exactly as they are — only the ceiling and its alerts go.":
+    "Os teus movimentos ficam exactamente como estão — só o tecto e os avisos desaparecem.",
+  "Remove": "Remover",
+  "Could not remove": "Não foi possível remover",
+  "Long-press a limit to remove it.": "Mantém premido um limite para o remover.",
+  "Limits": "Limites",
   "Netflix, rent, gym…": "Netflix, renda, ginásio…",
   "How often": "Com que frequência",
   "Weekly": "Semanal",

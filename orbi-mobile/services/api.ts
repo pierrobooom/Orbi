@@ -467,6 +467,55 @@ export async function deleteRecurring(id: string): Promise<void> {
   if (!res.ok && res.status !== 404) throw await parseError(res);
 }
 
+export interface SpendingLimit {
+  id: string;
+  category: string;
+  monthly_limit: number;
+  alert_threshold: number;
+  alerts_enabled: boolean;
+  /** Summed from entries on every read, never a stored running total — that
+   * drifts the moment an entry is edited or deleted. */
+  spent: number;
+  remaining: number;
+  /** Null when the limit is zero, so the UI never divides by it. */
+  fraction: number | null;
+}
+
+export async function getLimits(): Promise<{
+  month: string;
+  limits: SpendingLimit[];
+}> {
+  const res = await authFetch(`${V1}/finance/limits`);
+  if (!res.ok) throw await parseError(res);
+  return await res.json();
+}
+
+/** Create or change a category's monthly ceiling.
+ *
+ * Upsert by category, so the caller never has to check whether one already
+ * exists before setting it. */
+export async function upsertLimit(
+  category: string,
+  monthlyLimit: number,
+  options?: { alert_threshold?: number; alerts_enabled?: boolean },
+): Promise<void> {
+  const res = await authFetch(`${V1}/finance/limits`, {
+    method: "PUT",
+    body: JSON.stringify({
+      category,
+      monthly_limit: monthlyLimit,
+      alert_threshold: options?.alert_threshold ?? 0.8,
+      alerts_enabled: options?.alerts_enabled ?? true,
+    }),
+  });
+  if (!res.ok) throw await parseError(res);
+}
+
+export async function deleteLimit(id: string): Promise<void> {
+  const res = await authFetch(`${V1}/finance/limits/${id}`, { method: "DELETE" });
+  if (!res.ok && res.status !== 404) throw await parseError(res);
+}
+
 export interface DashboardCategory {
   category: string;
   amount: number;

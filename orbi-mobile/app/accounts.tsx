@@ -510,6 +510,19 @@ export default function AccountsScreen() {
         </Pressable>
 
         <Pressable
+          onPress={() => router.push("/limits" as Href)}
+          style={styles.linkRow}
+        >
+          <View style={styles.toggleLabelGroup}>
+            <Text style={styles.rowLabel}>{t("Spending limits")}</Text>
+            <Text style={styles.rowHint}>
+              {t("A ceiling per category. Orbi tells you as you approach one — once, not every hour.")}
+            </Text>
+          </View>
+          <MaterialIcons name="chevron-right" size={22} color={colors.inkDim} />
+        </Pressable>
+
+        <Pressable
           onPress={() => router.push("/recurring" as Href)}
           style={styles.linkRow}
         >

@@ -23,6 +23,7 @@ from datetime import date, datetime, timezone
 from app.db import finance as finance_db, finance_accounts as accounts_db
 from app.services import recurring
 from app.services.bank_sync import sync_due_accounts
+from app.services.budget_alerts import run_budget_alerts
 
 logger = logging.getLogger(__name__)
 
@@ -78,11 +79,24 @@ async def materialise_recurring(today: date | None = None) -> dict:
 
 
 async def run_once(now: datetime | None = None) -> dict:
-    """One pass of both jobs. Exposed so an endpoint or a test can drive it."""
+    """One pass of every finance job. Driven by the loop, an endpoint or a test."""
     now = now or datetime.now(timezone.utc)
     recurring_result = await materialise_recurring(now.date())
     sync_result = await sync_due_accounts(now)
-    return {"recurring": recurring_result, "bank_sync": sync_result}
+
+    # Runs after the sync so a limit is judged against transactions that
+    # arrived moments ago, not against yesterday's picture.
+    try:
+        budget_result = await run_budget_alerts(now)
+    except Exception as exc:  # noqa: BLE001 — alerts must not break the tick
+        logger.error("Budget alerts failed: %s", exc)
+        budget_result = {"checked": 0, "notified": 0}
+
+    return {
+        "recurring": recurring_result,
+        "bank_sync": sync_result,
+        "budgets": budget_result,
+    }
 
 
 async def run_forever() -> None:
@@ -92,7 +106,11 @@ async def run_forever() -> None:
         try:
             await asyncio.sleep(TICK_SECONDS)
             result = await run_once()
-            if result["recurring"]["entries"] or result["bank_sync"]["imported"]:
+            if (
+                result["recurring"]["entries"]
+                or result["bank_sync"]["imported"]
+                or result["budgets"]["notified"]
+            ):
                 logger.info("Finance tick: %s", result)
         except asyncio.CancelledError:
             logger.info("Finance scheduler stopping")
