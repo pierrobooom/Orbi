@@ -573,17 +573,46 @@ export async function getProviderStatus(): Promise<ProviderStatus> {
   return (await res.json()) as ProviderStatus;
 }
 
+export interface ApprovedAccount {
+  uid: string;
+  /** Masked — enough to recognise which account, not the full number. */
+  masked_iban: string | null;
+  name: string | null;
+  currency: string | null;
+}
+
 export interface BankConnection {
   id: string;
   owner_id: string;
   account_id: string;
   provider: string;
   institution_id: string | null;
-  status: "pending" | "active" | "expired" | "revoked" | "error";
+  /** "choose" means the bank approved access and returned several accounts:
+   * the consent is live, and only the mapping is missing. Not an error. */
+  status: "pending" | "active" | "choose" | "expired" | "revoked" | "error";
   consent_expires_at: string | null;
   last_synced_at: string | null;
   next_sync_after: string | null;
   last_error: string | null;
+  /** Present only while status is "choose". */
+  approved_accounts?: ApprovedAccount[] | null;
+}
+
+/** Say which of the bank's approved accounts this Orbi account is.
+ *
+ * Only reachable from the "choose" state, where the consent already exists
+ * and the single missing fact is the mapping — which is the one thing the
+ * server cannot safely work out on its own. */
+export async function chooseConnectionAccount(
+  connectionId: string,
+  uid: string,
+): Promise<BankConnection> {
+  const res = await authFetch(
+    `${V1}/finance/connections/${connectionId}/choose`,
+    { method: "POST", body: JSON.stringify({ uid }) },
+  );
+  if (!res.ok) throw await parseError(res);
+  return (await res.json()) as BankConnection;
 }
 
 export interface ConnectResponse {

@@ -570,4 +570,11 @@ export const ptPT: Record<string, string> = {
   "Your bank": "O teu banco",
   "Change bank": "Mudar de banco",
   "Continue to {bank}": "Continuar para {bank}",
+  // Picking which approved account a connection refers to.
+  "Which account is this?": "Que conta é esta?",
+  "Your bank approved access to more than one account.":
+    "O teu banco aprovou o acesso a mais do que uma conta.",
+  "No accounts came back. Try connecting again.":
+    "Não veio nenhuma conta. Tenta ligar outra vez.",
+  "Could not finish connecting": "Não foi possível concluir a ligação",
 };

@@ -15,6 +15,10 @@ class Cadence(str, Enum):
 class ConnectionStatus(str, Enum):
     pending = "pending"
     active = "active"
+    # The bank approved access but returned several accounts and none
+    # matched on IBAN. Not an error: the consent is live and the only thing
+    # missing is which of them the user meant.
+    choose = "choose"
     expired = "expired"
     revoked = "revoked"
     error = "error"
@@ -137,6 +141,10 @@ class BankConnection(BaseModel):
     last_synced_at: Optional[datetime] = None
     next_sync_after: Optional[datetime] = None
     last_error: Optional[str] = None
+    # Present only while status is "choose". Masked identification, never
+    # balances or scheme internals — just enough for a human to recognise
+    # which of their accounts this is.
+    approved_accounts: Optional[list[dict]] = None
 
 
 class SyncResult(BaseModel):

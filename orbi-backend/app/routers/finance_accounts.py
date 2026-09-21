@@ -290,6 +290,65 @@ async def connections_attention(user_id: UUID = Depends(get_current_user)):
     return await connections_needing_attention(user_id)
 
 
+class ChooseAccountRequest(BaseModel):
+    """Which approved account this Orbi account corresponds to."""
+
+    uid: str = Field(min_length=1, max_length=200)
+
+
+@router.post("/connections/{connection_id}/choose", response_model=BankConnection)
+async def choose_connection_account(
+    connection_id: UUID,
+    body: ChooseAccountRequest,
+    user_id: UUID = Depends(get_current_user),
+):
+    """Finish a connection whose bank returned several approved accounts.
+
+    The consent already exists — this only records which of the approved
+    accounts the user meant, which is the one thing no amount of server-side
+    cleverness can determine safely.
+
+    The uid must be one the provider actually returned. Trusting the client
+    here would let a typo point a connection at an account the user never
+    approved, and the sync would then fail in a way that looks like a
+    provider outage rather than a bad request.
+    """
+    connection = await accounts_db.fetch_connection(connection_id, user_id)
+    if connection is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_error("Connection not found.", "CONNECTION_NOT_FOUND"),
+        )
+    if connection.get("status") != "choose":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=_error(
+                "That connection is not waiting for a choice.", "NOT_CHOOSABLE"
+            ),
+        )
+
+    approved = connection.get("approved_accounts") or []
+    if not any(str(item.get("uid")) == body.uid for item in approved):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=_error("That account was not one of the approved ones.", "UNKNOWN_ACCOUNT"),
+        )
+
+    updated = await accounts_db.update_connection(
+        connection_id,
+        {
+            "status": "active",
+            "external_account_id": body.uid,
+            # Stale the moment the choice is made, and it is the provider's
+            # data about accounts the user may not have picked.
+            "approved_accounts": None,
+            "last_error": None,
+            "next_sync_after": datetime.now(timezone.utc).isoformat(),
+        },
+    )
+    return updated or connection
+
+
 @router.get("/provider")
 async def provider_status(user_id: UUID = Depends(get_current_user)):
     """Which bank provider this deployment is configured against.
@@ -365,24 +424,29 @@ async def bank_callback(code: str | None = None, state: str | None = None,
         external_account_id = _match_account(session, account)
         if not external_account_id:
             # Authorised, but we cannot tell WHICH of the approved accounts is
-            # the one they meant. Left pending with the reason rather than
-            # activated against a guess — filing someone's transactions to the
-            # wrong account is worse than not filing them.
+            # the one they meant. Guessing is not an option — filing someone's
+            # transactions against the wrong account is worse than filing none
+            # — but neither is throwing the authorisation away, which is what
+            # this used to do. The consent is the expensive part: it cost the
+            # user a trip through their bank, a login and a biometric prompt.
+            #
+            # So it is kept, and the app asks. 'choose' is a real state, not
+            # an error: the bank said yes and only the mapping is missing.
             await accounts_db.update_connection(
                 UUID(str(connection["id"])),
                 {
-                    "status": "error",
-                    "last_error": "Could not match the approved account. "
-                    "Add the account's IBAN in Orbi and reconnect.",
+                    "status": "choose",
+                    "consent_reference": str(session.get("session_id") or ""),
+                    "approved_accounts": _choosable_accounts(session),
+                    "last_error": None,
                 },
             )
             return HTMLResponse(
                 _callback_page(
-                    ok=False,
-                    detail="Approved, but we could not tell which account. "
-                    "Add its IBAN in Orbi and try again.",
+                    ok=True,
+                    detail="Approved. Go back to Orbi and pick which account "
+                    "this is — your bank returned more than one.",
                 ),
-                status_code=409,
             )
 
         await accounts_db.update_connection(
@@ -406,12 +470,49 @@ async def bank_callback(code: str | None = None, state: str | None = None,
         )
 
 
+def _account_uid(candidate: dict) -> str | None:
+    """The provider's handle for an approved account.
+
+    Providers disagree about the key — Enable Banking returns `uid`, others
+    `id` or `resourceId` — and an account we cannot address is one we cannot
+    sync, so it is better to return None than an empty string that looks
+    like a successful match.
+    """
+    for key in ("uid", "id", "resourceId", "resource_id"):
+        value = candidate.get(key)
+        if value:
+            return str(value)
+    return None
+
+
+def _account_iban(candidate: dict) -> str | None:
+    """The IBAN of an approved account, wherever this provider put it.
+
+    Banks are inconsistent about the shape: some nest it under account_id,
+    some return it flat, some only give `other.identification`. Checking one
+    place meant a bank that answered in a different shape looked like a bank
+    that had returned no IBAN at all.
+    """
+    identifiers = candidate.get("account_id") or {}
+    for source in (
+        identifiers.get("iban"),
+        candidate.get("iban"),
+        (identifiers.get("other") or {}).get("identification"),
+        (candidate.get("other") or {}).get("identification"),
+    ):
+        normalised = accounts_db.normalise_iban(source)
+        if normalised:
+            return normalised
+    return None
+
+
 def _match_account(session: dict, account: dict | None) -> str | None:
     """Pick which approved account corresponds to the user's Orbi account.
 
     By IBAN first — this is the one job the IBAN field genuinely does, and
     the payoff for having asked for it. When only one account was approved,
-    that is unambiguous regardless. Otherwise nothing is guessed.
+    that is unambiguous regardless. Otherwise nothing is guessed: the user
+    is asked, via the 'choose' state.
     """
     approved = session.get("accounts") or []
     if not approved:
@@ -420,13 +521,42 @@ def _match_account(session: dict, account: dict | None) -> str | None:
     stored_iban = accounts_db.normalise_iban((account or {}).get("iban"))
     if stored_iban:
         for candidate in approved:
-            identification = (candidate.get("account_id") or {}).get("iban")
-            if accounts_db.normalise_iban(identification) == stored_iban:
-                return str(candidate.get("uid") or candidate.get("id") or "") or None
+            if _account_iban(candidate) == stored_iban:
+                return _account_uid(candidate)
 
     if len(approved) == 1:
-        only = approved[0]
-        return str(only.get("uid") or only.get("id") or "") or None
+        return _account_uid(approved[0])
+    return None
+
+
+def _choosable_accounts(session: dict) -> list[dict]:
+    """Approved accounts, reduced to what a human needs to pick between.
+
+    Deliberately not the provider's raw objects: those carry balances,
+    scheme names and internal ids that have no business being stored longer
+    than the choice takes. What is kept is a handle to select with and
+    enough identification to recognise the account — masked, because the
+    full IBAN adds nothing to "which of these is my current account?".
+    """
+    out: list[dict] = []
+    for candidate in session.get("accounts") or []:
+        uid = _account_uid(candidate)
+        if not uid:
+            continue
+        iban = _account_iban(candidate)
+        out.append(
+            {
+                "uid": uid,
+                "masked_iban": (f"{iban[:4]}…{iban[-4:]}" if iban and len(iban) > 8 else iban),
+                "name": (
+                    candidate.get("name")
+                    or candidate.get("product")
+                    or (candidate.get("account_id") or {}).get("name")
+                ),
+                "currency": candidate.get("currency"),
+            }
+        )
+    return out
 
     return None
 
@@ -434,11 +564,14 @@ def _match_account(session: dict, account: dict | None) -> str | None:
 def _callback_page(*, ok: bool, detail: str = "") -> str:
     """A plain page for a human who has just been bounced between two apps."""
     title = "Account connected" if ok else "Couldn't connect"
-    body = (
+    # A successful outcome can still have something specific to say — an
+    # approval that needs the user to pick which account it was, for
+    # instance. Without this, detail was silently dropped whenever ok.
+    body = detail or (
         "Your transactions will start appearing in Orbi shortly. "
         "You can close this page and go back to the app."
         if ok
-        else detail or "Please try again from Orbi."
+        else "Please try again from Orbi."
     )
     tint = "#4ade80" if ok else "#ff4d6d"
     return f"""<!doctype html>

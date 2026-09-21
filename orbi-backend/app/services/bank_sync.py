@@ -319,7 +319,9 @@ async def connections_needing_attention(owner_id: UUID) -> list[dict]:
 
     needs: list[dict] = []
     for connection in connections:
-        if connection.get("status") in {"expired", "error", "revoked"}:
+        # "choose" belongs here too: the bank said yes, but until the user
+        # picks an account nothing syncs, and nothing else will prompt them.
+        if connection.get("status") in {"expired", "error", "revoked", "choose"}:
             needs.append(connection)
             continue
         expires_at = connection.get("consent_expires_at")

@@ -36,6 +36,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { translate, useT } from "@/i18n";
 import {
   ApiError,
+  chooseConnectionAccount,
   deleteAccount,
   disconnectBank,
   getProviderStatus,
@@ -44,6 +45,7 @@ import {
   listBankConnections,
   runFinanceJobs,
   type AccountBalance,
+  type ApprovedAccount,
   type BankConnection,
   type ProviderStatus,
 } from "@/services/api";
@@ -72,6 +74,8 @@ export default function AccountsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [importing, setImporting] = useState<string | null>(null);
+  // The uid currently being confirmed, so only that row shows a spinner.
+  const [choosing, setChoosing] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -96,7 +100,11 @@ export default function AccountsScreen() {
    * why a sync over accounts alone imports nothing. */
   const connectionFor = (accountId: string) =>
     connections.find(
-      (c) => c.account_id === accountId && ["pending", "active"].includes(c.status),
+      (c) =>
+        c.account_id === accountId &&
+        // "choose" belongs with the live ones: the consent exists and holds
+        // the account slot, it is simply not finished being mapped.
+        ["pending", "active", "choose"].includes(c.status),
     );
 
   /** A connection that has stopped working and needs the user to act.
@@ -113,6 +121,27 @@ export default function AccountsScreen() {
         c.account_id === accountId &&
         ["expired", "revoked", "error"].includes(c.status),
     );
+
+  /** Record which approved account this Orbi account corresponds to.
+   *
+   * Reloads rather than patching local state: activating also stamps
+   * next_sync_after, so the first sync is already in flight by the time the
+   * list comes back and the card should reflect that.
+   */
+  const onChoose = async (link: BankConnection, choice: ApprovedAccount) => {
+    setChoosing(choice.uid);
+    try {
+      await chooseConnectionAccount(link.id, choice.uid);
+      await load();
+    } catch (e) {
+      Alert.alert(
+        translate("Could not finish connecting"),
+        e instanceof ApiError ? e.message : String(e),
+      );
+    } finally {
+      setChoosing(null);
+    }
+  };
 
   /** Explain before redirecting, rather than after.
    *
@@ -459,6 +488,68 @@ export default function AccountsScreen() {
                   // and approve. Anyone who closed the bank page, or lost the
                   // link, was stuck with a connection that would never
                   // complete and a sync that silently did nothing.
+                  // The bank said yes but returned several accounts and none
+                  // matched on IBAN. The consent is live and valuable — it
+                  // cost a trip through the bank — so it is kept and the
+                  // question is asked here rather than thrown away.
+                  if (link && link.status === "choose") {
+                    const choices = link.approved_accounts ?? [];
+                    return (
+                      <View style={styles.brokenBox}>
+                        <View style={styles.brokenHead}>
+                          <MaterialIcons
+                            name="help-outline"
+                            size={15}
+                            color={colors.finance}
+                          />
+                          <Text style={styles.chooseTitle}>
+                            {t("Which account is this?")}
+                          </Text>
+                        </View>
+                        <Text style={styles.brokenBody}>
+                          {t("Your bank approved access to more than one account.")}
+                        </Text>
+                        {choices.map((choice) => (
+                          <Pressable
+                            key={choice.uid}
+                            onPress={() => onChoose(link, choice)}
+                            disabled={choosing !== null}
+                            style={[
+                              styles.choiceRow,
+                              choosing === choice.uid && styles.btnBusy,
+                            ]}
+                          >
+                            <MaterialIcons
+                              name="account-balance-wallet"
+                              size={16}
+                              color={colors.inkDim}
+                            />
+                            <Text style={styles.choiceText} numberOfLines={1}>
+                              {choice.name || choice.masked_iban || t("Account")}
+                              {choice.name && choice.masked_iban
+                                ? ` · ${choice.masked_iban}`
+                                : ""}
+                            </Text>
+                            {choosing === choice.uid ? (
+                              <ActivityIndicator size="small" color={colors.accent} />
+                            ) : (
+                              <MaterialIcons
+                                name="chevron-right"
+                                size={18}
+                                color={colors.inkDim}
+                              />
+                            )}
+                          </Pressable>
+                        ))}
+                        {choices.length === 0 ? (
+                          <Text style={styles.brokenBody}>
+                            {t("No accounts came back. Try connecting again.")}
+                          </Text>
+                        ) : null}
+                      </View>
+                    );
+                  }
+
                   if (link && link.status === "pending") {
                     return (
                       <View style={styles.connectRow}>
@@ -793,6 +884,20 @@ const styles = StyleSheet.create({
   },
   brokenHead: { flexDirection: "row", alignItems: "center", gap: 6 },
   brokenText: { color: colors.overdue, fontSize: 11, fontWeight: "700", flex: 1 },
+  chooseTitle: { color: colors.finance, fontSize: 11, fontWeight: "700", flex: 1 },
+  choiceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginTop: 8,
+    paddingVertical: 11,
+    paddingHorizontal: 12,
+    borderRadius: 9,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.canvas,
+  },
+  choiceText: { flex: 1, color: colors.ink, fontSize: 12.5, fontWeight: "600" },
   brokenBody: { color: colors.inkDim, fontSize: 11, lineHeight: 16, marginTop: 4 },
   brokenActions: {
     flexDirection: "row",
