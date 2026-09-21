@@ -603,6 +603,17 @@ export async function listBankConnections(): Promise<BankConnection[]> {
   return (await res.json()) as BankConnection[];
 }
 
+/** Connections the user has to act on: expired, errored, or ending soon.
+ *
+ * Worth its own call from screens that show totals. A feed that has quietly
+ * stopped is indistinguishable from a quiet month, so the number stays
+ * trusted long after it stopped being true. */
+export async function connectionsNeedingAttention(): Promise<BankConnection[]> {
+  const res = await authFetch(`${V1}/finance/connections/attention`);
+  if (!res.ok) throw await parseError(res);
+  return (await res.json()) as BankConnection[];
+}
+
 /** Start linking an account to the configured bank provider.
  *
  * An account and a connection are different things: an account is a label to

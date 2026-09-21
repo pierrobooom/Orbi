@@ -540,4 +540,20 @@ export const ptPT: Record<string, string> = {
   // Account dropdown on the movements ledger.
   "Showing": "A mostrar",
   "Show movements from": "Mostrar movimentos de",
+  // Bank connection health — consent expiry and reconnection.
+  "A bank connection needs attention": "Uma ligação bancária precisa de atenção",
+  "{n} bank connections need attention": "{n} ligações bancárias precisam de atenção",
+  "Totals may be missing recent transactions. Tap to reconnect.":
+    "Os totais podem não ter movimentos recentes. Toca para religar.",
+  "Bank permission ends today": "A autorização do banco termina hoje",
+  "Bank permission ends in {n} days": "A autorização do banco termina daqui a {n} dias",
+  "Renew": "Renovar",
+  "Reconnect": "Religar",
+  "Stopped updating": "Deixou de actualizar",
+  "Stopped updating on {date}": "Deixou de actualizar a {date}",
+  "Sync problem": "Problema de sincronização",
+  "We'll keep retrying. Reconnect if it persists.":
+    "Vamos continuar a tentar. Religa se persistir.",
+  "Your bank's permission expired. New transactions aren't arriving until you reconnect.":
+    "A autorização do teu banco expirou. Não chegam novos movimentos até religares.",
 };

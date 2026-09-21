@@ -24,6 +24,7 @@ from app.db import finance as finance_db, finance_accounts as accounts_db
 from app.services import recurring
 from app.services.bank_sync import sync_due_accounts
 from app.services.budget_alerts import run_budget_alerts
+from app.services.connection_alerts import run_connection_alerts
 
 logger = logging.getLogger(__name__)
 
@@ -92,10 +93,19 @@ async def run_once(now: datetime | None = None) -> dict:
         logger.error("Budget alerts failed: %s", exc)
         budget_result = {"checked": 0, "notified": 0}
 
+    # After the sync too, so a consent that lapsed during THIS tick is
+    # reported in the same pass rather than an hour later.
+    try:
+        connection_result = await run_connection_alerts(now)
+    except Exception as exc:  # noqa: BLE001 — alerts must not break the tick
+        logger.error("Connection alerts failed: %s", exc)
+        connection_result = {"checked": 0, "notified": 0}
+
     return {
         "recurring": recurring_result,
         "bank_sync": sync_result,
         "budgets": budget_result,
+        "connections": connection_result,
     }
 
 
@@ -110,6 +120,7 @@ async def run_forever() -> None:
                 result["recurring"]["entries"]
                 or result["bank_sync"]["imported"]
                 or result["budgets"]["notified"]
+                or result["connections"]["notified"]
             ):
                 logger.info("Finance tick: %s", result)
         except asyncio.CancelledError:

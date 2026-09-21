@@ -99,6 +99,21 @@ export default function AccountsScreen() {
       (c) => c.account_id === accountId && ["pending", "active"].includes(c.status),
     );
 
+  /** A connection that has stopped working and needs the user to act.
+   *
+   * Kept separate from connectionFor because these rows are not "connected"
+   * — they fetch nothing — but they are not "never connected" either. Before
+   * this, a lapsed consent simply vanished from the card and the account
+   * offered a Connect button again, so the user never learned that their
+   * feed had died or that the last few weeks of totals have a hole in them.
+   */
+  const brokenConnectionFor = (accountId: string) =>
+    connections.find(
+      (c) =>
+        c.account_id === accountId &&
+        ["expired", "revoked", "error"].includes(c.status),
+    );
+
   /** Explain before redirecting, rather than after.
    *
    * Connecting throws the user out of the app onto a bank login page. An
@@ -459,21 +474,107 @@ export default function AccountsScreen() {
                   }
 
                   if (link) {
+                    // Working, but consent is finite. Asking a week out is
+                    // the difference between a renewal the user schedules
+                    // and an outage they discover from a wrong total.
+                    const endsInDays = link.consent_expires_at
+                      ? Math.ceil(
+                          (new Date(link.consent_expires_at).getTime() - Date.now()) /
+                            86400000,
+                        )
+                      : null;
+                    const endingSoon = endsInDays !== null && endsInDays <= 7;
                     return (
-                      <Pressable
-                        onPress={() => onDisconnect(link)}
-                        style={styles.connectRow}
-                      >
-                        <MaterialIcons name="link" size={15} color={colors.health} />
-                        <Text style={styles.connectText}>
-                          {link.last_synced_at
-                            ? t("Connected · syncs daily")
-                            : t("Connected · first sync pending")}
-                        </Text>
-                        <Text style={styles.disconnectText}>{t("Disconnect")}</Text>
-                      </Pressable>
+                      <>
+                        <Pressable
+                          onPress={() => onDisconnect(link)}
+                          style={styles.connectRow}
+                        >
+                          <MaterialIcons name="link" size={15} color={colors.health} />
+                          <Text style={styles.connectText}>
+                            {link.last_synced_at
+                              ? t("Connected · syncs daily")
+                              : t("Connected · first sync pending")}
+                          </Text>
+                          <Text style={styles.disconnectText}>{t("Disconnect")}</Text>
+                        </Pressable>
+                        {endingSoon ? (
+                          <Pressable
+                            onPress={() => onConnect(row.account)}
+                            style={styles.expiringRow}
+                          >
+                            <MaterialIcons
+                              name="schedule"
+                              size={14}
+                              color={colors.finance}
+                            />
+                            <Text style={styles.expiringText}>
+                              {endsInDays <= 0
+                                ? t("Bank permission ends today")
+                                : t("Bank permission ends in {n} days", {
+                                    n: String(endsInDays),
+                                  })}
+                            </Text>
+                            <Text style={styles.resumeText}>{t("Renew")}</Text>
+                          </Pressable>
+                        ) : null}
+                      </>
                     );
                   }
+                  // Stopped, and only the user can restart it: renewing a
+                  // PSD2 consent means going back to the bank and approving
+                  // again. Said plainly, with the date it stopped, because
+                  // the totals since then are incomplete and the user is
+                  // entitled to know which ones to distrust.
+                  const broken = brokenConnectionFor(row.account.id);
+                  if (broken) {
+                    const stoppedOn = broken.last_synced_at
+                      ? new Date(broken.last_synced_at).toLocaleDateString(undefined, {
+                          day: "numeric",
+                          month: "short",
+                        })
+                      : null;
+                    const isError = broken.status === "error";
+                    return (
+                      <View style={styles.brokenBox}>
+                        <View style={styles.brokenHead}>
+                          <MaterialIcons
+                            name="link-off"
+                            size={15}
+                            color={colors.overdue}
+                          />
+                          <Text style={styles.brokenText}>
+                            {isError
+                              ? t("Sync problem")
+                              : stoppedOn
+                                ? t("Stopped updating on {date}", { date: stoppedOn })
+                                : t("Stopped updating")}
+                          </Text>
+                        </View>
+                        <Text style={styles.brokenBody}>
+                          {isError
+                            ? t("We'll keep retrying. Reconnect if it persists.")
+                            : t(
+                                "Your bank's permission expired. New transactions aren't arriving until you reconnect.",
+                              )}
+                        </Text>
+                        <View style={styles.brokenActions}>
+                          <Pressable
+                            onPress={() => onConnect(row.account)}
+                            style={styles.reconnectBtn}
+                          >
+                            <Text style={styles.reconnectBtnText}>
+                              {t("Reconnect")}
+                            </Text>
+                          </Pressable>
+                          <Pressable onPress={() => onDisconnect(broken)}>
+                            <Text style={styles.disconnectText}>{t("Remove")}</Text>
+                          </Pressable>
+                        </View>
+                      </View>
+                    );
+                  }
+
                   if (!provider?.automatic_import) return null;
                   return (
                     <Pressable
@@ -670,6 +771,39 @@ const styles = StyleSheet.create({
   connectText: { color: colors.inkDim, fontSize: 11, flex: 1 },
   disconnectText: { color: colors.overdue, fontSize: 11, fontWeight: "600" },
   resumeText: { color: colors.accent, fontSize: 11, fontWeight: "700" },
+  expiringRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 6,
+    paddingVertical: 7,
+    paddingHorizontal: 9,
+    borderRadius: 8,
+    backgroundColor: colors.canvas,
+  },
+  expiringText: { color: colors.finance, fontSize: 11, flex: 1, fontWeight: "600" },
+  brokenBox: {
+    marginTop: 4,
+    paddingTop: 8,
+    borderTopColor: colors.line,
+    borderTopWidth: 1,
+  },
+  brokenHead: { flexDirection: "row", alignItems: "center", gap: 6 },
+  brokenText: { color: colors.overdue, fontSize: 11, fontWeight: "700", flex: 1 },
+  brokenBody: { color: colors.inkDim, fontSize: 11, lineHeight: 16, marginTop: 4 },
+  brokenActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    marginTop: 10,
+  },
+  reconnectBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    backgroundColor: colors.accent,
+  },
+  reconnectBtnText: { color: colors.canvas, fontSize: 12, fontWeight: "700" },
   providerCard: {
     backgroundColor: colors.panel,
     borderColor: colors.line,

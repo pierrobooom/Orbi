@@ -33,9 +33,11 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useT } from "@/i18n";
 import {
+  connectionsNeedingAttention,
   getFinanceDashboard,
   listAccounts,
   type AccountBalance,
+  type BankConnection,
   type FinanceDashboard,
 } from "@/services/api";
 import { useFinanceStore } from "@/stores/financeStore";
@@ -77,6 +79,7 @@ export default function MoneyScreen() {
 
   const [accounts, setAccounts] = useState<AccountBalance[]>([]);
   const [dashboard, setDashboard] = useState<FinanceDashboard | null>(null);
+  const [attention, setAttention] = useState<BankConnection[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
@@ -89,6 +92,9 @@ export default function MoneyScreen() {
     getFinanceDashboard()
       .then(setDashboard)
       .catch(() => setDashboard(null));
+    connectionsNeedingAttention()
+      .then(setAttention)
+      .catch(() => setAttention([]));
   }, [hydrate]);
 
   useFocusEffect(
@@ -211,6 +217,33 @@ export default function MoneyScreen() {
           </View>
         </View>
 
+        {/* Directly under the totals, because it is about those totals.
+            A lapsed bank consent makes the number above quietly incomplete,
+            and the user has no way to see that from the number itself — it
+            looks like a quiet month. This is the only thing allowed to
+            interrupt the menu. */}
+        {attention.length > 0 ? (
+          <Pressable
+            onPress={() => router.push("/accounts" as Href)}
+            style={styles.alert}
+          >
+            <MaterialIcons name="link-off" size={18} color={colors.overdue} />
+            <View style={styles.alertBody}>
+              <Text style={styles.alertTitle}>
+                {attention.length === 1
+                  ? t("A bank connection needs attention")
+                  : t("{n} bank connections need attention", {
+                      n: String(attention.length),
+                    })}
+              </Text>
+              <Text style={styles.alertText}>
+                {t("Totals may be missing recent transactions. Tap to reconnect.")}
+              </Text>
+            </View>
+            <MaterialIcons name="chevron-right" size={20} color={colors.inkDim} />
+          </Pressable>
+        ) : null}
+
         <View style={styles.grid}>
           {blocks.map((block) => (
             <Pressable
@@ -274,6 +307,20 @@ const styles = StyleSheet.create({
   summaryDelta: { fontSize: 11, fontWeight: "600", marginTop: 4 },
   up: { color: colors.overdue },
   down: { color: colors.health },
+  alert: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    padding: 14,
+    marginBottom: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.overdue,
+    backgroundColor: colors.panel,
+  },
+  alertBody: { flex: 1 },
+  alertTitle: { color: colors.ink, fontSize: 13, fontWeight: "700" },
+  alertText: { color: colors.inkDim, fontSize: 11, lineHeight: 16, marginTop: 2 },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
   block: {
     // Two per row on any phone, without hard-coding a width.

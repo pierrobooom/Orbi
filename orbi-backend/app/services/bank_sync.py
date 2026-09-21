@@ -151,6 +151,21 @@ async def sync_connection(connection: dict, now: datetime | None = None) -> int:
         {"next_sync_after": (now + timedelta(hours=SYNC_INTERVAL_HOURS)).isoformat()},
     )
 
+    # A consent past its stated end is dead, and calling the provider to be
+    # told so costs a metered request per account per day for as long as the
+    # user ignores the reconnect prompt. The expiry date came from the
+    # provider itself, so trusting it is not a guess.
+    if _consent_has_lapsed(connection, now):
+        await accounts_db.update_connection(
+            connection_id,
+            {
+                "status": "expired",
+                "last_error": "Consent expired — reconnect the account.",
+            },
+        )
+        logger.info("Skipping connection %s — consent lapsed", connection_id)
+        return 0
+
     provider = get_provider(connection.get("provider"))
     until = now.date()
     since = until - timedelta(days=SYNC_WINDOW_DAYS)
@@ -198,6 +213,10 @@ async def sync_connection(connection: dict, now: datetime | None = None) -> int:
             "status": "active",
             "last_synced_at": now.isoformat(),
             "last_error": None,
+            # A working sync means this consent period is healthy, so any
+            # warning already sent about it belongs to the previous one.
+            # Without this, a reconnected account never warns again.
+            "notified_state": None,
         },
     )
     if written:
@@ -269,6 +288,23 @@ def _to_entry(transaction: BankTransaction, *, owner_id: UUID, account_id) -> di
         "external_id": transaction.external_id,
         "raw_description": (transaction.description or "")[:500],
     }
+
+
+def _consent_has_lapsed(connection: dict, now: datetime) -> bool:
+    """Is this connection's consent past its stated end?
+
+    A missing or unparseable expiry means "don't know", which must read as
+    not-lapsed: refusing to sync on a guess would break every provider that
+    omits the field.
+    """
+    expires_at = connection.get("consent_expires_at")
+    if not expires_at:
+        return False
+    try:
+        parsed = datetime.fromisoformat(str(expires_at).replace("Z", "+00:00"))
+    except (ValueError, TypeError):
+        return False
+    return parsed <= now
 
 
 async def connections_needing_attention(owner_id: UUID) -> list[dict]:
