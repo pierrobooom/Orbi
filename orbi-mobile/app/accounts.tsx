@@ -123,8 +123,11 @@ export default function AccountsScreen() {
    * owns the decision and the API call.
    */
   const onConnect = (account: AccountBalance["account"]) => {
+    // Bank first, explainer second. Which bank they use is something the user
+    // already knows; what is about to happen is not — and the explainer reads
+    // very differently once it can name the bank they are being sent to.
     router.push(
-      `/connect-bank?id=${account.id}&name=${encodeURIComponent(account.name)}` as Href,
+      `/bank-picker?id=${account.id}&name=${encodeURIComponent(account.name)}` as Href,
     );
   };
 

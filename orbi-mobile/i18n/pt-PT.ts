@@ -556,4 +556,18 @@ export const ptPT: Record<string, string> = {
     "Vamos continuar a tentar. Religa se persistir.",
   "Your bank's permission expired. New transactions aren't arriving until you reconnect.":
     "A autorização do teu banco expirou. Não chegam novos movimentos até religares.",
+  // Bank picker.
+  "Choose your bank": "Escolhe o teu banco",
+  "Search banks": "Procurar bancos",
+  "Could not load the banks": "Não foi possível carregar os bancos",
+  "Try again": "Tentar de novo",
+  "No bank matches that": "Nenhum banco corresponde",
+  "Check the spelling, or try another country.":
+    "Verifica a escrita, ou tenta outro país.",
+  "No banks available here": "Sem bancos disponíveis aqui",
+  "Your bank may not be reachable yet. You can import a statement instead.":
+    "O teu banco pode ainda não estar disponível. Podes importar um extracto.",
+  "Your bank": "O teu banco",
+  "Change bank": "Mudar de banco",
+  "Continue to {bank}": "Continuar para {bank}",
 };

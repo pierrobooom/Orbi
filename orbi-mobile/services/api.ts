@@ -614,14 +614,48 @@ export async function connectionsNeedingAttention(): Promise<BankConnection[]> {
   return (await res.json()) as BankConnection[];
 }
 
+export interface Institution {
+  name: string;
+  country: string;
+  logo: string | null;
+  /** "personal" / "business". A bank listed for business customers only
+   * fails at the bank's own login with a confusing error, so the server
+   * filters to personal before this ever arrives. */
+  psu_types: string[];
+}
+
+/** The banks this user can connect to, in a given country.
+ *
+ * Fetched live rather than shipped in the bundle: providers add and remove
+ * institutions continuously, and a stale list offers people a bank they
+ * cannot actually connect to. */
+export async function listInstitutions(country: string): Promise<Institution[]> {
+  const res = await authFetch(
+    `${V1}/finance/institutions?country=${encodeURIComponent(country)}`,
+  );
+  if (!res.ok) throw await parseError(res);
+  const body = (await res.json()) as { institutions: Institution[] };
+  return body.institutions ?? [];
+}
+
 /** Start linking an account to the configured bank provider.
  *
  * An account and a connection are different things: an account is a label to
  * file transactions against, a connection is permission to fetch them.
- * Syncing iterates connections, so an account alone never produces anything. */
-export async function connectAccount(accountId: string): Promise<ConnectResponse> {
+ * Syncing iterates connections, so an account alone never produces anything.
+ *
+ * The institution is required in practice even though the API allows it to be
+ * omitted: leaving it out falls back to a server-wide default, which sends
+ * every user to one bank. Fine for a single developer, wrong for user two. */
+export async function connectAccount(
+  accountId: string,
+  bank?: { institution: string; country: string },
+): Promise<ConnectResponse> {
   const res = await authFetch(`${V1}/finance/accounts/${accountId}/connect`, {
     method: "POST",
+    body: JSON.stringify(
+      bank ? { institution: bank.institution, country: bank.country } : {},
+    ),
   });
   if (!res.ok) throw await parseError(res);
   return (await res.json()) as ConnectResponse;

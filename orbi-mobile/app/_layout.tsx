@@ -147,6 +147,10 @@ export default function RootLayout() {
                 options={{ presentation: "modal", headerShown: false }}
               />
               <Stack.Screen
+                name="bank-picker"
+                options={{ presentation: "modal", headerShown: false }}
+              />
+              <Stack.Screen
                 name="movements"
                 options={{ presentation: "modal", headerShown: false }}
               />

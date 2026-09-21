@@ -48,9 +48,16 @@ interface Step {
 export default function ConnectBankScreen() {
   const t = useT();
   const router = useRouter();
-  const params = useLocalSearchParams<{ id?: string; name?: string }>();
+  const params = useLocalSearchParams<{
+    id?: string;
+    name?: string;
+    institution?: string;
+    country?: string;
+  }>();
   const accountId = (params.id ?? "").toString();
   const accountName = (params.name ?? "").toString();
+  const institution = (params.institution ?? "").toString();
+  const country = (params.country ?? "").toString();
 
   const [busy, setBusy] = useState(false);
 
@@ -76,7 +83,10 @@ export default function ConnectBankScreen() {
     if (!accountId) return;
     setBusy(true);
     try {
-      const result = await connectAccount(accountId);
+      const result = await connectAccount(
+        accountId,
+        institution ? { institution, country: country || "PT" } : undefined,
+      );
       if (result.authorization_url) {
         await Linking.openURL(result.authorization_url);
         // Back out to the accounts list — the user finishes in the browser
@@ -111,6 +121,22 @@ export default function ConnectBankScreen() {
             ? t("Connect {name} so your spending appears on its own.", { name: accountName })
             : t("Connect your account so your spending appears on its own.")}
         </Text>
+
+        {/* The chosen bank, stated and changeable before anyone leaves the
+            app. Being sent to the wrong bank's login is disorienting enough
+            that people abandon the whole flow rather than come back. */}
+        {institution ? (
+          <Pressable onPress={() => router.back()} style={styles.chosen}>
+            <MaterialIcons name="account-balance" size={18} color={colors.accent} />
+            <View style={styles.chosenBody}>
+              <Text style={styles.chosenLabel}>{t("Your bank")}</Text>
+              <Text style={styles.chosenName} numberOfLines={1}>
+                {institution}
+              </Text>
+            </View>
+            <Text style={styles.chosenChange}>{t("Change bank")}</Text>
+          </Pressable>
+        ) : null}
 
         <View style={styles.steps}>
           {steps.map((step, index) => (
@@ -177,7 +203,9 @@ export default function ConnectBankScreen() {
           {busy ? (
             <ActivityIndicator color={colors.canvas} />
           ) : (
-            <Text style={styles.ctaText}>{t("Continue to my bank")}</Text>
+            <Text style={styles.ctaText}>{institution
+                ? t("Continue to {bank}", { bank: institution })
+                : t("Continue to my bank")}</Text>
           )}
         </Pressable>
 
@@ -218,6 +246,27 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     marginBottom: 24,
   },
+  chosen: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 14,
+    marginBottom: 24,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.panel,
+  },
+  chosenBody: { flex: 1 },
+  chosenLabel: {
+    color: colors.inkDim,
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+  },
+  chosenName: { color: colors.ink, fontSize: 14, fontWeight: "700", marginTop: 2 },
+  chosenChange: { color: colors.accent, fontSize: 12, fontWeight: "700" },
   steps: { gap: 18, marginBottom: 26 },
   step: { flexDirection: "row", gap: 12 },
   stepIcon: {
