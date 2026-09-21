@@ -537,4 +537,7 @@ export const ptPT: Record<string, string> = {
   "Nothing spent this month": "Nada gasto este mês",
   "Movements you log or import will be broken down here.":
     "Os movimentos que registares ou importares são detalhados aqui.",
+  // Account dropdown on the movements ledger.
+  "Showing": "A mostrar",
+  "Show movements from": "Mostrar movimentos de",
 };

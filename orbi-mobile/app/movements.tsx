@@ -5,8 +5,10 @@
 // stopped pretending its month total described a single account.
 //
 // Opened either from the hub (every account) or from a row on the Accounts
-// screen (one account, via the `account` param). The filter row stays either
-// way, so the scope is always visible and always changeable.
+// screen (one account, via the `account` param). The scope is a dropdown
+// that always states what is being shown, and with no filter on, each row
+// carries the account it came from — a mixed list where every row looks
+// alike cannot answer "which card was that on".
 //
 // WHY THE TOTAL IS RECOMPUTED WHEN A FILTER IS ON
 // The server's summary covers every account. Showing it above one account's
@@ -18,9 +20,9 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useState } from "react";
 import {
   ActivityIndicator,
+  Modal,
   Pressable,
   RefreshControl,
-  ScrollView,
   SectionList,
   StyleSheet,
   Text,
@@ -97,6 +99,7 @@ export default function MovementsScreen() {
   const [accountFilter, setAccountFilter] = useState<string | null>(
     params.account ?? null,
   );
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -130,6 +133,7 @@ export default function MovementsScreen() {
   const scopeName = accountFilter
     ? accounts.find((a) => a.account.id === accountFilter)?.account.name
     : null;
+  const accountNames = new Map(accounts.map((a) => [a.account.id, a.account.name]));
 
   return (
     <SafeAreaView style={styles.root} edges={["top"]}>
@@ -150,40 +154,22 @@ export default function MovementsScreen() {
         <Text style={styles.totalValue}>{formatAmount(totalSpend, currency)}</Text>
       </View>
 
+      {/* A dropdown rather than a row of pips.
+          The pips were fine at two accounts and stopped being fine at five:
+          the row scrolled sideways, so which account was selected could be
+          off-screen, and "what am I looking at" is the one question this
+          screen must always answer without scrolling. A closed dropdown
+          states the current scope in one line. */}
       {accounts.length > 1 ? (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filterRow}
-        >
-          <Pressable
-            onPress={() => setAccountFilter(null)}
-            style={[styles.filterPip, accountFilter === null && styles.filterPipActive]}
-          >
-            <Text
-              style={[styles.filterText, accountFilter === null && styles.filterTextActive]}
-            >
-              {t("All accounts")}
+        <Pressable onPress={() => setPickerOpen(true)} style={styles.picker}>
+          <View style={styles.pickerLeft}>
+            <Text style={styles.pickerLabel}>{t("Showing")}</Text>
+            <Text style={styles.pickerValue} numberOfLines={1}>
+              {scopeName ?? t("All accounts")}
             </Text>
-          </Pressable>
-          {accounts.map((row) => {
-            const active = accountFilter === row.account.id;
-            return (
-              <Pressable
-                key={row.account.id}
-                onPress={() => setAccountFilter(row.account.id)}
-                style={[styles.filterPip, active && styles.filterPipActive]}
-              >
-                <Text style={[styles.filterText, active && styles.filterTextActive]}>
-                  {row.account.name}
-                </Text>
-                <Text style={[styles.filterBalance, active && styles.filterTextActive]}>
-                  {formatAmount(row.balance, row.account.currency)}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
+          </View>
+          <MaterialIcons name="expand-more" size={22} color={colors.inkDim} />
+        </Pressable>
       ) : null}
 
       {status === "loading" || status === "idle" ? (
@@ -220,6 +206,12 @@ export default function MovementsScreen() {
           renderItem={({ item }) => (
             <EntryRow
               entry={item}
+              // Only when several accounts are mixed together. With a filter
+              // on, every row carries the same label and it is just noise
+              // repeated down the screen.
+              accountName={
+                accountFilter === null ? accountNames.get(item.account_id ?? "") : undefined
+              }
               onPress={() =>
                 router.push({ pathname: "/entry-detail", params: { id: item.id } })
               }
@@ -245,15 +237,94 @@ export default function MovementsScreen() {
       >
         <Text style={styles.fabPlus}>+</Text>
       </Pressable>
+
+      <Modal
+        visible={pickerOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPickerOpen(false)}
+      >
+        {/* Tapping the dimmed area closes it — the only way out on Android
+            besides the back gesture, and the one people try first. */}
+        <Pressable style={styles.sheetBackdrop} onPress={() => setPickerOpen(false)}>
+          <Pressable style={styles.sheet} onPress={() => undefined}>
+            <Text style={styles.sheetTitle}>{t("Show movements from")}</Text>
+
+            <AccountOption
+              label={t("All accounts")}
+              detail={formatAmount(
+                accounts
+                  .filter((a) => a.account.include_in_total)
+                  .reduce((sum, a) => sum + a.balance, 0),
+                currency,
+              )}
+              selected={accountFilter === null}
+              onPress={() => {
+                setAccountFilter(null);
+                setPickerOpen(false);
+              }}
+            />
+            {accounts.map((row) => (
+              <AccountOption
+                key={row.account.id}
+                label={row.account.name}
+                detail={formatAmount(row.balance, row.account.currency)}
+                selected={accountFilter === row.account.id}
+                onPress={() => {
+                  setAccountFilter(row.account.id);
+                  setPickerOpen(false);
+                }}
+              />
+            ))}
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
+  );
+}
+
+function AccountOption({
+  label,
+  detail,
+  selected,
+  onPress,
+}: {
+  label: string;
+  detail: string;
+  selected: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={[styles.option, selected && styles.optionSelected]}
+      android_ripple={{ color: colors.line }}
+    >
+      <Text style={styles.optionLabel} numberOfLines={1}>
+        {label}
+      </Text>
+      <View style={styles.optionRight}>
+        <Text style={styles.optionDetail}>{detail}</Text>
+        {selected ? (
+          <MaterialIcons name="check" size={18} color={colors.accent} />
+        ) : (
+          <View style={styles.optionCheckSpacer} />
+        )}
+      </View>
+    </Pressable>
   );
 }
 
 function EntryRow({
   entry,
+  accountName,
   onPress,
 }: {
   entry: ServerFinanceEntry;
+  /** Undefined when the list is already scoped to one account, or when the
+   * entry belongs to none — a manual entry made before any account existed
+   * has nothing honest to label it with. */
+  accountName?: string;
   onPress: () => void;
 }) {
   const isExpense = entry.entry_type === "expense";
@@ -261,9 +332,16 @@ function EntryRow({
   return (
     <Pressable onPress={onPress} style={styles.row} android_ripple={{ color: colors.line }}>
       <View style={styles.rowLeft}>
-        <Text style={styles.merchant} numberOfLines={1}>
-          {entry.merchant}
-        </Text>
+        <View style={styles.merchantLine}>
+          <Text style={styles.merchant} numberOfLines={1}>
+            {entry.merchant}
+          </Text>
+          {accountName ? (
+            <Text style={styles.accountTag} numberOfLines={1}>
+              {accountName}
+            </Text>
+          ) : null}
+        </View>
         {/* An uncategorised entry is a prompt, not a category. Styling it as
             a tappable hint rather than a label stops it reading as a bug. */}
         <Text style={[styles.category, needsCategory && styles.categoryMissing]}>
@@ -299,25 +377,81 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     fontVariant: ["tabular-nums"],
   },
-  filterRow: { paddingHorizontal: 18, paddingBottom: 12, gap: 8 },
-  filterPip: {
-    paddingVertical: 7,
-    paddingHorizontal: 13,
-    borderRadius: 9,
+  picker: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginHorizontal: 18,
+    marginBottom: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: colors.line,
     backgroundColor: colors.panel,
-    alignItems: "flex-start",
   },
-  filterPipActive: { borderColor: colors.accent, backgroundColor: colors.accent },
-  filterText: { color: colors.ink, fontSize: 12, fontWeight: "600" },
-  filterBalance: {
+  pickerLeft: { flex: 1, marginRight: 10 },
+  pickerLabel: {
     color: colors.inkDim,
     fontSize: 10,
-    marginTop: 2,
+    fontWeight: "700",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+  },
+  pickerValue: { color: colors.ink, fontSize: 14, fontWeight: "600", marginTop: 2 },
+  sheetBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "flex-end",
+  },
+  sheet: {
+    backgroundColor: colors.panel,
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    paddingTop: 16,
+    paddingBottom: 32,
+    paddingHorizontal: 14,
+    gap: 4,
+  },
+  sheetTitle: {
+    color: colors.inkDim,
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+    paddingHorizontal: 6,
+    paddingBottom: 8,
+  },
+  option: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+  },
+  optionSelected: { backgroundColor: colors.canvas },
+  optionLabel: { color: colors.ink, fontSize: 15, fontWeight: "600", flex: 1 },
+  optionRight: { flexDirection: "row", alignItems: "center", gap: 10 },
+  optionDetail: {
+    color: colors.inkDim,
+    fontSize: 13,
     fontVariant: ["tabular-nums"],
   },
-  filterTextActive: { color: colors.canvas },
+  // Keeps the amounts in a column whether or not a row has the tick.
+  optionCheckSpacer: { width: 18 },
+  merchantLine: { flexDirection: "row", alignItems: "center", gap: 8 },
+  accountTag: {
+    color: colors.inkDim,
+    fontSize: 10,
+    fontWeight: "600",
+    maxWidth: 110,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 5,
+    backgroundColor: colors.panel,
+    overflow: "hidden",
+  },
   categoryMissing: { color: colors.accent, fontStyle: "italic" },
   centered: { flex: 1, justifyContent: "center", alignItems: "center", padding: 24 },
   errorTitle: { color: colors.overdue, fontSize: 15, fontWeight: "600", marginBottom: 6 },
@@ -351,7 +485,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   rowLeft: { flex: 1, marginRight: 12 },
-  merchant: { color: colors.ink, fontSize: 15, fontWeight: "500" },
+  merchant: { color: colors.ink, fontSize: 15, fontWeight: "500", flexShrink: 1 },
   category: { color: colors.inkDim, fontSize: 12, marginTop: 2 },
   amount: { color: colors.ink, fontSize: 16, fontWeight: "700" },
   income: { color: colors.health },
