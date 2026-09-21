@@ -38,6 +38,7 @@ from app.services.bank_providers import (
     get_provider,
 )
 from app.services.bank_sync import connections_needing_attention, sync_user_now
+from app.services import categories as categories_service
 from app.services.finance_categorizer import categorize_merchant
 from app.services.finance_dashboard import build_dashboard
 from app.services.finance_insights import (
@@ -347,6 +348,120 @@ async def choose_connection_account(
         },
     )
     return updated or connection
+
+
+class CategoryCreate(BaseModel):
+    label: str = Field(min_length=1, max_length=40)
+    icon: Optional[str] = Field(default=None, max_length=40)
+    color: Optional[str] = Field(default=None, max_length=16)
+
+
+class CategoryUpdate(BaseModel):
+    label: Optional[str] = Field(default=None, min_length=1, max_length=40)
+    icon: Optional[str] = Field(default=None, max_length=40)
+    color: Optional[str] = Field(default=None, max_length=16)
+    hidden: Optional[bool] = None
+
+
+@router.get("/categories")
+async def list_categories(user_id: UUID = Depends(get_current_user)):
+    """This user's categories, seeded on first read.
+
+    Seeded rather than shared, so renaming one is a rename and not a change
+    to everybody's app.
+    """
+    return {"categories": await categories_service.ensure_defaults(user_id)}
+
+
+@router.post("/categories", status_code=status.HTTP_201_CREATED)
+async def create_category(
+    body: CategoryCreate, user_id: UUID = Depends(get_current_user)
+):
+    """Add a category of the user's own.
+
+    The slug is derived from the label and then fixed for ever: entries and
+    budgets point at it, so letting a rename change the slug would orphan
+    every row that used the old one.
+    """
+    await categories_service.ensure_defaults(user_id)
+    slug = categories_service.slugify(body.label)
+    if not slug:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=_error("That name can't be used as a category.", "INVALID_LABEL"),
+        )
+
+    created = await categories_service.create(
+        user_id, slug=slug, label=body.label.strip(), icon=body.icon, color=body.color
+    )
+    if created is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=_error("You already have a category with that name.", "CATEGORY_EXISTS"),
+        )
+    return created
+
+
+@router.patch("/categories/{category_id}")
+async def update_category(
+    category_id: UUID,
+    body: CategoryUpdate,
+    user_id: UUID = Depends(get_current_user),
+):
+    """Rename, re-icon or hide a category. The slug never changes."""
+    patch = body.model_dump(exclude_none=True)
+    if not patch:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=_error("Nothing to change.", "NO_FIELDS"),
+        )
+    updated = await categories_service.update(category_id, user_id, patch)
+    if updated is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_error("Category not found.", "CATEGORY_NOT_FOUND"),
+        )
+    return updated
+
+
+@router.delete("/categories/{category_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_category(
+    category_id: UUID, user_id: UUID = Depends(get_current_user)
+):
+    """Remove a category the user added.
+
+    Seeded ones are hidden rather than deleted: entries, budgets and learned
+    rules already point at their slugs, and a dangling slug renders as
+    nothing at all.
+    """
+    outcome = await categories_service.remove(category_id, user_id)
+    if outcome == "missing":
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_error("Category not found.", "CATEGORY_NOT_FOUND"),
+        )
+    if outcome == "in_use":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=_error(
+                "Transactions still use this category. Move them first, or hide it.",
+                "CATEGORY_IN_USE",
+            ),
+        )
+
+
+@router.post("/categories/recategorise")
+async def recategorise(auth: dict = Depends(get_current_user_with_tier)):
+    """Have another go at everything still uncategorised.
+
+    Runs the whole ladder — what the user has taught us, then the static
+    rules, then one batched model call for whatever is left. Explicit rather
+    than automatic because it is the only part that can cost anything, and a
+    button the user pressed is a cost they chose.
+    """
+    user_id = auth["user_id"]
+    tier = auth["tier"]
+    return await categories_service.recategorise_uncategorised(user_id, tier)
 
 
 @router.get("/provider")

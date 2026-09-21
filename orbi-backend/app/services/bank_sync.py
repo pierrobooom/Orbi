@@ -35,6 +35,7 @@ from app.services.bank_providers import (
     get_provider,
 )
 from app.services.finance_categorizer import categorize_merchant
+from app.services.merchant_cleanup import clean_merchant
 
 logger = logging.getLogger(__name__)
 
@@ -271,7 +272,11 @@ def _to_entry(transaction: BankTransaction, *, owner_id: UUID, account_id) -> di
     never happens.
     """
     is_expense = transaction.amount < 0
-    merchant = transaction.merchant or transaction.description or "Unknown"
+    raw = transaction.merchant or transaction.description or "Unknown"
+    # A bank sends a statement line, not a merchant: "COMPRA 8430968 NOS
+    # CINEMAS OEIRAS". Categorising that was hopeless, and the embedded card
+    # number also split one shop into several in every per-vendor total.
+    merchant = clean_merchant(raw) or raw
 
     return {
         "user_id": str(owner_id),
@@ -281,7 +286,7 @@ def _to_entry(transaction: BankTransaction, *, owner_id: UUID, account_id) -> di
         "amount": abs(transaction.amount),
         "currency": transaction.currency,
         "merchant": merchant[:200],
-        "category": categorize_merchant(merchant),
+        "category": categorize_merchant(merchant, raw),
         "entry_type": "expense" if is_expense else "income",
         "entry_date": transaction.booked_on.isoformat(),
         "source_type": "bank",

@@ -577,4 +577,25 @@ export const ptPT: Record<string, string> = {
   "No accounts came back. Try connecting again.":
     "Não veio nenhuma conta. Tenta ligar outra vez.",
   "Could not finish connecting": "Não foi possível concluir a ligação",
+  // Categories the user owns.
+  "Make them fit your life": "Ajusta-as à tua vida",
+  "Pets, gym, travel…": "Animais, ginásio, viagens…",
+  "Add": "Adicionar",
+  "Hidden": "Escondida",
+  "Yours": "Tua",
+  "Could not add it": "Não foi possível adicionar",
+  "Delete {label}?": "Apagar {label}?",
+  "Only works if nothing is filed under it.":
+    "Só funciona se não houver nada nesta categoria.",
+  "Sort what's left": "Organizar o resto",
+  "Sorted": "Organizado",
+  "Could not sort": "Não foi possível organizar",
+  "Nothing else could be placed automatically.":
+    "Não foi possível colocar mais nada automaticamente.",
+  "{n} transactions sorted. {left} still unsorted.":
+    "{n} movimentos organizados. {left} ainda por organizar.",
+  "Tap to rename. Long-press one of your own to delete it. Changing a transaction's category teaches Orbi that shop for next time.":
+    "Toca para mudar o nome. Mantém premida uma das tuas para apagar. Mudar a categoria de um movimento ensina o Orbi essa loja para a próxima.",
+  "File {merchant} under": "Arquivar {merchant} em",
+  "Manage categories": "Gerir categorias",
 };

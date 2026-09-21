@@ -22,6 +22,9 @@ rather than \\b because several keywords end in punctuation — "disney+",
 """
 
 import re
+import unicodedata
+
+from app.services.merchant_cleanup import is_transfer
 
 # Merchant keyword → category mapping.
 # Keys are lowercase and matched as whole words. Order still matters: the
@@ -161,6 +164,74 @@ _RULES: list[tuple[str, str]] = [
     ("credito", "finance"),
     ("crédito", "finance"),
     ("multibanco", "finance"),
+    # ---------------------------------------------------------------------
+    # Generic Portuguese words, not brands.
+    #
+    # A brand table can never cover every neighbourhood restaurant, and the
+    # long tail is where "uncategorized" actually comes from. But Portuguese
+    # businesses put what they ARE in their name — Tasquinha, Padaria,
+    # Farmácia, Ginásio — so the kind of place is usually right there in the
+    # string. These generalise to every user in the country, which is more
+    # than any brand ever does.
+    # ---------------------------------------------------------------------
+    ("tasquinha", "dining"),
+    ("tasca", "dining"),
+    ("restaurante", "dining"),
+    ("cervejaria", "dining"),
+    ("marisqueira", "dining"),
+    ("churrasqueira", "dining"),
+    ("pastelaria", "dining"),
+    ("padaria", "dining"),
+    ("confeitaria", "dining"),
+    ("gelataria", "dining"),
+    ("snack", "dining"),
+    ("cafe", "dining"),
+    ("bar ", "dining"),
+    ("take away", "dining"),
+    ("takeaway", "dining"),
+    ("farmacia", "health"),
+    ("clinica", "health"),
+    ("hospital", "health"),
+    ("dentista", "health"),
+    ("medico", "health"),
+    ("ginasio", "health"),
+    ("gym", "health"),
+    ("fitness", "health"),
+    ("cinema", "leisure"),
+    ("cinemas", "leisure"),
+    ("teatro", "leisure"),
+    ("museu", "leisure"),
+    ("livraria", "leisure"),
+    ("estacionamento", "transport"),
+    ("parking", "transport"),
+    ("via verde", "transport"),
+    ("portagem", "transport"),
+    ("combustivel", "transport"),
+    ("minipreco", "groceries"),
+    ("mercado", "groceries"),
+    ("supermercado", "groceries"),
+    ("talho", "groceries"),
+    ("peixaria", "groceries"),
+    ("frutaria", "groceries"),
+    # Moving money to and from a wallet is not spending, whichever direction
+    # it goes. Without these, every Revolut top-up inflated the month.
+    ("revolut", "transfers"),
+    ("top-up", "transfers"),
+    ("paypal", "transfers"),
+    ("wise", "transfers"),
+    # The bank charging for being a bank. Not a purchase, and grouping these
+    # with a mortgage payment under "finance" hides them — small, frequent
+    # and worth seeing as their own line.
+    ("taxa de conversao", "fees"),
+    ("comissao", "fees"),
+    ("comissoes", "fees"),
+    ("juros", "fees"),
+    ("imposto do selo", "fees"),
+    ("anuidade", "fees"),
+    ("manutencao de conta", "fees"),
+    # Cash out of a machine. Where it went afterwards is unknowable from a
+    # bank feed, so it gets its own category instead of a guess.
+    ("levantamento", "cash"),
 ]
 
 # Compiled once. `(?<!\w)` / `(?!\w)` mean "not glued to a word character",
@@ -172,21 +243,37 @@ _COMPILED: list[tuple[re.Pattern[str], str]] = [
 ]
 
 
-def categorize_merchant(merchant: str) -> str:
+def categorize_merchant(merchant: str, raw: str | None = None) -> str:
     """Return the category for a merchant name using rule-based matching.
 
-    Matching is case-insensitive substring search. The first rule that matches
-    wins. If no rule matches, returns "uncategorized" — the caller should then
-    decide whether to escalate to the AI router.
+    Matching is case-insensitive and accent-insensitive; the first rule that
+    matches wins. If no rule matches, returns "uncategorized" — the caller
+    should then decide whether to escalate to the AI router.
 
     Args:
-        merchant: Raw merchant name as received from the user or bank import.
+        merchant: The merchant name, already cleaned of bank narrative.
+        raw:      The bank's original line, when there is one. Only the raw
+                  text can say whether this was a transfer, because cleaning
+                  deliberately removes the words that mark it as one.
 
     Returns:
         A lowercase category string, e.g. "groceries", or "uncategorized".
     """
-    normalised = merchant.lower().strip()
+    # Money moving between a person's own accounts is not spending, and
+    # filing it as "shopping" overstates every total built on top of it.
+    if is_transfer(raw if raw is not None else merchant):
+        return "transfers"
+
+    # Accents are stripped before matching: the rules are written without
+    # them, and "Conversao" and "Conversão" are the same word to everyone
+    # except a regex.
+    normalised = _strip_accents(merchant.lower().strip())
     for pattern, category in _COMPILED:
         if pattern.search(normalised):
             return category
     return "uncategorized"
+
+
+def _strip_accents(value: str) -> str:
+    decomposed = unicodedata.normalize("NFD", value)
+    return "".join(c for c in decomposed if unicodedata.category(c) != "Mn")

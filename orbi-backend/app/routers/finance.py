@@ -14,6 +14,7 @@ from app.agents.finance_agent import categorize_unknown_merchant
 from app.db import finance as finance_db
 from app.models.finance import FinanceBudget, FinanceEntry, FinanceEntryCreate, FinanceEntryUpdate
 from app.services.auth import get_current_user, get_current_user_with_tier
+from app.services import categories as categories_service
 from app.services.finance_categorizer import categorize_merchant
 
 router = APIRouter(prefix="/finance", tags=["finance"])
@@ -116,6 +117,15 @@ async def update_entry(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=_error("Entry not found.", "ENTRY_NOT_FOUND"),
         )
+
+    # A category the user typed is a fact about this merchant, not just about
+    # this row. Remembering it is the difference between an app that learns
+    # and one that has to be corrected every single month.
+    if "category" in payload and row.get("merchant"):
+        await categories_service.learn(
+            user_id, row["merchant"], payload["category"], source="user"
+        )
+
     return row
 
 

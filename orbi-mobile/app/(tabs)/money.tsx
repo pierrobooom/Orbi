@@ -162,6 +162,13 @@ export default function MoneyScreen() {
       label: t("Limits"),
       hint: t("Ceilings per category"),
     },
+    {
+      key: "categories",
+      href: "/categories",
+      icon: "label",
+      label: t("Categories"),
+      hint: t("Make them fit your life"),
+    },
     // Last, and wide: the ledger is still here for anyone who wants to read
     // it straight through, but it is no longer what the tab opens on.
     {

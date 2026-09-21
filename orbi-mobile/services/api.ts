@@ -1456,3 +1456,74 @@ export async function getSpendingBreakdown(
   if (!res.ok) throw await parseError(res);
   return (await res.json()) as SpendingBreakdown;
 }
+
+export interface FinanceCategory {
+  id: string;
+  slug: string;
+  label: string;
+  icon: string | null;
+  color: string | null;
+  /** Seeded categories can be renamed and hidden but never deleted: entries
+   * and budgets already point at their slugs. */
+  is_default: boolean;
+  hidden: boolean;
+  position: number;
+}
+
+/** This user's categories. Seeded server-side on first read. */
+export async function listCategories(): Promise<FinanceCategory[]> {
+  const res = await authFetch(`${V1}/finance/categories`);
+  if (!res.ok) throw await parseError(res);
+  const body = (await res.json()) as { categories: FinanceCategory[] };
+  return body.categories ?? [];
+}
+
+export async function createCategory(input: {
+  label: string;
+  icon?: string;
+  color?: string;
+}): Promise<FinanceCategory> {
+  const res = await authFetch(`${V1}/finance/categories`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) throw await parseError(res);
+  return (await res.json()) as FinanceCategory;
+}
+
+export async function updateCategory(
+  id: string,
+  patch: { label?: string; icon?: string; color?: string; hidden?: boolean },
+): Promise<FinanceCategory> {
+  const res = await authFetch(`${V1}/finance/categories/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) throw await parseError(res);
+  return (await res.json()) as FinanceCategory;
+}
+
+export async function deleteCategory(id: string): Promise<void> {
+  const res = await authFetch(`${V1}/finance/categories/${id}`, { method: "DELETE" });
+  if (!res.ok && res.status !== 404) throw await parseError(res);
+}
+
+export interface RecategoriseResult {
+  examined: number;
+  categorised: number;
+  /** False when the rules alone did it, or when the tier has no AI. */
+  used_ai: boolean;
+  remaining: number;
+}
+
+/** Have another go at everything still uncategorised.
+ *
+ * Cheap passes first — what the user has taught us, then the static rules —
+ * and only what survives both reaches a model, in one batched call. */
+export async function recategorise(): Promise<RecategoriseResult> {
+  const res = await authFetch(`${V1}/finance/categories/recategorise`, {
+    method: "POST",
+  });
+  if (!res.ok) throw await parseError(res);
+  return (await res.json()) as RecategoriseResult;
+}

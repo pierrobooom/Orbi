@@ -7,12 +7,14 @@
 // user can fix a "Tesco" typo and the entry re-categorises on its own.
 
 import DateTimePicker from "@react-native-community/datetimepicker";
+import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Keyboard,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -24,7 +26,14 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useT } from "@/i18n";
-import { ApiError, deleteFinanceEntry, updateFinanceEntry } from "@/services/api";
+import {
+  ApiError,
+  deleteFinanceEntry,
+  listCategories,
+  updateFinanceEntry,
+  type FinanceCategory,
+} from "@/services/api";
+import { formatCategory, isUncategorized } from "@/services/categories";
 import { useFinanceStore } from "@/stores/financeStore";
 import { colors } from "@/theme/colors";
 
@@ -38,6 +47,16 @@ function isoDate(d: Date): string {
 function formatAmount(amount: number, currency: string): string {
   const symbol = currency === "GBP" ? "£" : currency === "EUR" ? "€" : currency === "USD" ? "$" : "";
   return `${symbol}${amount.toFixed(2)}`;
+}
+
+/** The label a user gave this category, falling back to a tidy slug.
+ *
+ * Categories are the user's own and renameable, so the slug stored on the
+ * entry is not what should be shown — but an entry can outlive a category
+ * that was hidden, and showing nothing at all is worse than showing the
+ * slug prettified. */
+function labelFor(slug: string, categories: FinanceCategory[]): string {
+  return categories.find((c) => c.slug === slug)?.label ?? formatCategory(slug);
 }
 
 function parseDateString(iso: string): Date {
@@ -63,6 +82,8 @@ export default function EntryDetailScreen() {
   );
 
   const [mode, setMode] = useState<"view" | "edit">("view");
+  const [pickingCategory, setPickingCategory] = useState(false);
+  const [categories, setCategories] = useState<FinanceCategory[]>([]);
   const [busy, setBusy] = useState<"save" | "delete" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -71,6 +92,15 @@ export default function EntryDetailScreen() {
   const [editDate, setEditDate] = useState<Date>(new Date());
   const [editNotes, setEditNotes] = useState("");
   const [showDatePicker, setShowDatePicker] = useState(false);
+
+  // Loaded here rather than in the picker so the label is right the first
+  // time the screen paints. Must sit above the early return below: a hook
+  // after a conditional return is a hook that sometimes does not run.
+  useEffect(() => {
+    listCategories()
+      .then(setCategories)
+      .catch(() => setCategories([]));
+  }, []);
 
   if (!entry) {
     return (
@@ -126,6 +156,21 @@ export default function EntryDetailScreen() {
       setError(e instanceof ApiError ? e.message : String(e));
     } finally {
       setBusy(null);
+    }
+  };
+
+  /** File this entry under a category, and teach the merchant.
+   *
+   * The teaching happens server-side on the same request: a category the
+   * user chose is a fact about that shop, not just about this row.
+   */
+  const onPickCategory = async (slug: string) => {
+    setPickingCategory(false);
+    if (!entry || slug === entry.category) return;
+    try {
+      replaceEntry(await updateFinanceEntry(entry.id, { category: slug }));
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : String(e));
     }
   };
 
@@ -187,10 +232,30 @@ export default function EntryDetailScreen() {
               <Text style={styles.merchant}>{entry.merchant}</Text>
 
               <View style={styles.metaRow}>
-                <View style={styles.metaCell}>
+                {/* Tappable, because this is the only place a person can
+                    correct a category — and a correction here teaches the
+                    merchant for every future transaction, which is the
+                    difference between an app that learns and one that has
+                    to be fixed every month. */}
+                <Pressable
+                  style={styles.metaCell}
+                  onPress={() => setPickingCategory(true)}
+                >
                   <Text style={styles.metaLabel}>{t("Category")}</Text>
-                  <Text style={styles.metaValue}>{entry.category}</Text>
-                </View>
+                  <View style={styles.categoryValue}>
+                    <Text
+                      style={[
+                        styles.metaValue,
+                        isUncategorized(entry.category) && styles.categoryMissing,
+                      ]}
+                    >
+                      {isUncategorized(entry.category)
+                        ? t("Tap to categorise")
+                        : labelFor(entry.category, categories)}
+                    </Text>
+                    <MaterialIcons name="expand-more" size={16} color={colors.inkDim} />
+                  </View>
+                </Pressable>
                 <View style={styles.metaCell}>
                   <Text style={styles.metaLabel}>{t("Date")}</Text>
                   <Text style={styles.metaValue}>
@@ -333,6 +398,62 @@ export default function EntryDetailScreen() {
             </>
           )}
         </View>
+
+        <Modal
+          visible={pickingCategory}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setPickingCategory(false)}
+        >
+          <Pressable
+            style={styles.sheetBackdrop}
+            onPress={() => setPickingCategory(false)}
+          >
+            <Pressable style={styles.sheet} onPress={() => undefined}>
+              <Text style={styles.sheetTitle}>
+                {t("File {merchant} under", { merchant: entry.merchant })}
+              </Text>
+              <ScrollView keyboardShouldPersistTaps="handled">
+                {categories
+                  .filter((c) => !c.hidden)
+                  .map((category) => {
+                    const active = category.slug === entry.category;
+                    return (
+                      <Pressable
+                        key={category.id}
+                        onPress={() => onPickCategory(category.slug)}
+                        style={[styles.option, active && styles.optionSelected]}
+                      >
+                        <MaterialIcons
+                          name={(category.icon as never) ?? "label"}
+                          size={18}
+                          color={active ? colors.accent : colors.inkDim}
+                        />
+                        <Text style={styles.optionLabel}>{category.label}</Text>
+                        {active ? (
+                          <MaterialIcons name="check" size={18} color={colors.accent} />
+                        ) : null}
+                      </Pressable>
+                    );
+                  })}
+              </ScrollView>
+              {/* The way out of a list that doesn't contain what you need.
+                  Without it, an unusual purchase has nowhere to go and the
+                  answer is "Other" for ever, which is where the whole
+                  custom-category feature started. */}
+              <Pressable
+                onPress={() => {
+                  setPickingCategory(false);
+                  router.push("/categories");
+                }}
+                style={styles.manageRow}
+              >
+                <MaterialIcons name="add" size={18} color={colors.accent} />
+                <Text style={styles.manageText}>{t("Manage categories")}</Text>
+              </Pressable>
+            </Pressable>
+          </Pressable>
+        </Modal>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -361,6 +482,52 @@ const styles = StyleSheet.create({
   title: { color: colors.ink, fontSize: 22, fontWeight: "700", marginBottom: 8 },
   metaRow: { flexDirection: "row", gap: 16, marginBottom: 14 },
   metaCell: { flex: 1, marginBottom: 14 },
+  categoryValue: { flexDirection: "row", alignItems: "center", gap: 4 },
+  categoryMissing: { color: colors.accent, fontStyle: "italic" },
+  sheetBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "flex-end",
+  },
+  sheet: {
+    maxHeight: "72%",
+    backgroundColor: colors.panel,
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    paddingTop: 16,
+    paddingBottom: 28,
+    paddingHorizontal: 14,
+  },
+  sheetTitle: {
+    color: colors.inkDim,
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+    paddingHorizontal: 6,
+    paddingBottom: 8,
+  },
+  option: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 13,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+  },
+  optionSelected: { backgroundColor: colors.canvas },
+  optionLabel: { flex: 1, color: colors.ink, fontSize: 15, fontWeight: "600" },
+  manageRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginTop: 8,
+    paddingVertical: 13,
+    borderTopColor: colors.line,
+    borderTopWidth: 1,
+  },
+  manageText: { color: colors.accent, fontSize: 14, fontWeight: "700" },
   metaLabel: {
     color: colors.inkDim,
     fontSize: 10,
