@@ -31,6 +31,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { SettingsButton } from "@/components/settings-button";
 import { useT } from "@/i18n";
 import {
   connectionsNeedingAttention,
@@ -184,6 +185,11 @@ export default function MoneyScreen() {
           />
         }
       >
+        <View style={styles.titleRow}>
+          <Text style={styles.title}>{t("Money")}</Text>
+          <SettingsButton />
+        </View>
+
         {/* Two numbers, because they answer different questions and people
             conflate them: what you HAVE, and what you have SPENT. The old
             header showed only the second while looking like the first. */}
@@ -278,6 +284,13 @@ export default function MoneyScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   body: { padding: 16, paddingBottom: 48 },
+  titleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 14,
+  },
+  title: { color: colors.ink, fontSize: 22, fontWeight: "800" },
   summary: {
     flexDirection: "row",
     backgroundColor: colors.panel,

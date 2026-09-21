@@ -44,6 +44,7 @@ import {
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { SettingsButton } from "@/components/settings-button";
 import { useT } from "@/i18n";
 import { useUniverseStore } from "@/stores/universeStore";
 import { colors } from "@/theme/colors";
@@ -325,15 +326,18 @@ export default function TasksScreen() {
     <SafeAreaView style={styles.root} edges={["top"]}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>{t("Tasks")}</Text>
-        <Text style={styles.headerCount}>
-          {filtering
-            ? t("{n} of {total}", { n: sorted.length, total: pool.length })
-            : showDone
-              ? t("{n} done", { n: pool.length })
-              : overdueOnly
-                ? t("{n} overdue", { n: pool.length })
-                : t("{n} active", { n: activeTasks.length })}
-        </Text>
+        <View style={styles.headerRight}>
+          <Text style={styles.headerCount}>
+            {filtering
+              ? t("{n} of {total}", { n: sorted.length, total: pool.length })
+              : showDone
+                ? t("{n} done", { n: pool.length })
+                : overdueOnly
+                  ? t("{n} overdue", { n: pool.length })
+                  : t("{n} active", { n: activeTasks.length })}
+          </Text>
+          <SettingsButton />
+        </View>
       </View>
 
       <View style={styles.searchRow}>
@@ -564,6 +568,7 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     paddingBottom: 12,
   },
+  headerRight: { flexDirection: "row", alignItems: "center", gap: 12 },
   headerTitle: { color: colors.ink, fontSize: 22, fontWeight: "700" },
   headerCount: { color: colors.inkDim, fontSize: 12, fontWeight: "500" },
   searchRow: {

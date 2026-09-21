@@ -9,6 +9,7 @@
 // path as every later one — rather than a special case that only the first
 // entry ever exercises, and which is therefore the one that breaks.
 
+import DateTimePicker from "@react-native-community/datetimepicker";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useState } from "react";
@@ -62,6 +63,17 @@ const CATEGORIES = [
   "Other",
 ];
 
+/** Local calendar date as YYYY-MM-DD.
+ *
+ * NOT toISOString(), which converts to UTC first: west of Greenwich a date
+ * picked in the evening comes back as the day before, so a rule set for the
+ * 8th would quietly run on the 7th. */
+function toIsoDate(date: Date): string {
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
 function formatMoney(amount: number, currency: string): string {
   const symbol =
     currency === "EUR" ? "€" : currency === "GBP" ? "£" : currency === "USD" ? "$" : "";
@@ -95,6 +107,13 @@ export default function RecurringScreen() {
   const [category, setCategory] = useState(CATEGORIES[0]);
   const [cadence, setCadence] = useState<Cadence>("monthly");
   const [accountId, setAccountId] = useState<string | null>(null);
+  // When the first one falls due. Defaults to today so a rule does something
+  // straight away, but rent is due on the 8th — for anything that repeats,
+  // the start date IS the schedule.
+  const [startOn, setStartOn] = useState(new Date());
+  const [showStartPicker, setShowStartPicker] = useState(false);
+  // An existing rule whose next date is being corrected, if any.
+  const [editingDate, setEditingDate] = useState<RecurringTransaction | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -133,9 +152,7 @@ export default function RecurringScreen() {
         cadence,
         account_id: accountId,
         entry_type: "expense",
-        // Starts today, so the next job run produces the first entry and
-        // the user sees the rule do something rather than wondering.
-        next_run_on: new Date().toISOString().slice(0, 10),
+        next_run_on: toIsoDate(startOn),
       });
       setMerchant("");
       setAmount("");
@@ -146,6 +163,29 @@ export default function RecurringScreen() {
       Alert.alert(translate("Could not save"), e instanceof ApiError ? e.message : String(e));
     } finally {
       setBusy(false);
+    }
+  };
+
+  /** Move an existing rule's next occurrence.
+   *
+   * Optimistic, because the alternative is a list that sits unchanged for a
+   * round trip after an edit the user just made — which reads as the tap
+   * not having registered, and gets tapped again.
+   */
+  const onChangeNextDate = async (rule: RecurringTransaction, date: Date) => {
+    const next_run_on = toIsoDate(date);
+    setRules((current) =>
+      (current ?? []).map((r) => (r.id === rule.id ? { ...r, next_run_on } : r)),
+    );
+    try {
+      await updateRecurring(rule.id, { next_run_on });
+    } catch (e) {
+      setRules((current) =>
+        (current ?? []).map((r) =>
+          r.id === rule.id ? { ...r, next_run_on: rule.next_run_on } : r,
+        ),
+      );
+      Alert.alert(translate("Could not save"), e instanceof ApiError ? e.message : String(e));
     }
   };
 
@@ -237,6 +277,52 @@ export default function RecurringScreen() {
                 keyboardType="decimal-pad"
                 style={[styles.input, styles.mono]}
               />
+
+              {/* When the first one is due.
+                  This used to be hard-wired to today, so a rule for rent
+                  due on the 8th created an entry the moment it was typed
+                  and every month on the wrong day after that. The start
+                  date IS the schedule for anything that repeats. */}
+              <Text style={styles.formLabel}>{t("First payment")}</Text>
+              {Platform.OS === "ios" ? (
+                <View style={styles.dateRow}>
+                  <DateTimePicker
+                    value={startOn}
+                    mode="date"
+                    display="compact"
+                    themeVariant="dark"
+                    onChange={(_event, date) => {
+                      if (date) setStartOn(date);
+                    }}
+                  />
+                </View>
+              ) : (
+                <>
+                  <Pressable
+                    onPress={() => setShowStartPicker(true)}
+                    style={styles.dateBtn}
+                  >
+                    <Text style={styles.dateText}>
+                      {startOn.toLocaleDateString(undefined, {
+                        weekday: "long",
+                        month: "short",
+                        day: "numeric",
+                      })}
+                    </Text>
+                  </Pressable>
+                  {showStartPicker ? (
+                    <DateTimePicker
+                      value={startOn}
+                      mode="date"
+                      display="default"
+                      onChange={(event, date) => {
+                        setShowStartPicker(false);
+                        if (event.type === "set" && date) setStartOn(date);
+                      }}
+                    />
+                  ) : null}
+                </>
+              )}
 
               <Text style={styles.formLabel}>{t("How often")}</Text>
               <View style={styles.pipRow}>
@@ -356,11 +442,23 @@ export default function RecurringScreen() {
                     trackColor={{ false: colors.line, true: colors.accent }}
                   />
                 </View>
-                <Text style={styles.cardNext}>
-                  {rule.active
-                    ? t("Next: {date}", { date: rule.next_run_on })
-                    : t("Paused")}
-                </Text>
+                {/* Tappable: a rule created on the wrong day used to be
+                    stuck on it for ever, since nothing here could edit the
+                    date and deleting the rule was the only way out. */}
+                {rule.active ? (
+                  <Pressable
+                    onPress={() => setEditingDate(rule)}
+                    hitSlop={8}
+                    style={styles.nextRow}
+                  >
+                    <Text style={styles.cardNext}>
+                      {t("Next: {date}", { date: rule.next_run_on })}
+                    </Text>
+                    <MaterialIcons name="edit-calendar" size={14} color={colors.accent} />
+                  </Pressable>
+                ) : (
+                  <Text style={styles.cardNext}>{t("Paused")}</Text>
+                )}
               </Pressable>
             ))
           )}
@@ -370,6 +468,22 @@ export default function RecurringScreen() {
             <Text style={styles.footHint}>{t("Long-press a rule to delete it.")}</Text>
           ) : null}
         </ScrollView>
+
+        {/* Rendered outside the list so one picker serves every row. */}
+        {editingDate ? (
+          <DateTimePicker
+            value={new Date(`${editingDate.next_run_on}T12:00:00`)}
+            mode="date"
+            display={Platform.OS === "ios" ? "spinner" : "default"}
+            themeVariant="dark"
+            onChange={(event, date) => {
+              const rule = editingDate;
+              setEditingDate(null);
+              if (event.type !== "set" || !date || !rule) return;
+              void onChangeNextDate(rule, date);
+            }}
+          />
+        ) : null}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -476,6 +590,17 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   cardMeta: { color: colors.inkDim, fontSize: 12, flexShrink: 1 },
+  nextRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 6 },
+  dateRow: { alignItems: "flex-start", marginBottom: 4 },
+  dateBtn: {
+    paddingVertical: 11,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.canvas,
+  },
+  dateText: { color: colors.ink, fontSize: 14, fontWeight: "600" },
   cardNext: { color: colors.inkDim, fontSize: 11 },
   error: { color: colors.overdue, fontSize: 12 },
   footHint: { color: colors.inkDim, fontSize: 11, textAlign: "center", marginTop: 4 },

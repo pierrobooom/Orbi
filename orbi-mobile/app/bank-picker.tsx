@@ -24,6 +24,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  Modal,
   Image,
   Pressable,
   ScrollView,
@@ -80,6 +81,7 @@ export default function BankPickerScreen() {
   const [institutions, setInstitutions] = useState<Institution[]>([]);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
+  const [countryOpen, setCountryOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async (code: string) => {
@@ -149,26 +151,19 @@ export default function BankPickerScreen() {
         ) : null}
       </View>
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.countryRow}
-      >
-        {COUNTRIES.map((item) => {
-          const active = country === item.code;
-          return (
-            <Pressable
-              key={item.code}
-              onPress={() => setCountry(item.code)}
-              style={[styles.countryPip, active && styles.countryPipActive]}
-            >
-              <Text style={[styles.countryText, active && styles.countryTextActive]}>
-                {item.name}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
+      {/* A dropdown, not a scrolling strip of pips.
+          The strip was clipped top and bottom: a horizontal ScrollView is a
+          flex child like any other, so in a column it takes the height it is
+          given rather than the height its content needs, and the labels were
+          cut in half. Sixteen countries scrolling sideways was also the
+          wrong shape for something people change once a year. */}
+      <Pressable onPress={() => setCountryOpen(true)} style={styles.country}>
+        <Text style={styles.countryLabel}>{t("Country")}</Text>
+        <Text style={styles.countryValue}>
+          {COUNTRIES.find((c) => c.code === country)?.name ?? country}
+        </Text>
+        <MaterialIcons name="expand-more" size={20} color={colors.inkDim} />
+      </Pressable>
 
       {loading ? (
         <ActivityIndicator color={colors.accent} style={styles.loader} />
@@ -228,6 +223,40 @@ export default function BankPickerScreen() {
           )}
         />
       )}
+
+      <Modal
+        visible={countryOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setCountryOpen(false)}
+      >
+        <Pressable style={styles.sheetBackdrop} onPress={() => setCountryOpen(false)}>
+          <Pressable style={styles.sheet} onPress={() => undefined}>
+            <Text style={styles.sheetTitle}>{t("Country")}</Text>
+            <ScrollView>
+              {COUNTRIES.map((item) => {
+                const active = country === item.code;
+                return (
+                  <Pressable
+                    key={item.code}
+                    onPress={() => {
+                      setCountry(item.code);
+                      setQuery("");
+                      setCountryOpen(false);
+                    }}
+                    style={[styles.option, active && styles.optionSelected]}
+                  >
+                    <Text style={styles.optionLabel}>{item.name}</Text>
+                    {active ? (
+                      <MaterialIcons name="check" size={18} color={colors.accent} />
+                    ) : null}
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -259,18 +288,60 @@ const styles = StyleSheet.create({
     backgroundColor: colors.panel,
   },
   searchInput: { flex: 1, color: colors.ink, fontSize: 14, padding: 0 },
-  countryRow: { paddingHorizontal: 16, gap: 8, paddingBottom: 12 },
-  countryPip: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 8,
+  country: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginHorizontal: 16,
+    marginBottom: 12,
+    paddingVertical: 11,
+    paddingHorizontal: 14,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: colors.line,
     backgroundColor: colors.panel,
   },
-  countryPipActive: { borderColor: colors.accent, backgroundColor: colors.accent },
-  countryText: { color: colors.inkDim, fontSize: 12, fontWeight: "600" },
-  countryTextActive: { color: colors.canvas },
+  countryLabel: {
+    color: colors.inkDim,
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+  },
+  countryValue: { flex: 1, color: colors.ink, fontSize: 14, fontWeight: "600" },
+  sheetBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "flex-end",
+  },
+  sheet: {
+    maxHeight: "70%",
+    backgroundColor: colors.panel,
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    paddingTop: 16,
+    paddingBottom: 28,
+    paddingHorizontal: 14,
+  },
+  sheetTitle: {
+    color: colors.inkDim,
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+    paddingHorizontal: 6,
+    paddingBottom: 8,
+  },
+  option: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+  },
+  optionSelected: { backgroundColor: colors.canvas },
+  optionLabel: { color: colors.ink, fontSize: 15, fontWeight: "600" },
   loader: { marginTop: 40 },
   list: { paddingBottom: 40 },
   separator: { height: 1, backgroundColor: colors.line, marginLeft: 68 },

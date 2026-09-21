@@ -35,6 +35,7 @@ import {
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { SettingsButton } from "@/components/settings-button";
 import { useT } from "@/i18n";
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
 import { ApiError, isQuotaError, transcribeAudio } from "@/services/api";
@@ -273,11 +274,14 @@ export default function ChatScreen() {
     <SafeAreaView style={styles.root} edges={["top"]}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>{t("Chat")}</Text>
-        <Pressable onPress={() => clear()} hitSlop={10}>
-          <Text style={styles.headerAction} numberOfLines={1}>
-            {t("New")}
-          </Text>
-        </Pressable>
+        <View style={styles.headerRight}>
+          <Pressable onPress={() => clear()} hitSlop={10}>
+            <Text style={styles.headerAction} numberOfLines={1}>
+              {t("New")}
+            </Text>
+          </Pressable>
+          <SettingsButton />
+        </View>
       </View>
 
       <KeyboardAvoidingView
@@ -378,6 +382,7 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.line,
     borderBottomWidth: 1,
   },
+  headerRight: { flexDirection: "row", alignItems: "center", gap: 12 },
   headerTitle: { color: colors.ink, fontSize: 22, fontWeight: "700" },
   headerAction: { color: colors.accent, fontSize: 14, fontWeight: "600", minWidth: 40 },
   centered: { flex: 1, justifyContent: "center", alignItems: "center", padding: 32 },
