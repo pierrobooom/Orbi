@@ -645,12 +645,19 @@ export default function AccountsScreen() {
                                 : t("Stopped updating")}
                           </Text>
                         </View>
+                        {/* The server's own reason when it has one. It is
+                            always more specific than anything generic said
+                            here — "the bank shared no accounts" and "the
+                            provider is having a bad morning" both land in
+                            this state and need different reactions. */}
                         <Text style={styles.brokenBody}>
-                          {isError
-                            ? t("We'll keep retrying. Reconnect if it persists.")
-                            : t(
-                                "Your bank's permission expired. New transactions aren't arriving until you reconnect.",
-                              )}
+                          {broken.last_error
+                            ? broken.last_error
+                            : isError
+                              ? t("We'll keep retrying. Reconnect if it persists.")
+                              : t(
+                                  "Your bank's permission expired. New transactions aren't arriving until you reconnect.",
+                                )}
                         </Text>
                         <View style={styles.brokenActions}>
                           <Pressable

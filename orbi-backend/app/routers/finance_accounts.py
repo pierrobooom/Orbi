@@ -421,6 +421,40 @@ async def bank_callback(code: str | None = None, state: str | None = None,
             UUID(str(connection["account_id"])), UUID(str(connection["owner_id"]))
         )
 
+        # Authorised, but the provider exposed no accounts at all. Distinct
+        # from "several, and we cannot tell which": there is nothing to pick
+        # from, so offering a picker shows an empty list under the heading
+        # "Which account is this?", which reads as a bug.
+        #
+        # In restricted mode this is the expected answer for any account not
+        # linked in the provider's control panel — the consent succeeds and
+        # the accounts are filtered out afterwards. In full production it
+        # means the bank shared nothing we can use.
+        choices = _choosable_accounts(session)
+        if not choices:
+            logger.warning(
+                "Session %s authorised but exposed no accounts (aspsp=%s)",
+                session.get("session_id"),
+                (session.get("aspsp") or {}).get("name"),
+            )
+            await accounts_db.update_connection(
+                UUID(str(connection["id"])),
+                {
+                    "status": "error",
+                    "last_error": "The bank approved access but shared no "
+                    "accounts. This account may not be available through "
+                    "open banking yet.",
+                },
+            )
+            return HTMLResponse(
+                _callback_page(
+                    ok=False,
+                    detail="Your bank approved access but didn't share any "
+                    "accounts, so there is nothing to connect yet.",
+                ),
+                status_code=409,
+            )
+
         external_account_id = _match_account(session, account)
         if not external_account_id:
             # Authorised, but we cannot tell WHICH of the approved accounts is
@@ -437,7 +471,7 @@ async def bank_callback(code: str | None = None, state: str | None = None,
                 {
                     "status": "choose",
                     "consent_reference": str(session.get("session_id") or ""),
-                    "approved_accounts": _choosable_accounts(session),
+                    "approved_accounts": choices,
                     "last_error": None,
                 },
             )
