@@ -238,3 +238,28 @@ async def dismiss_insight(insight_id: UUID, user_id: UUID) -> bool:
         .execute()
     )
     return bool(response.data)
+
+
+async def entries_in_window(
+    user_id: UUID,
+    account_id: str | None,
+    since: str,
+    until: str,
+) -> list[dict]:
+    """Bank entries already stored for this account over a date range.
+
+    Used to reconcile an incoming sync against what is already known. Scoped
+    to source_type='bank' so a manually typed coffee is never mistaken for a
+    bank row and silently suppressed.
+    """
+    query = (
+        get_client().table("finance_entries")
+        .select("id,amount,entry_date,merchant,raw_description,external_id")
+        .eq("user_id", str(user_id))
+        .eq("source_type", "bank")
+        .gte("entry_date", since)
+        .lte("entry_date", until)
+    )
+    if account_id:
+        query = query.eq("account_id", str(account_id))
+    return query.execute().data or []

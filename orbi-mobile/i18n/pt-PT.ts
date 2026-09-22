@@ -587,7 +587,7 @@ export const ptPT: Record<string, string> = {
   "Delete {label}?": "Apagar {label}?",
   "Only works if nothing is filed under it.":
     "Só funciona se não houver nada nesta categoria.",
-  "Sort what's left": "Organizar o resto",
+  "Sort what's left": "Organizar",
   "Sorted": "Organizado",
   "Could not sort": "Não foi possível organizar",
   "Nothing else could be placed automatically.":

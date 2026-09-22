@@ -70,7 +70,9 @@ export function ActionBar({ primary, secondary, style }: Props) {
           {secondary.busy ? (
             <ActivityIndicator color={colors.ink} size="small" />
           ) : (
-            <Text style={styles.secondaryText}>{secondary.label}</Text>
+            <Text style={styles.secondaryText} numberOfLines={1} adjustsFontSizeToFit>
+              {secondary.label}
+            </Text>
           )}
         </Pressable>
       ) : null}
@@ -91,7 +93,9 @@ export function ActionBar({ primary, secondary, style }: Props) {
         {primary.busy ? (
           <ActivityIndicator color={colors.canvas} size="small" />
         ) : (
-          <Text style={styles.primaryText}>{primary.label}</Text>
+          <Text style={styles.primaryText} numberOfLines={1} adjustsFontSizeToFit>
+            {primary.label}
+          </Text>
         )}
       </Pressable>
     </View>
@@ -113,6 +117,7 @@ const styles = StyleSheet.create({
   mirrored: { flexDirection: "row-reverse" },
   button: {
     height: HEIGHT,
+    paddingHorizontal: 12,
     borderRadius: 13,
     alignItems: "center",
     justifyContent: "center",
@@ -120,13 +125,30 @@ const styles = StyleSheet.create({
   primary: { backgroundColor: colors.accent },
   primaryAlone: { flex: 1 },
   primaryWithSecondary: { flex: 2 },
-  primaryText: { color: colors.canvas, fontSize: 16, fontWeight: "700" },
+  // Centred and capped to one line.
+  //
+  // Without textAlign a wrapped label renders left-aligned inside a centred
+  // container, which reads as a broken button rather than a long word — and
+  // "Organizar o resto" wraps on any phone. Shrinking to fit keeps the bar
+  // one consistent height instead of growing for whichever translation
+  // happens to be longest.
+  primaryText: {
+    color: colors.canvas,
+    fontSize: 16,
+    fontWeight: "700",
+    textAlign: "center",
+  },
   secondary: {
     flex: 1,
     borderWidth: 1,
     borderColor: colors.line,
     backgroundColor: colors.panel,
   },
-  secondaryText: { color: colors.ink, fontSize: 15, fontWeight: "600" },
+  secondaryText: {
+    color: colors.ink,
+    fontSize: 15,
+    fontWeight: "600",
+    textAlign: "center",
+  },
   disabled: { opacity: 0.5 },
 });

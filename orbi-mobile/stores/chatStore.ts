@@ -23,6 +23,21 @@ import {
 
 const SESSION_KEY = "orbi.chat.sessionId";
 
+// When the user last tapped "New". Anything the server holds from before
+// that moment is not shown again.
+//
+// Clearing used to drop the session id and empty the list, which looked
+// right until the next hydrate: with no id, the server is asked for the most
+// recent session, and it handed back the conversation that had just been
+// dismissed. Worse, voice commands are recorded into that same history, so a
+// cleared chat would refill itself with things the user had spoken elsewhere
+// and never typed here.
+//
+// A timestamp rather than a flag, because it answers the harder question
+// correctly: a voice command made AFTER the clear is a new exchange and
+// belongs on screen, while the same command from before it does not.
+const CLEARED_AT_KEY = "orbi.chat.clearedAt";
+
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
@@ -68,8 +83,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
   hydrate: async () => {
     if (get().status === "idle") set({ status: "loading" });
     let stored: string | null = null;
+    let clearedAt = 0;
     try {
       stored = await AsyncStorage.getItem(SESSION_KEY);
+      clearedAt = Number((await AsyncStorage.getItem(CLEARED_AT_KEY)) ?? 0);
     } catch {
       // A missing store is not fatal — we just start a new session.
       stored = null;
@@ -86,11 +103,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
           /* non-fatal */
         }
       }
+      // Everything from before the last "New" stays in the database and
+      // stays off the screen.
+      const visible = history.messages.filter(
+        (m) => !clearedAt || Date.parse(m.created_at) > clearedAt,
+      );
+
       set({
         status: "ready",
-        sessionId,
+        // Only adopt the server's session when something in it is still
+        // visible. Adopting an entirely dismissed one would append the next
+        // message to the conversation the user just walked away from.
+        sessionId: visible.length > 0 ? sessionId : null,
         errorMessage: null,
-        messages: history.messages.map((m) => ({
+        messages: visible.map((m) => ({
           id: m.id,
           role: m.role,
           content: m.content,
@@ -174,6 +200,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // conversation", not "delete history".
     try {
       await AsyncStorage.removeItem(SESSION_KEY);
+      // Recorded before the state change so a hydrate racing this cannot
+      // read the old value and refill the list.
+      await AsyncStorage.setItem(CLEARED_AT_KEY, String(Date.now()));
     } catch {
       /* non-fatal */
     }

@@ -225,22 +225,83 @@ async def sync_connection(connection: dict, now: datetime | None = None) -> int:
     return written
 
 
+def natural_key(*, entry_date: str, amount: float, description: str) -> str:
+    """What makes two bank rows the same transaction.
+
+    NOT the provider's reference. Bankinter — and it will not be the only one
+    — issues a new entry_reference on every fetch:
+
+        969TAB190033105998   sync 1
+        969TAB040033136388   sync 2   same transaction
+        969TAB190033146634   sync 3
+
+    The transaction number at the front is stable; the token after it is per
+    response. Trusting the whole string as an identity meant every sync
+    imported the same week again, and the unique index could not help because
+    each copy genuinely had a new id. Twelve rows for four transactions.
+
+    So identity is what the bank cannot change between reads: the date, the
+    amount, and the text it printed. Coarser than a real id, and that is the
+    point — a key that varies per request is not an id at all.
+    """
+    flat = " ".join((description or "").split()).lower()
+    return f"{entry_date}|{amount:.2f}|{flat}"
+
+
+def unstored_indices(keys: list[str], stored: dict[str, int]) -> list[int]:
+    """Which of these incoming transactions are not already in the database.
+
+    Pure, because this is the decision that got the data wrong and it should
+    be arguable without a bank, a network or a table.
+
+    Counting rather than set membership is the whole point. Three parking
+    payments of 2.70 at the same machine on the same day are three real
+    transactions sharing one natural key; asking "have I seen this key"
+    would keep one and silently discard two. Asking "how many should exist"
+    keeps all three, and still drops the re-import on the next sync.
+    """
+    remaining = dict(stored)
+    out: list[int] = []
+    for index, key in enumerate(keys):
+        if remaining.get(key, 0) > 0:
+            remaining[key] -= 1
+            continue
+        out.append(index)
+    return out
+
+
 async def _store(
     transactions: list[BankTransaction], *, owner_id: UUID, account_id
 ) -> int:
     """Write transactions that aren't already known. Returns the count written.
 
-    Existing external_ids are read once up front rather than probed per row: a
-    week's window is a handful of transactions, but the alternative is a query
-    per transaction per account per day, which is the kind of thing that looks
-    free until there are a thousand users.
+    RECONCILED BY COUNT, NOT BY MEMBERSHIP
+    Three parking payments of 2.70 on the same day at the same machine are
+    three real transactions with one natural key. So the question is never
+    "have I seen this key" — it is "how many of this key should exist". The
+    stored count is compared against the incoming count and only the
+    difference is written, which keeps genuine repeats and drops re-imports.
+
+    The provider's id is still stored and still uniquely indexed. It remains
+    a useful second line of defence for the banks that do keep it stable; it
+    is simply no longer the only one.
     """
     if not transactions:
         return 0
 
-    known = await finance_db.existing_external_ids(
-        owner_id, [t.external_id for t in transactions]
+    dates = [t.booked_on.isoformat() for t in transactions]
+    existing = await finance_db.entries_in_window(
+        owner_id, account_id, min(dates), max(dates)
     )
+
+    seen: dict[str, int] = {}
+    for row in existing:
+        key = natural_key(
+            entry_date=str(row.get("entry_date")),
+            amount=float(row.get("amount") or 0),
+            description=row.get("raw_description") or row.get("merchant") or "",
+        )
+        seen[key] = seen.get(key, 0) + 1
 
     # Providers return transactions newest-first, and bank feeds carry no
     # time — so this list order is the ONLY intra-day ordering that exists.
@@ -249,11 +310,20 @@ async def _store(
     base = int(datetime.now(timezone.utc).timestamp() * 1000) * 1000
     ordered = list(reversed(transactions))
 
+    keys = [
+        natural_key(
+            entry_date=t.booked_on.isoformat(),
+            amount=abs(t.amount),
+            description=t.description or t.merchant or "",
+        )
+        for t in ordered
+    ]
+
     rows = []
-    for position, transaction in enumerate(ordered):
-        if transaction.external_id in known:
-            continue
-        entry = _to_entry(transaction, owner_id=owner_id, account_id=account_id)
+    for position in unstored_indices(keys, seen):
+        entry = _to_entry(
+            ordered[position], owner_id=owner_id, account_id=account_id
+        )
         entry["sort_key"] = base + position
         rows.append(entry)
 
