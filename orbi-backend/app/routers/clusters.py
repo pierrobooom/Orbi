@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
 
 from app.agents.cluster_manager import propose_organisation
@@ -49,6 +49,11 @@ class ClusterUpdate(BaseModel):
     # one noisy area of life is the usual reason people kill notifications
     # for a whole app, and this is the smaller instrument for that job.
     notifications_muted: Optional[bool] = None
+    # Where the user dropped this cluster, as a 0..1 fraction of the canvas.
+    # Normalised so a placement made on one phone still means the same thing
+    # on another — see migration 0021.
+    canvas_x: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    canvas_y: Optional[float] = Field(default=None, ge=0.0, le=1.0)
 
 
 def _error(message: str, error_code: str) -> dict:

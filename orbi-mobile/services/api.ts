@@ -801,6 +801,14 @@ export type ServerVisibility = "private" | "shared" | "collaborative";
 export interface ServerTask {
   id: string;
   owner_id: string;
+  /** Where the user dropped this, as a 0..1 fraction of the canvas.
+   *
+   * Null means they never moved it and the layout pass still owns its
+   * position — which is a different thing from 0, so these are nullable
+   * rather than defaulted. Normalised rather than pixels so a placement
+   * made on one phone means the same thing on another. */
+  canvas_x?: number | null;
+  canvas_y?: number | null;
   title: string;
   // Short keyword rendered inside the bubble. Server auto-derives
   // when client omits it; null on pre-0005-migration rows.
@@ -834,6 +842,14 @@ export interface ServerCluster {
   // reading a pre-0007 row still type-checks; universeLayout falls back
   // to name classification when it's missing.
   kind?: string | null;
+  /** Where the user dropped this, as a 0..1 fraction of the canvas.
+   *
+   * Null means they never moved it and the layout pass still owns its
+   * position — which is a different thing from 0, so these are nullable
+   * rather than defaulted. Normalised rather than pixels so a placement
+   * made on one phone means the same thing on another. */
+  canvas_x?: number | null;
+  canvas_y?: number | null;
   weight_score: number;
   active_count: number;
   parent_cluster_id: string | null;
@@ -875,6 +891,10 @@ export interface UpdateClusterInput {
   color?: string;
   summary?: string | null;
   notifications_muted?: boolean;
+  /** Where the user dropped it, 0..1 across the canvas. Sent only when a
+   * drag actually moved something. */
+  canvas_x?: number;
+  canvas_y?: number;
 }
 
 export async function updateCluster(
@@ -1297,6 +1317,10 @@ export interface UpdateTaskInput {
   due_at?: string | null;
   importance?: number;
   parent_cluster_id?: string | null;
+  /** Where the user dropped it, 0..1 across the canvas. Sent only when a
+   * drag actually moved something. */
+  canvas_x?: number;
+  canvas_y?: number;
 }
 
 export async function updateTask(id: string, patch: UpdateTaskInput): Promise<ServerTask> {

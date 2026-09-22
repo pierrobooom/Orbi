@@ -20,6 +20,9 @@ export interface Cluster {
   color: string;
   // Center expressed as a fraction of the canvas (0..1) so the layout
   // adapts to any screen size without hardcoded pixel coords.
+  /** Set when the user has dragged this cluster somewhere. */
+  placedX?: number | null;
+  placedY?: number | null;
   centerX: number;
   centerY: number;
 }
@@ -43,6 +46,14 @@ export interface Bubble {
   isDominant?: boolean;
   // Starting offset (pixels) from the cluster center. Physics takes
   // over after the first frame.
+  /** An absolute position the user chose, as a 0..1 fraction of the canvas.
+   *
+   * Takes precedence over centre + offset when set. Kept as its own field
+   * rather than folded into the offsets because the two answer different
+   * questions: an offset says "near its cluster", a placement says
+   * "exactly here, and stop rearranging it". */
+  placedX?: number | null;
+  placedY?: number | null;
   offsetX: number;
   offsetY: number;
   // Discriminator. "cluster" = top-level cluster-as-bubble view; "task"

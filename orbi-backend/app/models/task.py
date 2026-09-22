@@ -43,6 +43,12 @@ class TaskBubble(BaseModel):
     source_type: str
     # AI confidence in parsed fields (0.0–1.0)
     confidence: float = Field(ge=0.0, le=1.0)
+    # Where the user dropped this bubble, as a 0..1 fraction of the canvas.
+    # None means they never moved it and the layout pass still owns it —
+    # which is a different thing from 0, and why these are nullable rather
+    # than defaulted.
+    canvas_x: Optional[float] = None
+    canvas_y: Optional[float] = None
     visibility: Visibility = Visibility.private
     created_at: datetime
     updated_at: datetime
@@ -79,6 +85,11 @@ class TaskBubbleUpdate(BaseModel):
     source_type: Optional[str] = None
     confidence: Optional[float] = Field(default=None, ge=0.0, le=1.0)
     visibility: Optional[Visibility] = None
+    # Clamped rather than merely validated: a gesture that ends slightly
+    # off-canvas should place the bubble at the edge, not fail the save and
+    # lose the placement.
+    canvas_x: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    canvas_y: Optional[float] = Field(default=None, ge=0.0, le=1.0)
 
 
 class Cluster(BaseModel):
@@ -93,4 +104,7 @@ class Cluster(BaseModel):
     weight_score: float
     active_count: int
     parent_cluster_id: Optional[UUID] = None
+    # Same as TaskBubble: None means the weight-based layout still owns it.
+    canvas_x: Optional[float] = None
+    canvas_y: Optional[float] = None
     created_at: datetime

@@ -29,6 +29,8 @@ import {
   chatMessage,
   isQuotaError,
   transcribeAudio,
+  updateCluster,
+  updateTask,
 } from "@/services/api";
 import { canCreateBubble, formatTurnsChip, isAtAiCap } from "@/services/tierGate";
 import { useAuthStore, type SubscriptionTier } from "@/stores/authStore";
@@ -327,6 +329,29 @@ export default function UniverseScreen() {
     router.push({ pathname: "/cluster-editor", params: { id: clusterId } });
   };
 
+  /** Remember where the user dropped a bubble.
+   *
+   * Fire-and-forget: the bubble is already sitting where they put it on the
+   * UI thread, and blocking the gesture on a round trip — or bouncing it
+   * back on a failed one — would make a smooth interaction feel unreliable
+   * over a bad connection. A lost save costs one placement; the position is
+   * re-sent the next time they move it.
+   *
+   * No refetch either. Hydrating here would rebuild the layout and fight
+   * the placement that was just made.
+   */
+  const onBubbleMoved = useCallback(
+    (kind: "cluster" | "task", id: string, x: number, y: number) => {
+      const patch = { canvas_x: x, canvas_y: y };
+      const save = kind === "cluster" ? updateCluster(id, patch) : updateTask(id, patch);
+      save.catch(() => {
+        // Silent: there is nothing the user can usefully do about it, and a
+        // toast over a drag they have already finished is noise.
+      });
+    },
+    [],
+  );
+
   const onTierPress = () => {
     router.push("/settings" as Href);
   };
@@ -403,6 +428,7 @@ export default function UniverseScreen() {
               router.push({ pathname: "/move-task", params: { id: taskId } })
             }
             onClusterLongPress={onClusterLongPress}
+            onBubbleMoved={onBubbleMoved}
             onEditFocusedCluster={(clusterId) =>
               router.push({ pathname: "/cluster-editor", params: { id: clusterId } })
             }

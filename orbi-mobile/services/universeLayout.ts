@@ -211,8 +211,13 @@ export function layoutUniverse(
       // returned no color (legacy rows). Previously we always used
       // KIND_COLORS which silently ignored the user's choice.
       color: (c.color && c.color.trim().length > 0) ? c.color : KIND_COLORS[kind],
-      centerX: pos.x,
-      centerY: pos.y,
+      // A cluster the user dragged sits where they left it. The kind-based
+      // spread below still decides where an untouched one goes, so a new
+      // cluster still lands somewhere sensible rather than at 0,0.
+      placedX: c.canvas_x ?? null,
+      placedY: c.canvas_y ?? null,
+      centerX: c.canvas_x ?? pos.x,
+      centerY: c.canvas_y ?? pos.y,
     };
   });
 
@@ -353,6 +358,11 @@ export function layoutUniverse(
         // No dominant in drilled view — the cluster name is in the
         // header overlay, every task bubble shows its own label only.
         isDominant: false,
+        // A task the user has dropped somewhere keeps that spot; the
+        // orbital offset below is only the fallback for one they have
+        // never touched.
+        placedX: t.canvas_x ?? null,
+        placedY: t.canvas_y ?? null,
         offsetX: offset.x,
         offsetY: offset.y,
         kind: "task",
@@ -386,6 +396,8 @@ export function layoutUniverse(
       pressureScore: 0, // unused for cluster bubbles
       overdue: hasOverdue,
       isDominant: false,
+      placedX: cluster.placedX ?? null,
+      placedY: cluster.placedY ?? null,
       offsetX: 0,
       offsetY: 0,
       kind: "cluster",

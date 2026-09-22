@@ -61,6 +61,13 @@ interface Props {
   // so holding a cluster opens its editor and holding a task opens the
   // move-to-cluster sheet.
   onLongPress?: () => void;
+  // Reports where a bubble was dropped, as a 0..1 fraction of the canvas.
+  // Normalised here rather than in the handler because this is the only
+  // place that knows the canvas size the drag happened on.
+  onMoved?: (x: number, y: number) => void;
+  // The canvas size, for that normalisation.
+  canvasWidth: number;
+  canvasHeight: number;
   // The canvas's own horizontal pan. Handed in so the drag can block it:
   // without that, dragging a bubble sideways slides the whole universe
   // underneath it and the bubble appears to stick to the screen.
@@ -85,6 +92,9 @@ export default function BubbleHitArea({
   padding = 6,
   onPress,
   onLongPress,
+  onMoved,
+  canvasWidth,
+  canvasHeight,
   canvasPan,
 }: Props) {
   // Drives the lift. Kept separate from the physics entry because it is
@@ -168,7 +178,18 @@ export default function BubbleHitArea({
         : { ...b, dragging: 0 };
       physics.value = next;
 
-      if (!moved.value && onLongPress) runOnJS(onLongPress)();
+      if (moved.value) {
+        // Clamped: a drag that ends past the edge should place the bubble at
+        // the edge, not save a fraction outside 0..1 that the server would
+        // reject and the user would experience as the placement not sticking.
+        if (onMoved) {
+          const nx = Math.max(0, Math.min(1, b.x / canvasWidth));
+          const ny = Math.max(0, Math.min(1, b.y / canvasHeight));
+          runOnJS(onMoved)(nx, ny);
+        }
+      } else if (onLongPress) {
+        runOnJS(onLongPress)();
+      }
     })
     .onFinalize(() => {
       "worklet";

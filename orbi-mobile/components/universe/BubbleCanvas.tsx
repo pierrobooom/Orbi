@@ -148,8 +148,12 @@ function buildInitialStates(
     const cluster = clusters.find((c) => c.id === b.clusterId)!;
     const cx = cluster.centerX * width;
     const cy = cluster.centerY * height;
-    const tx = cx + b.offsetX;
-    const ty = cy + b.offsetY;
+    // A placement the user made wins over the computed layout. Stored as a
+    // fraction of the canvas, so it lands in the same relative spot on any
+    // screen rather than at whatever pixel it happened to be dropped on.
+    const placed = b.placedX != null && b.placedY != null;
+    const tx = placed ? b.placedX! * width : cx + b.offsetX;
+    const ty = placed ? b.placedY! * height : cy + b.offsetY;
     return {
       x: tx,
       y: ty,
@@ -176,7 +180,7 @@ function buildInitialStates(
       freqY: (Math.PI * 2) / (16000 + Math.random() * 12000),
       id: b.id,
       dragging: 0,
-      placed: 0,
+      placed: placed ? 1 : 0,
     };
   });
 }
@@ -199,9 +203,24 @@ interface BubbleCanvasProps {
   // currently focused cluster without the canvas needing to know
   // about navigation.
   onEditFocusedCluster?: (clusterId: string) => void;
+  // Where the user dropped a bubble, as a 0..1 fraction of the canvas. The
+  // canvas does not save it — it has no business knowing about the API —
+  // it just reports what happened and lets the screen persist it.
+  onBubbleMoved?: (
+    kind: "cluster" | "task",
+    id: string,
+    x: number,
+    y: number,
+  ) => void;
 }
 
-export default function BubbleCanvas({ onBubbleTap, onClusterLongPress, onTaskLongPress, onEditFocusedCluster }: BubbleCanvasProps = {}) {
+export default function BubbleCanvas({
+  onBubbleTap,
+  onClusterLongPress,
+  onTaskLongPress,
+  onEditFocusedCluster,
+  onBubbleMoved,
+}: BubbleCanvasProps = {}) {
   const t = useT();
   const { width, height } = useWindowDimensions();
   // Approximate canvas height — leaves room for the header strip + tab bar.
@@ -408,6 +427,17 @@ export default function BubbleCanvas({ onBubbleTap, onClusterLongPress, onTaskLo
          clusters={clusters}
          // So a bubble drag can suppress the canvas pan for its duration.
          canvasPan={pan}
+         onBubbleMoved={
+           onBubbleMoved
+             ? (bubble, x, y) =>
+                 onBubbleMoved(
+                   bubble.kind === "cluster" ? "cluster" : "task",
+                   bubble.id,
+                   x,
+                   y,
+                 )
+             : undefined
+         }
          width={width}
          universeWidth={universeWidth}
          // Star field extends 20% past the universe on each side
@@ -551,6 +581,8 @@ interface BubbleFieldProps {
   canvasHeight: number;
   onBubblePress: (bubble: Bubble) => void;
   onBubbleLongPress?: (bubble: Bubble) => void;
+  // Where a bubble was dropped, normalised to the canvas.
+  onBubbleMoved?: (bubble: Bubble, x: number, y: number) => void;
   // Passed straight to each hit area so a bubble drag can block it.
   canvasPan?: GestureType;
 }
@@ -564,6 +596,7 @@ function BubbleField({
   canvasHeight,
   onBubblePress,
   onBubbleLongPress,
+  onBubbleMoved,
   canvasPan,
 }: BubbleFieldProps) {
   // The Skia Canvas is sized to the FULL STAR FIELD (which is wider
@@ -798,6 +831,11 @@ function BubbleField({
           fallback={initial[i]}
           physics={physics}
           canvasPan={canvasPan}
+          canvasWidth={width}
+          canvasHeight={canvasHeight}
+          onMoved={
+            onBubbleMoved ? (x, y) => onBubbleMoved(b, x, y) : undefined
+          }
           onPress={() => onBubblePress(b)}
           onLongPress={onBubbleLongPress ? () => onBubbleLongPress(b) : undefined}
         />
