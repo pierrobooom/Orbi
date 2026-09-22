@@ -15,26 +15,7 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { colors } from "@/theme/colors";
-
-interface PhysicsState {
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  tx: number;
-  ty: number;
-  r: number;
-  wiggle: number;
-  orbitR: number;
-  phaseX: number;
-  phaseY: number;
-  freqX: number;
-  freqY: number;
-  // The bubble this entry belongs to. Consumers resolve by id instead of
-  // by array position so a one-render-stale array cannot hand them
-  // another bubble's coordinates.
-  id: string;
-}
+import type { PhysicsState } from "./types";
 
 interface Props {
   index: number;

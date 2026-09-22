@@ -63,3 +63,42 @@ export interface Bubble {
   // can tell at a glance which cluster each match came from.
   color?: string;
 }
+
+/** One bubble's live simulation state, shared between the canvas that draws
+ * it, the label that follows it, and the touch overlay that moves it.
+ *
+ * Declared here rather than copied into each file. It used to be duplicated
+ * three times with a comment in each saying the shape "has to match exactly
+ * or the SharedValue types stop being assignable" — which is true, and is
+ * exactly why it should not have been written out three times. Adding one
+ * field broke two files that had no reason to care about it.
+ */
+export interface PhysicsState {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  // The per-bubble target the spring pulls toward. Each non-dominant bubble
+  // settles at its own orbital spot around the cluster centre; without this
+  // they would all spring to the shared centre and overlap.
+  tx: number;
+  ty: number;
+  r: number;
+  wiggle: number;
+  // Orbit around (tx, ty). Fixed per bubble for its lifetime, so the path is
+  // stable across frames and the bubble always has a home to return to.
+  orbitR: number;
+  phaseX: number;
+  phaseY: number;
+  freqX: number;
+  freqY: number;
+  // Consumers resolve by id rather than array position, so a one-render-stale
+  // array cannot hand them another bubble's coordinates.
+  id: string;
+  // 1 while a finger is holding this bubble: the frame loop skips orbit,
+  // spring and damping for it, and collisions treat it as immovable.
+  dragging: number;
+  // 1 once the user has dropped it somewhere deliberately, so a resync does
+  // not quietly send it home again.
+  placed: number;
+}

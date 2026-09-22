@@ -26,7 +26,11 @@
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
-import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import {
+  Gesture,
+  GestureDetector,
+  type GestureType,
+} from "react-native-gesture-handler";
 import {
   Canvas,
   Circle,
@@ -53,34 +57,7 @@ import { useUniverseStore } from "@/stores/universeStore";
 import BubbleHitArea from "./BubbleHitArea";
 import BubbleLabel from "./BubbleLabel";
 import StarField from "./StarField";
-import type { Cluster, Bubble } from "./types";
-
-interface PhysicsState {
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  // The per-bubble target the spring force pulls toward. Each non-
-  // dominant bubble settles at its own orbital spot around the cluster
-  // center; without this, every bubble would spring back to the shared
-  // cluster center and they'd all overlap.
-  tx: number;
-  ty: number;
-  r: number;
-  wiggle: number;
-  // Orbit around (tx, ty). Fixed per bubble for its lifetime, so the
-  // path is stable across frames and the bubble always has a home to
-  // return to.
-  orbitR: number;
-  phaseX: number;
-  phaseY: number;
-  freqX: number;
-  freqY: number;
-  // The bubble this entry belongs to. Consumers resolve by id instead of
-  // by array position so a one-render-stale array cannot hand them
-  // another bubble's coordinates.
-  id: string;
-}
+import type { Cluster, Bubble, PhysicsState } from "./types";
 
 function pressureToRadius(p: number): number {
   "worklet";
@@ -198,6 +175,8 @@ function buildInitialStates(
       freqX: (Math.PI * 2) / (14000 + Math.random() * 12000),
       freqY: (Math.PI * 2) / (16000 + Math.random() * 12000),
       id: b.id,
+      dragging: 0,
+      placed: 0,
     };
   });
 }
@@ -427,6 +406,8 @@ export default function BubbleCanvas({ onBubbleTap, onClusterLongPress, onTaskLo
        <BubbleField
          bubbles={bubbles}
          clusters={clusters}
+         // So a bubble drag can suppress the canvas pan for its duration.
+         canvasPan={pan}
          width={width}
          universeWidth={universeWidth}
          // Star field extends 20% past the universe on each side
@@ -570,6 +551,8 @@ interface BubbleFieldProps {
   canvasHeight: number;
   onBubblePress: (bubble: Bubble) => void;
   onBubbleLongPress?: (bubble: Bubble) => void;
+  // Passed straight to each hit area so a bubble drag can block it.
+  canvasPan?: GestureType;
 }
 
 function BubbleField({
@@ -581,6 +564,7 @@ function BubbleField({
   canvasHeight,
   onBubblePress,
   onBubbleLongPress,
+  canvasPan,
 }: BubbleFieldProps) {
   // The Skia Canvas is sized to the FULL STAR FIELD (which is wider
   // than the universe) and shifted left so the universe is centered
@@ -634,6 +618,16 @@ function BubbleField({
           freqX: prev[prevIdx].freqX,
           freqY: prev[prevIdx].freqY,
           id,
+          // A resync while a finger is down would otherwise drop the
+          // bubble mid-drag.
+          dragging: prev[prevIdx].dragging,
+          placed: 0,
+          // A bubble the user has placed keeps where they put it: the
+          // anchor was moved on drop, and a resync must not send it
+          // home again.
+          ...(prev[prevIdx].placed
+            ? { tx: prev[prevIdx].tx, ty: prev[prevIdx].ty, placed: 1 }
+            : {}),
         };
       }
       return init;
@@ -664,6 +658,15 @@ function BubbleField({
     const now = tickMs.value;
     for (let i = 0; i < next.length; i++) {
       const b = next[i];
+      // Held bubbles are not simulated. Letting the spring run while a
+      // finger drags produces a bubble that lags behind the touch and
+      // snaps forward on release — the exact "cheap" feel this is meant
+      // to avoid.
+      if (b.dragging) {
+        b.vx = 0;
+        b.vy = 0;
+        continue;
+      }
       // The anchor traces the orbit; the bubble springs toward it.
       const ax = b.tx + Math.sin(now * b.freqX + b.phaseX) * b.orbitR;
       const ay = b.ty + Math.cos(now * b.freqY + b.phaseY) * b.orbitR;
@@ -694,11 +697,17 @@ function BubbleField({
         const nx = ddx / dist;
         const ny = ddy / dist;
         const overlap = minDist - dist;
-        const half = overlap * 0.5;
-        a.x -= nx * half;
-        a.y -= ny * half;
-        b.x += nx * half;
-        b.y += ny * half;
+        // A held bubble is immovable: the other one takes the whole
+        // separation. Splitting it evenly would slide the bubble out from
+        // under the finger every time it touched a neighbour.
+        const aFixed = a.dragging === 1;
+        const bFixed = b.dragging === 1;
+        const aShare = aFixed ? 0 : bFixed ? overlap : overlap * 0.5;
+        const bShare = bFixed ? 0 : aFixed ? overlap : overlap * 0.5;
+        a.x -= nx * aShare;
+        a.y -= ny * aShare;
+        b.x += nx * bShare;
+        b.y += ny * bShare;
         const relVx = b.vx - a.vx;
         const relVy = b.vy - a.vy;
         const relV_n = relVx * nx + relVy * ny;
@@ -788,6 +797,7 @@ function BubbleField({
           bubbleId={b.id}
           fallback={initial[i]}
           physics={physics}
+          canvasPan={canvasPan}
           onPress={() => onBubblePress(b)}
           onLongPress={onBubbleLongPress ? () => onBubbleLongPress(b) : undefined}
         />
