@@ -114,11 +114,7 @@ export default function InsightsScreen() {
           think to pull. */}
       <ScreenHeader
         title={t("Insights")}
-        action={
-          <Pressable onPress={onRefresh} hitSlop={10} accessibilityLabel="Refresh">
-            <MaterialIcons name="refresh" size={20} color={colors.inkDim} />
-          </Pressable>
-        }
+        action={{ icon: "refresh", onPress: onRefresh, label: "Refresh" }}
       />
 
       <ScrollView

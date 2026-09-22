@@ -189,6 +189,11 @@ class ChatHistoryMessage(BaseModel):
     role: str
     content: str
     intent: Optional[str] = None
+    # "voice", "text", "receipt"… Exposed because a spoken sentence and a
+    # typed one look identical once transcribed, and a user who sees their
+    # own dictation in the chat log with no marking reasonably concludes the
+    # app is writing messages as them.
+    source: Optional[str] = None
     created_at: datetime
 
 
@@ -239,6 +244,7 @@ async def chat_history(
                 role=row["role"],
                 content=row["content"],
                 intent=row.get("intent"),
+                source=row.get("source"),
                 created_at=row["created_at"],
             )
             for row in rows

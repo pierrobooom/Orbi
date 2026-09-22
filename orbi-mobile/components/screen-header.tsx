@@ -25,7 +25,14 @@
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { useRouter } from "expo-router";
 import React from "react";
-import { Pressable, StyleSheet, Text, View, type ViewStyle } from "react-native";
+import {
+  ActivityIndicator,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  type ViewStyle,
+} from "react-native";
 
 import { useMirrored } from "@/stores/handednessStore";
 import { colors } from "@/theme/colors";
@@ -39,17 +46,31 @@ interface Props {
    * the top. Different gestures got the user here, and the icon is the only
    * clue about which one leaving will undo. */
   backIcon?: "chevron" | "close" | "none";
-  /** A secondary control — a refresh, an overflow menu. Never the primary
-   * action: that belongs at the bottom of the screen. */
-  action?: React.ReactNode;
+  /** A secondary control — a refresh, a delete, an overflow menu. Never the
+   * primary action: that belongs at the bottom of the screen.
+   *
+   * Described rather than passed as a node, so the TOUCH TARGET belongs to
+   * this component. When callers supplied their own element they supplied a
+   * bare 20px icon with a stingy hitSlop, and the 48pt slot around it was
+   * decoration — the thing you actually had to hit was the glyph.
+   */
+  action?: {
+    icon: keyof typeof MaterialIcons.glyphMap;
+    onPress: () => void;
+    label: string;
+    tint?: string;
+    busy?: boolean;
+    disabled?: boolean;
+  };
   style?: ViewStyle;
 }
 
-// 44pt is the smallest reliable touch target on a phone. Several of the
-// hand-rolled headers used 16–18pt icons with inconsistent hitSlop, which is
-// a coin-flip to hit one-handed and a certainty to hit with two — the exact
-// bug that only shows up in real use.
-const TARGET = 44;
+// 44pt is Apple's published minimum and it is a floor, not a target. Tested
+// on a real phone it is still fiddly for larger hands at the top of the
+// screen, where the thumb arrives at an angle rather than straight down. 48
+// costs nothing — the space beside a title is empty anyway.
+const TARGET = 48;
+const ICON = 26;
 
 export function ScreenHeader({
   title,
@@ -73,7 +94,7 @@ export function ScreenHeader({
       >
         <MaterialIcons
           name={backIcon === "close" ? "close" : "chevron-left"}
-          size={24}
+          size={ICON}
           color={colors.inkDim}
         />
       </Pressable>
@@ -85,7 +106,27 @@ export function ScreenHeader({
       <Text style={styles.title} numberOfLines={1}>
         {title}
       </Text>
-      <View style={styles.side}>{action}</View>
+      {action ? (
+        <Pressable
+          onPress={action.onPress}
+          disabled={action.disabled || action.busy}
+          style={[styles.side, (action.disabled || action.busy) && styles.dim]}
+          accessibilityRole="button"
+          accessibilityLabel={action.label}
+        >
+          {action.busy ? (
+            <ActivityIndicator size="small" color={action.tint ?? colors.inkDim} />
+          ) : (
+            <MaterialIcons
+              name={action.icon}
+              size={ICON}
+              color={action.tint ?? colors.inkDim}
+            />
+          )}
+        </Pressable>
+      ) : (
+        <View style={styles.side} />
+      )}
     </View>
   );
 }
@@ -110,4 +151,5 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   title: { flex: 1, color: colors.ink, fontSize: 15, fontWeight: "600", textAlign: "center" },
+  dim: { opacity: 0.5 },
 });

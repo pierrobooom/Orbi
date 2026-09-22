@@ -27,6 +27,11 @@ export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
   content: string;
+  /** How this turn arrived. Voice commands and replies sent from a
+   * notification are recorded in the same conversation as typed messages,
+   * so without this the user sees their own dictation in the log and
+   * reasonably concludes the app is writing messages as them. */
+  source?: string | null;
   // Set on a user message whose send failed, so the UI can mark it and
   // offer a retry instead of silently losing what was typed.
   failed?: boolean;
@@ -89,6 +94,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           id: m.id,
           role: m.role,
           content: m.content,
+          source: m.source,
         })),
       });
     } catch (e) {

@@ -199,6 +199,16 @@ export default function ChatScreen() {
           <Text style={[styles.bubbleText, mine && styles.bubbleTextMine]}>
             {item.content}
           </Text>
+          {/* Spoken turns are recorded in the same conversation as typed
+              ones — including replies sent from a notification. Without
+              this marker a user sees their own dictation in the log and
+              reasonably concludes the app is writing messages as them. */}
+          {mine && item.source === "voice" ? (
+            <View style={styles.sourceNote}>
+              <MaterialIcons name="mic" size={11} color={colors.canvas} />
+              <Text style={styles.sourceNoteText}>{t("Spoken")}</Text>
+            </View>
+          ) : null}
           {item.failed ? (
             <Text style={styles.failedNote}>{t("Not sent")}</Text>
           ) : null}
@@ -414,6 +424,14 @@ const styles = StyleSheet.create({
   bubbleFailed: { borderColor: colors.overdue, borderWidth: 1 },
   bubbleText: { color: colors.ink, fontSize: 15, lineHeight: 21 },
   bubbleTextMine: { color: "white" },
+  sourceNote: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    marginTop: 4,
+    opacity: 0.7,
+  },
+  sourceNoteText: { color: colors.canvas, fontSize: 10, fontWeight: "600" },
   failedNote: { color: colors.overdue, fontSize: 11, marginTop: 4, fontWeight: "600" },
   offer: {
     flexDirection: "row",

@@ -1223,6 +1223,9 @@ export interface ChatHistoryMessage {
   role: "user" | "assistant";
   content: string;
   intent: string | null;
+  /** "voice", "text", "receipt"… A spoken sentence and a typed one look
+   * identical once transcribed, so the chat has to say which it was. */
+  source: string | null;
   created_at: string;
 }
 

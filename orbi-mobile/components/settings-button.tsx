@@ -23,16 +23,25 @@ export function SettingsButton({ tint = colors.inkDim }: { tint?: string }) {
   return (
     <Pressable
       onPress={() => router.push("/settings")}
-      hitSlop={12}
       style={styles.button}
       accessibilityLabel="Settings"
       accessibilityRole="button"
     >
-      <MaterialIcons name="settings" size={20} color={tint} />
+      <MaterialIcons name="settings" size={24} color={tint} />
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  button: { padding: 2 },
+  // A real 48pt square rather than a 20px glyph with hitSlop bolted on.
+  // hitSlop works, but it is invisible in every screenshot and every code
+  // review, so it silently rots — and it cannot extend past a parent that
+  // clips, which is exactly where headers put their controls.
+  button: {
+    width: 48,
+    height: 48,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: -12,
+  },
 });

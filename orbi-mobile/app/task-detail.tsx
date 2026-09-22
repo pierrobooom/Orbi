@@ -330,24 +330,16 @@ export default function TaskDetailScreen() {
           title={t("Task")}
           backIcon="close"
           action={
-            mode === "view" ? (
-              <Pressable
-                onPress={onDelete}
-                disabled={busy !== null}
-                hitSlop={8}
-                accessibilityLabel="Delete task"
-              >
-                {busy === "delete" ? (
-                  <ActivityIndicator size="small" color={colors.overdue} />
-                ) : (
-                  <MaterialIcons
-                    name="delete-outline"
-                    size={22}
-                    color={colors.overdue}
-                  />
-                )}
-              </Pressable>
-            ) : null
+            mode === "view"
+              ? {
+                  icon: "delete-outline",
+                  onPress: onDelete,
+                  label: "Delete task",
+                  tint: colors.overdue,
+                  busy: busy === "delete",
+                  disabled: busy !== null,
+                }
+              : undefined
           }
         />
 

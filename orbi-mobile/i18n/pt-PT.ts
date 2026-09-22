@@ -613,4 +613,5 @@ export const ptPT: Record<string, string> = {
   // Action bars introduced with the one-handed pass.
   "New limit": "Novo limite",
   "New membership": "Nova subscrição",
+  "Spoken": "Falado",
 };
