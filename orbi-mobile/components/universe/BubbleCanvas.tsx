@@ -61,19 +61,52 @@ import type { Cluster, Bubble, PhysicsState } from "./types";
 
 function pressureToRadius(p: number): number {
   "worklet";
-  // Baseline 16px (low-pressure / default tasks), max ~24px at
-  // pressure 10. Roughly 1.5x growth — gentle and easy to compare
-  // at a glance.
-  return 16 + (Math.max(0, Math.min(10, p)) / 10) * 8;
+  // 26px at rest, 40px at pressure 10.
+  //
+  // Up from 16–24, which was a deliberate choice for a screen full of tasks
+  // and the wrong one for the screen people actually see. A cluster drilled
+  // into usually holds a handful of things, and at 16px they read as specks
+  // in a lot of empty space — nothing like the 30–72px cluster bubbles the
+  // user just came from. The crowding scale below is what earns this back
+  // when a cluster really does fill up.
+  return 26 + (Math.max(0, Math.min(10, p)) / 10) * 14;
+}
+
+// Bubbles stay full size up to this many, then shrink.
+//
+// Chosen as "a cluster you can take in at a glance". Below it there is space
+// going spare and no reason to make anything smaller.
+const FULL_SIZE_UP_TO = 8;
+
+// Never shrink past this, however many there are. Past roughly half size a
+// bubble stops carrying a readable label and becomes a dot, at which point
+// the view has stopped being a universe and become a scatter plot.
+const MIN_CROWDING_SCALE = 0.45;
+
+function crowdingScale(taskCount: number): number {
+  "worklet";
+  if (taskCount <= FULL_SIZE_UP_TO) return 1;
+  // Inverse square root, so the TOTAL area of the bubbles stays roughly
+  // constant as they multiply — which is what makes it read as the camera
+  // pulling back rather than as everything arbitrarily deflating.
+  return Math.max(
+    MIN_CROWDING_SCALE,
+    Math.sqrt(FULL_SIZE_UP_TO / taskCount),
+  );
 }
 
 // Overdue bubbles get a flat size boost on top of pressure-based sizing
 // so they read as physically chunkier, not just animated. The breathing
 // pulse on top of this still works.
-const OVERDUE_RADIUS_BOOST = 4;
+//
+// Applied BEFORE the crowding scale, so an overdue bubble in a crowded
+// cluster stays proportionally bigger than its neighbours rather than
+// having its one distinguishing feature scaled away.
+const OVERDUE_RADIUS_BOOST = 6;
 
-// Bubbles are tiny (radius 10–36px); long titles overflow as a single
-// glyph run because Skia text doesn't wrap. We extract a short label
+// Bubbles are small (task radius ~15–43px depending on pressure, overdue
+// and how many share the view); long titles overflow as a single glyph run
+// because Skia text doesn't wrap. We extract a short label
 // from the title — preferring distinctive content words ("Mercedes",
 // "rent") over generic verbs and stop words ("call", "the", "about").
 //
@@ -97,6 +130,15 @@ const _LOW_SIGNAL_VERBS = new Set([
   "get", "have", "take", "pick", "drop", "visit", "see", "check",
   "need", "want", "should", "must", "gotta", "going", "gonna",
 ]);
+
+// How many characters a task bubble's label can hold at a given crowding.
+//
+// 14 was fixed, which was right for exactly one bubble size. Now that a quiet
+// cluster draws at 33px and a full one at 15, a fixed budget either overflows
+// the small ones or wastes the large ones.
+function labelBudget(crowding: number): number {
+  return Math.max(8, Math.round(18 * crowding));
+}
 
 function shortLabel(title: string, maxChars: number = 14): string {
   const trimmed = title.trim();
@@ -133,9 +175,13 @@ function shortLabel(title: string, maxChars: number = 14): string {
 // task bubbles fall back to the pressure-based calc. Overdue boost
 // only applies in task mode — pulsing the whole cluster bubble would
 // be noisy when many clusters have at least one overdue task.
-function radiusFor(b: Bubble): number {
+function radiusFor(b: Bubble, crowding: number = 1): number {
+  // Cluster bubbles carry an explicit radius from the layout pass and are
+  // never crowded — there are only ever a handful of them.
   if (b.radius !== undefined) return b.radius;
-  return pressureToRadius(b.pressureScore) + (b.overdue ? OVERDUE_RADIUS_BOOST : 0);
+  const base =
+    pressureToRadius(b.pressureScore) + (b.overdue ? OVERDUE_RADIUS_BOOST : 0);
+  return base * crowding;
 }
 
 function buildInitialStates(
@@ -143,6 +189,7 @@ function buildInitialStates(
   clusters: Cluster[],
   width: number,
   height: number,
+  crowding: number = 1,
 ): PhysicsState[] {
   return bubbles.map((b) => {
     const cluster = clusters.find((c) => c.id === b.clusterId)!;
@@ -163,7 +210,7 @@ function buildInitialStates(
       ty,
       // r is the collision radius — include the overdue boost so the
       // physics hitbox matches what the user sees.
-      r: radiusFor(b),
+      r: radiusFor(b, crowding),
       // A whisper of Brownian on top of the orbit — just enough that
       // two bubbles sharing a similar path don't look mechanically
       // synchronised. An order of magnitude below the old value.
@@ -612,9 +659,16 @@ function BubbleField({
   // Universe sits centered within the star field, so bubbles draw at
   // (physics.x + canvasLeftOffset). This is the screen→canvas shift.
   const bubbleDrawOffsetX = canvasLeftOffset;
+  // How much to shrink task bubbles because of how many there are. Computed
+  // once here and passed to BOTH the physics and the drawing: they each call
+  // radiusFor, and a factor applied to one but not the other would give every
+  // bubble a hitbox that no longer matches the circle people can see.
+  const taskCount = bubbles.filter((b) => b.radius === undefined).length;
+  const crowding = crowdingScale(taskCount);
+
   const initial = useMemo(
-    () => buildInitialStates(bubbles, clusters, width, canvasHeight),
-    [bubbles, clusters, width, canvasHeight],
+    () => buildInitialStates(bubbles, clusters, width, canvasHeight, crowding),
+    [bubbles, clusters, width, canvasHeight, crowding],
   );
 
   // Each BubbleField instance owns its own physics state. When the
@@ -783,13 +837,18 @@ function BubbleField({
               physics={physics}
               tickMs={tickMs}
               drawOffsetX={bubbleDrawOffsetX}
+              crowding={crowding}
             />
           );
         })}
       </Canvas>
       {bubbles.map((b, i) => {
         const cluster = clusters.find((c) => c.id === b.clusterId)!;
-        const label = b.label || shortLabel(b.title ?? "");
+        // Bigger bubbles can carry more of the title, and crowded ones
+        // less. Tying the budget to the radius means the text shrinks with
+        // the circle instead of overflowing it the moment a cluster fills up.
+        const label =
+          b.label || shortLabel(b.title ?? "", labelBudget(crowding));
         if (!label) return null;
         if (b.kind === "cluster") {
           return (
@@ -969,6 +1028,10 @@ interface BubbleProps {
   // computes positions in screen coords; we add the Canvas's left
   // shift when drawing so they line up with their RN-side label.
   drawOffsetX?: number;
+  // The same factor the physics used. Not recomputed here — two derivations
+  // of one number drift, and this one decides both what is drawn and what
+  // can be tapped.
+  crowding?: number;
 }
 
 const BubbleNode: React.FC<BubbleProps> = ({
@@ -978,13 +1041,14 @@ const BubbleNode: React.FC<BubbleProps> = ({
   physics,
   tickMs,
   drawOffsetX = 0,
+  crowding = 1,
 }) => {
   // Cluster bubbles carry an explicit radius set by the layout pass
   // (sqrt of task count). Task bubbles fall back to pressure-based
   // sizing plus the overdue chunkiness boost. Without this, every
   // cluster bubble would draw at 16px because pressureScore is 0 for
   // them, while their physics hitbox is correct (30–72px).
-  const baseRadius = radiusFor(bubble);
+  const baseRadius = radiusFor(bubble, crowding);
   // Color resolution order: overdue (red pulse) > bubble.color override
   // (used in search view so each match keeps its origin cluster color)
   // > the bubble's current cluster color.
