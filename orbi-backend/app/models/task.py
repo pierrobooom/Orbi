@@ -50,6 +50,14 @@ class TaskBubble(BaseModel):
     canvas_x: Optional[float] = None
     canvas_y: Optional[float] = None
     visibility: Visibility = Visibility.private
+    # Set only on tasks reaching this user through a share. The client uses
+    # them to render somebody else's task as joint work rather than as one
+    # of their own — a shared bubble that looks identical to an owned one is
+    # a bubble people delete by accident.
+    shared_with_me: Optional[bool] = None
+    shared_by_user_id: Optional[UUID] = None
+    i_completed_at: Optional[datetime] = None
+    owner_completed_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
 

@@ -82,3 +82,25 @@ async def delete_auth_user(user_id: UUID) -> None:
     Requires the service key; the anon key cannot touch auth.admin.
     """
     get_client().auth.admin.delete_user(str(user_id))
+
+
+async def fetch_profile_by_email(email: str) -> dict | None:
+    """Find an account by email address.
+
+    Used only to attach a share invitation to an existing account. The RESULT
+    must never reach the client: whether an address has an account is not the
+    sender's business, and an endpoint that answers it is an account-existence
+    oracle usable from any signed-in session.
+    """
+    if not email:
+        return None
+    rows = (
+        get_client().table("user_profiles")
+        .select("*")
+        .eq("email", email.strip().lower())
+        .limit(1)
+        .execute()
+        .data
+        or []
+    )
+    return rows[0] if rows else None

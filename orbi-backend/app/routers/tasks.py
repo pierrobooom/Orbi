@@ -10,7 +10,7 @@ from typing import Optional
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 
 from app.agents.task_updater import parse_voice_update
 from app.db import (
@@ -23,6 +23,8 @@ from app.services.ai_router import AIRateLimited
 from app.services.usage_tracker import ObjectCapExceeded, check_bubble_cap
 from app.services.auth import get_current_user, get_current_user_with_tier
 from app.services.embeddings import generate_embedding
+from app.db.client import get_client
+from app.services import sharing_notify, task_sharing
 from app.services.reminder_dispatcher import sync_task_plans
 from app.services.scoring import calculate_pressure_score
 from app.services.task_embedding import regenerate_task_embedding
@@ -44,9 +46,276 @@ def _error(message: str, error_code: str) -> dict:
 
 @router.get("", response_model=list[TaskBubble])
 async def list_tasks(user_id: UUID = Depends(get_current_user)):
-    """Return all active tasks for the authenticated user, ordered by pressure_score desc."""
-    rows = await tasks_db.fetch_tasks_for_user(user_id)
-    return rows
+    """Active tasks for this user — their own, plus any shared with them.
+
+    Shared tasks are merged in here rather than exposed on a separate
+    endpoint so they land in the universe as ordinary bubbles. A shared task
+    that needed its own screen to be seen would not be shared in any sense
+    the user cares about.
+    """
+    own = await tasks_db.fetch_tasks_for_user(user_id)
+    shared = await tasks_db.fetch_shared_tasks_for_user(user_id)
+    return sorted(
+        own + shared,
+        key=lambda r: float(r.get("pressure_score") or 0),
+        reverse=True,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Sharing
+#
+# Declared before the /{task_id} routes: FastAPI matches in registration
+# order, so a static path registered later is swallowed by an earlier
+# parameterised one.
+# ---------------------------------------------------------------------------
+
+
+class ShareRequest(BaseModel):
+    """Who to share a task with."""
+
+    email: EmailStr
+
+
+class AcceptShareRequest(BaseModel):
+    # Where the recipient wants it in THEIR universe. Optional: accepting
+    # should not require also making a filing decision.
+    cluster_id: Optional[UUID] = None
+
+
+@router.get("/shared/incoming")
+async def incoming_shares(user_id: UUID = Depends(get_current_user)):
+    """Invitations waiting on this user, with the task attached.
+
+    The task comes along because an invitation that only says "Ana shared a
+    task" gives nobody enough to decide with.
+    """
+    rows = (
+        get_client()
+        .table("task_shares")
+        .select("*")
+        .eq("shared_with_user_id", str(user_id))
+        .eq("status", "pending")
+        .order("created_at", desc=True)
+        .execute()
+        .data
+        or []
+    )
+
+    out = []
+    for row in rows:
+        task = await tasks_db.fetch_task_by_id_any_owner(UUID(str(row["task_id"])))
+        if task is None:
+            continue
+        sender = await users_db.fetch_profile(UUID(str(row["shared_by_user_id"])))
+        out.append(
+            {
+                "share": row,
+                "task": task,
+                "shared_by_name": (sender or {}).get("full_name"),
+            }
+        )
+    return {"invitations": out}
+
+
+@router.post("/{task_id}/share", status_code=status.HTTP_201_CREATED)
+async def share_task(
+    task_id: UUID,
+    body: ShareRequest,
+    user_id: UUID = Depends(get_current_user),
+):
+    """Invite someone to a task by email address.
+
+    The response NEVER says whether that address has an account. It would
+    otherwise be a way to ask whether any given person uses Orbi, one address
+    at a time, from any account. The invitation is created either way and is
+    picked up when they sign up.
+    """
+    task = await tasks_db.fetch_task_by_id(task_id, user_id)
+    if task is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_error("Task not found.", "TASK_NOT_FOUND"),
+        )
+
+    email = body.email.strip().lower()
+    owner = await users_db.fetch_profile(user_id)
+    if owner and (owner.get("email") or "").lower() == email:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=_error("That is your own address.", "CANNOT_SHARE_WITH_SELF"),
+        )
+
+    recipient = await users_db.fetch_profile_by_email(email)
+    client = get_client()
+
+    existing = (
+        client.table("task_shares")
+        .select("*")
+        .eq("task_id", str(task_id))
+        .eq("invited_email", email)
+        .limit(1)
+        .execute()
+        .data
+        or []
+    )
+    if existing:
+        row = existing[0]
+        # A re-send of a declined or revoked invitation is a new ask, not an
+        # error — people change their minds, and the alternative is telling
+        # the sender they already asked, which leaks the answer.
+        if row["status"] in {"declined", "revoked"}:
+            client.table("task_shares").update(
+                {"status": "pending", "completed_at": None}
+            ).eq("id", row["id"]).execute()
+        share_row = row
+    else:
+        share_row = (
+            client.table("task_shares")
+            .insert(
+                {
+                    "id": str(uuid4()),
+                    "task_id": str(task_id),
+                    "shared_by_user_id": str(user_id),
+                    "invited_email": email,
+                    "shared_with_user_id": str(recipient["id"]) if recipient else None,
+                    "status": "pending",
+                }
+            )
+            .execute()
+            .data[0]
+        )
+
+    if recipient:
+        await sharing_notify.invited(task, owner, UUID(str(recipient["id"])))
+
+    return {"shared": True, "share_id": share_row["id"]}
+
+
+@router.post("/shares/{share_id}/accept")
+async def accept_share(
+    share_id: UUID,
+    body: AcceptShareRequest | None = None,
+    user_id: UUID = Depends(get_current_user),
+):
+    """Join a shared task. It then appears in this user's universe."""
+    row = await task_sharing.fetch_share_for_recipient(share_id, user_id)
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_error("Invitation not found.", "SHARE_NOT_FOUND"),
+        )
+
+    patch = {"status": "accepted"}
+    if body and body.cluster_id:
+        patch["cluster_id"] = str(body.cluster_id)
+
+    updated = (
+        get_client()
+        .table("task_shares")
+        .update(patch)
+        .eq("id", str(share_id))
+        .execute()
+        .data
+    )
+    task = await tasks_db.fetch_task_by_id_any_owner(UUID(str(row["task_id"])))
+    if task:
+        joiner = await users_db.fetch_profile(user_id)
+        await sharing_notify.joined(task, joiner, UUID(str(row["shared_by_user_id"])))
+    return (updated or [row])[0]
+
+
+@router.post("/shares/{share_id}/decline", status_code=status.HTTP_204_NO_CONTENT)
+async def decline_share(share_id: UUID, user_id: UUID = Depends(get_current_user)):
+    """Turn an invitation down.
+
+    The sender is not notified. Declining quietly is the point — a
+    notification saying someone said no turns a small act into a social one.
+    """
+    row = await task_sharing.fetch_share_for_recipient(share_id, user_id)
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_error("Invitation not found.", "SHARE_NOT_FOUND"),
+        )
+    get_client().table("task_shares").update({"status": "declined"}).eq(
+        "id", str(share_id)
+    ).execute()
+
+
+@router.get("/{task_id}/sharing")
+async def task_sharing_state(
+    task_id: UUID, user_id: UUID = Depends(get_current_user)
+):
+    """Who is on this task and where the completion vote stands."""
+    task = await tasks_db.fetch_task_by_id(task_id, user_id)
+    if task is None and not await task_sharing.is_participant(task_id, user_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_error("Task not found.", "TASK_NOT_FOUND"),
+        )
+    if task is None:
+        task = await tasks_db.fetch_task_by_id_any_owner(task_id)
+
+    shares = await task_sharing.shares_for_task(task_id)
+    state = task_sharing.tally(bool((task or {}).get("owner_completed_at")), shares)
+    return {"task_id": str(task_id), "shares": shares, **state}
+
+
+@router.post("/{task_id}/complete")
+async def complete_task(
+    task_id: UUID,
+    background_tasks: BackgroundTasks,
+    user_id: UUID = Depends(get_current_user),
+):
+    """Say this task is done, on behalf of whoever is asking.
+
+    On an unshared task this simply completes it. On a shared one it is a
+    vote: the task closes for everybody once a majority of participants have
+    said so, and until then the others are told they are being waited on.
+    """
+    task = await tasks_db.fetch_task_by_id(task_id, user_id)
+    share = None if task else await task_sharing.is_participant(task_id, user_id)
+    if task is None and share is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_error("Task not found.", "TASK_NOT_FOUND"),
+        )
+    if task is None:
+        task = await tasks_db.fetch_task_by_id_any_owner(task_id)
+
+    now = datetime.now(timezone.utc).isoformat()
+    client = get_client()
+    if share is not None:
+        client.table("task_shares").update({"completed_at": now}).eq(
+            "id", share["id"]
+        ).execute()
+    else:
+        await tasks_db.update_task(task_id, user_id, {"owner_completed_at": now})
+        task["owner_completed_at"] = now
+
+    shares = await task_sharing.shares_for_task(task_id)
+    state = task_sharing.tally(bool(task.get("owner_completed_at")), shares)
+
+    if state["complete"]:
+        # Completed by the OWNER's id, because that is who the row belongs to
+        # and the normal completion path (plans cancelled, completed_at set)
+        # is written in those terms.
+        await tasks_db.update_task(
+            task_id,
+            UUID(str(task["owner_id"])),
+            {"status": TaskStatus.completed.value, "completed_at": now},
+        )
+        background_tasks.add_task(sync_task_plans, {**task, "status": "completed"},
+                                  UUID(str(task["owner_id"])))
+        await sharing_notify.closed(task, shares, UUID(str(task["owner_id"])), user_id)
+    elif state["participants"] > 1:
+        voter = await users_db.fetch_profile(user_id)
+        await sharing_notify.waiting_on_you(
+            task, shares, UUID(str(task["owner_id"])), user_id, voter, state
+        )
+
+    return {"task_id": str(task_id), **state}
 
 
 @router.post("", response_model=TaskBubble, status_code=status.HTTP_201_CREATED)

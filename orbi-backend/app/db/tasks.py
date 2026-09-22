@@ -113,3 +113,73 @@ async def fetch_tasks_without_embeddings(owner_id: UUID | None = None, limit: in
         query = query.eq("owner_id", str(owner_id))
     response = query.execute()
     return response.data or []
+
+
+async def fetch_task_by_id_any_owner(task_id: UUID) -> dict | None:
+    """A task by id, without checking who owns it.
+
+    For shared tasks: a participant is not the owner, so the owner-scoped
+    read finds nothing for them. Callers MUST establish the right to see it
+    first — via task_sharing.is_participant — because this function itself
+    checks nothing.
+    """
+    rows = (
+        get_client().table("task_bubbles")
+        .select("*")
+        .eq("id", str(task_id))
+        .limit(1)
+        .execute()
+        .data
+        or []
+    )
+    return rows[0] if rows else None
+
+
+async def fetch_shared_tasks_for_user(user_id: UUID) -> list[dict]:
+    """Tasks other people have shared with this user and they accepted.
+
+    Returned alongside their own so a shared task appears in their universe
+    as a bubble like any other — which is the entire point of sharing one.
+    Each row carries the share's own cluster_id, because where a task
+    belongs is a personal filing decision: the same errand is "Work" to one
+    person and "Home" to another.
+    """
+    shares = (
+        get_client().table("task_shares")
+        .select("task_id,cluster_id,shared_by_user_id,completed_at")
+        .eq("shared_with_user_id", str(user_id))
+        .eq("status", "accepted")
+        .execute()
+        .data
+        or []
+    )
+    if not shares:
+        return []
+
+    by_task = {str(s["task_id"]): s for s in shares}
+    rows = (
+        get_client().table("task_bubbles")
+        .select("*")
+        .in_("id", list(by_task))
+        .neq("status", "archived")
+        .execute()
+        .data
+        or []
+    )
+
+    out = []
+    for row in rows:
+        share = by_task.get(str(row["id"]), {})
+        out.append(
+            {
+                **row,
+                # The recipient's filing wins over the owner's.
+                "parent_cluster_id": share.get("cluster_id"),
+                # Flags the UI needs to render it as somebody else's task
+                # that this person is on, rather than as their own.
+                "shared_with_me": True,
+                "shared_by_user_id": share.get("shared_by_user_id"),
+                "i_completed_at": share.get("completed_at"),
+            }
+        )
+    return out
