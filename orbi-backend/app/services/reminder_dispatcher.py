@@ -34,6 +34,7 @@ from app.db import (
     tasks as tasks_db,
     users as users_db,
 )
+from app.services import job_lease
 from app.services.push import send_push
 from app.services.reminder_schedule import (
     daily_budget,
@@ -557,26 +558,38 @@ async def _schedule_escalations(
             logger.info("Escalation not scheduled: %s", exc)
 
 
+# How long a claim on this job lasts. Comfortably more than the tick so the
+# holder never loses its own lease between ticks, and short enough that a
+# replica dying costs a few minutes of reminders rather than a morning.
+_LEASE_TTL_SECONDS = DISPATCH_INTERVAL_SECONDS * 3
+
+
 async def run_forever() -> None:
     """Background loop. Started from main.py's lifespan, cancelled on shutdown.
 
     A plain asyncio task rather than APScheduler or Celery: the work is one
     indexed query a minute, the schedule itself lives in Postgres so nothing
     is lost on restart, and adding a scheduler dependency would buy only
-    features this does not use. If the API ever runs more than one instance,
-    replace this with a single external cron hitting POST /notifications/
-    dispatch — the endpoint exists for exactly that, and the handler is
-    already safe to call concurrently.
+    features this does not use.
+
+    SAFE ON MORE THAN ONE INSTANCE
+    Every replica runs this loop, and only the one holding the lease does
+    the work. Without that, two replicas would each send every reminder, and
+    the user would get every notification twice — the kind of bug that
+    arrives as "your app is broken" rather than as an error in a log.
     """
     logger.info("Reminder dispatcher started (every %ss)", DISPATCH_INTERVAL_SECONDS)
     while True:
         try:
             await asyncio.sleep(DISPATCH_INTERVAL_SECONDS)
+            if not await job_lease.hold("reminder_dispatcher", _LEASE_TTL_SECONDS):
+                continue
             result = await dispatch_due()
             if result["sent"] or result["skipped"] or result["postponed"]:
                 logger.info("Reminder tick: %s", result)
         except asyncio.CancelledError:
             logger.info("Reminder dispatcher stopping")
+            await job_lease.release("reminder_dispatcher")
             raise
         except Exception as exc:  # noqa: BLE001 — the loop must outlive any tick
             logger.error("Reminder tick failed: %s", exc)

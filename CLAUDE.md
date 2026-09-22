@@ -420,14 +420,24 @@ BANK\_PROVIDER=manual
 ```
 
 `RUN_REMINDER_DISPATCHER=1` and `RUN_FINANCE_SCHEDULER=1` (both the default)
-run their background loops inside the API process, which is correct for a
-single instance and wrong for several — every replica would send every
-reminder and sync every bank account, multiplying the provider bill by the
-replica count. Past one instance, set them to `0` and drive the work from a
-single external cron: POST `/api/v1/notifications/dispatch` with an
-`X-Dispatch-Secret` header matching `NOTIFICATIONS_DISPATCH_SECRET`. That
-endpoint returns 503 while the secret is unset, so it cannot be left
-accidentally open.
+run their background loops inside the API process. **They are now safe on any
+number of replicas**: each loop takes a lease from the `job_leases` table
+before doing anything, and only the holder works while the rest skip the tick.
+Claiming is a conditional UPDATE, so Postgres arbitrates — under READ
+COMMITTED a second claimant re-evaluates its WHERE clause against the
+committed row and matches nothing. See services/job_lease.py.
+
+This replaces the earlier advice to disable the loops past one instance and
+drive them from external cron. That still works and the endpoint still exists
+— POST `/api/v1/notifications/dispatch` with an `X-Dispatch-Secret` header
+matching `NOTIFICATIONS_DISPATCH_SECRET`, which returns 503 while the secret
+is unset so it cannot be left accidentally open — but it is no longer
+required, and a leased in-process loop needs no cron infrastructure to get
+right.
+
+What the lease protects is mostly money: duplicate reminders are an
+annoyance, duplicate bank syncs are billed, because bank data is priced per
+connected account per month and every replica would sync every account.
 
 `BANK_PROVIDER` selects the bank-data aggregator adapter in
 services/bank_providers.py. `manual` (the default) is the null provider: it

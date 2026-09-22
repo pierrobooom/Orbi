@@ -24,6 +24,7 @@ from app.db import finance as finance_db, finance_accounts as accounts_db
 from app.services import recurring
 from app.services.bank_sync import sync_due_accounts
 from app.services.budget_alerts import run_budget_alerts
+from app.services import job_lease
 from app.services.connection_alerts import run_connection_alerts
 from app.services import membership_alerts
 
@@ -31,6 +32,10 @@ logger = logging.getLogger(__name__)
 
 # Hourly. See the module docstring for why this is not daily.
 TICK_SECONDS = 3600
+
+# Longer than a tick so the holder keeps its own lease between runs, and
+# short enough that a replica dying does not strand the job for a day.
+_LEASE_TTL_SECONDS = TICK_SECONDS * 2
 
 # Runs this loop in-process. Same reasoning as the reminder dispatcher: right
 # for one instance, wrong for several, where every replica would sync every
@@ -141,6 +146,12 @@ async def run_forever() -> None:
     while True:
         try:
             await asyncio.sleep(TICK_SECONDS)
+            # Only one replica may run this. Duplicate reminders are
+            # annoying; duplicate bank syncs are billed, because bank data
+            # is priced per connected account per month and every replica
+            # would sync every account.
+            if not await job_lease.hold("finance_scheduler", _LEASE_TTL_SECONDS):
+                continue
             result = await run_once()
             if (
                 result["recurring"]["entries"]
@@ -152,6 +163,7 @@ async def run_forever() -> None:
                 logger.info("Finance tick: %s", result)
         except asyncio.CancelledError:
             logger.info("Finance scheduler stopping")
+            await job_lease.release("finance_scheduler")
             raise
         except Exception as exc:  # noqa: BLE001 — the loop must outlive any tick
             logger.error("Finance tick failed: %s", exc)
