@@ -18,6 +18,7 @@ import {
   Alert,
   Keyboard,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -76,6 +77,20 @@ function toIsoDate(date: Date): string {
   return `${date.getFullYear()}-${month}-${day}`;
 }
 
+/** "2026-10-08" -> "8 Oct 2026".
+ *
+ * Shown instead of the raw ISO string, which is a machine's spelling of a
+ * date and reads as debug output leaking into the UI. */
+function humanDate(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  if (!y || !m || !d) return iso;
+  return new Date(y, m - 1, d).toLocaleDateString(undefined, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
 function formatMoney(amount: number, currency: string): string {
   const symbol =
     currency === "EUR" ? "€" : currency === "GBP" ? "£" : currency === "USD" ? "$" : "";
@@ -116,6 +131,16 @@ export default function RecurringScreen() {
   const [showStartPicker, setShowStartPicker] = useState(false);
   // An existing rule whose next date is being corrected, if any.
   const [editingDate, setEditingDate] = useState<RecurringTransaction | null>(null);
+  // The date being spun, before it is committed. Held separately from the
+  // rule so the wheels can move without saving anything until Save.
+  const [draftDate, setDraftDate] = useState(new Date());
+
+  const openDateEditor = (rule: RecurringTransaction) => {
+    // Parsed at midday, so a timezone west of Greenwich cannot roll the date
+    // back to the previous day before the user has touched anything.
+    setDraftDate(new Date(`${rule.next_run_on}T12:00:00`));
+    setEditingDate(rule);
+  };
 
   const load = useCallback(async () => {
     try {
@@ -447,14 +472,16 @@ export default function RecurringScreen() {
                     date and deleting the rule was the only way out. */}
                 {rule.active ? (
                   <Pressable
-                    onPress={() => setEditingDate(rule)}
-                    hitSlop={8}
+                    onPress={() => openDateEditor(rule)}
                     style={styles.nextRow}
+                    accessibilityRole="button"
+                    accessibilityLabel="Change the renewal date"
                   >
+                    <MaterialIcons name="event" size={16} color={colors.accent} />
                     <Text style={styles.cardNext}>
-                      {t("Next: {date}", { date: rule.next_run_on })}
+                      {t("Renews {date}", { date: humanDate(rule.next_run_on) })}
                     </Text>
-                    <MaterialIcons name="edit-calendar" size={14} color={colors.accent} />
+                    <MaterialIcons name="edit" size={14} color={colors.accent} />
                   </Pressable>
                 ) : null}
                 {rule.active ? (
@@ -523,13 +550,23 @@ export default function RecurringScreen() {
           />
         )}
 
-        {/* Rendered outside the list so one picker serves every row. */}
-        {editingDate ? (
+        {/* Rendered outside the list so one picker serves every row.
+            iOS and Android genuinely need different handling here.
+
+            iOS's spinner fires onChange on EVERY wheel movement, so closing
+            the picker inside that handler closed it the instant the day was
+            nudged — changing a day, a month and a year meant opening it
+            three times. It gets a sheet with a draft date and an explicit
+            Save, so the wheels can be spun freely until the user is done.
+
+            Android's picker is its own dialog and reports once, with 'set'
+            or 'dismissed'. Wrapping that in a sheet would put a dialog
+            inside a modal and leave two things to dismiss. */}
+        {editingDate && Platform.OS !== "ios" ? (
           <DateTimePicker
-            value={new Date(`${editingDate.next_run_on}T12:00:00`)}
+            value={draftDate}
             mode="date"
-            display={Platform.OS === "ios" ? "spinner" : "default"}
-            themeVariant="dark"
+            display="default"
             onChange={(event, date) => {
               const rule = editingDate;
               setEditingDate(null);
@@ -538,6 +575,47 @@ export default function RecurringScreen() {
             }}
           />
         ) : null}
+
+        <Modal
+          visible={Platform.OS === "ios" && editingDate !== null}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setEditingDate(null)}
+        >
+          <Pressable style={styles.sheetBackdrop} onPress={() => setEditingDate(null)}>
+            <Pressable style={styles.sheet} onPress={() => undefined}>
+              <Text style={styles.sheetTitle}>
+                {editingDate
+                  ? t("When does {merchant} renew?", { merchant: editingDate.merchant })
+                  : ""}
+              </Text>
+              <DateTimePicker
+                value={draftDate}
+                mode="date"
+                display="spinner"
+                themeVariant="dark"
+                onChange={(_event, date) => {
+                  if (date) setDraftDate(date);
+                }}
+              />
+              <ActionBar
+                primary={{
+                  label: t("Save"),
+                  onPress: () => {
+                    const rule = editingDate;
+                    setEditingDate(null);
+                    if (rule) void onChangeNextDate(rule, draftDate);
+                  },
+                }}
+                secondary={{
+                  label: t("Cancel"),
+                  onPress: () => setEditingDate(null),
+                }}
+                style={styles.sheetActions}
+              />
+            </Pressable>
+          </Pressable>
+        </Modal>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -625,10 +703,45 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   cardMeta: { color: colors.inkDim, fontSize: 12, flexShrink: 1 },
+  // A button, not a caption. It was 11px grey text with a 14px icon and a
+  // hitSlop, carrying the only route to changing a date while looking
+  // exactly like the metadata line above it.
+  nextRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 10,
+    minHeight: 44,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.canvas,
+  },
+  sheetBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "flex-end",
+  },
+  sheet: {
+    backgroundColor: colors.panel,
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    paddingTop: 16,
+  },
+  sheetTitle: {
+    color: colors.inkDim,
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+    textAlign: "center",
+    paddingBottom: 4,
+  },
+  sheetActions: { borderTopWidth: 0, backgroundColor: "transparent" },
   notifyRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 6 },
   notifyText: { color: colors.inkDim, fontSize: 11 },
   notifyTextOn: { color: colors.accent, fontWeight: "600" },
-  nextRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 6 },
   dateRow: { alignItems: "flex-start", marginBottom: 4 },
   dateBtn: {
     paddingVertical: 11,
@@ -639,7 +752,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.canvas,
   },
   dateText: { color: colors.ink, fontSize: 14, fontWeight: "600" },
-  cardNext: { color: colors.inkDim, fontSize: 11 },
+  cardNext: { color: colors.ink, fontSize: 13, fontWeight: "600", flex: 1 },
   error: { color: colors.overdue, fontSize: 12 },
   footHint: { color: colors.inkDim, fontSize: 11, textAlign: "center", marginTop: 4 },
 });

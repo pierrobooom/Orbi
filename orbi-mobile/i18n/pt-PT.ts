@@ -617,4 +617,7 @@ export const ptPT: Record<string, string> = {
   // Membership renewal warnings.
   "Warns before it renews": "Avisa antes de renovar",
   "No renewal warning": "Sem aviso de renovação",
+  // Renewal date editor.
+  "Renews {date}": "Renova a {date}",
+  "When does {merchant} renew?": "Quando renova {merchant}?",
 };
