@@ -129,6 +129,9 @@ class UserPreferenceInput(BaseModel):
     reminders_enabled: Optional[bool] = None
     lead_reminders_enabled: Optional[bool] = None
     chase_reminders_enabled: Optional[bool] = None
+    # "right" or "left". Mirrors where controls sit so the common ones fall
+    # inside the thumb's arc, whichever hand is holding the phone.
+    handedness: Optional[str] = Field(default=None, pattern="^(right|left)$")
     # IANA zone from the device. Not validated here beyond the length the
     # column allows — services/reminder_schedule.py falls back to UTC on
     # anything this Python build cannot resolve, which is the behaviour we
@@ -160,6 +163,7 @@ async def set_my_preferences(
         "lead_reminders_enabled": True,
         "chase_reminders_enabled": True,
         "timezone": "UTC",
+        "handedness": "right",
     }
     incoming = body.model_dump(mode="json", exclude_none=True)
     payload = {**defaults, **{k: v for k, v in existing.items() if v is not None}, **incoming}

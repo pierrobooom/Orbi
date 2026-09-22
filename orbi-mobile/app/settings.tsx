@@ -42,6 +42,10 @@ import {
 import { TIER_DISPLAY } from "@/services/tierGate";
 import { useAuthStore } from "@/stores/authStore";
 import { useLocaleStore, useT, type UiLanguage, translate } from "@/i18n";
+import {
+  useHandednessStore,
+  type Handedness,
+} from "@/stores/handednessStore";
 import { colors } from "@/theme/colors";
 
 // Backend reachability is shown in a dedicated Status section. Lives
@@ -92,6 +96,9 @@ export default function SettingsScreen() {
 
   const email = session?.user?.email ?? "—";
 
+  const handedness = useHandednessStore((s) => s.handedness);
+  const setHandedness = useHandednessStore((s) => s.setHandedness);
+
   const [notifsGranted, setNotifsGranted] = useState<boolean | null>(null);
   const [busy, setBusy] = useState<"signout" | "test" | "register" | null>(null);
   const [health, setHealth] = useState<HealthStatus>({ kind: "loading" });
@@ -101,6 +108,7 @@ export default function SettingsScreen() {
   const [prefs, setPrefs] = useState<UserPreferences | null>(null);
   const [savingLanguage, setSavingLanguage] = useState<LanguageTag | null>(null);
   const [languageError, setLanguageError] = useState<string | null>(null);
+  const [savingHand, setSavingHand] = useState<Handedness | null>(null);
   const [prefsError, setPrefsError] = useState<string | null>(null);
   // Which quiet-hours bound the picker is editing, if any.
   const [editingQuiet, setEditingQuiet] = useState<"start" | "end" | null>(null);
@@ -243,6 +251,26 @@ export default function SettingsScreen() {
       // The chain must survive a failed link or every later save is
       // dropped with it.
       .catch(() => {});
+  };
+
+  /** Flip which side the reachable controls sit on.
+   *
+   * Applied locally before the save so the layout moves under the finger
+   * that pressed it — a setting about reachability that takes a round trip
+   * to show anything reads as not having worked.
+   */
+  const onSelectHandedness = async (hand: Handedness) => {
+    if (handedness === hand) return;
+    setSavingHand(hand);
+    const previous = handedness;
+    setHandedness(hand);
+    try {
+      setPrefs(await setMyPreferences({ handedness: hand }));
+    } catch {
+      setHandedness(previous);
+    } finally {
+      setSavingHand(null);
+    }
   };
 
   const onSelectLanguage = async (tag: LanguageTag) => {
@@ -561,6 +589,41 @@ export default function SettingsScreen() {
           {languageError ? (
             <Text style={styles.languageError}>{languageError}</Text>
           ) : null}
+        </Section>
+
+        {/* Which hand holds the phone.
+            Both top corners sit outside a thumb's arc, but the far one is
+            the unreachable one — and which corner is far depends entirely
+            on the hand. The app had no way to know, so it guessed the same
+            way for everybody. */}
+        <Section title={t("Handedness")}>
+          <Text style={styles.languageHint}>
+            {t(
+              "Moves buttons to the side your thumb reaches. Nothing changes what they do.",
+            )}
+          </Text>
+          {(["right", "left"] as const).map((hand) => {
+            const active = handedness === hand;
+            return (
+              <Pressable
+                key={hand}
+                onPress={() => onSelectHandedness(hand)}
+                disabled={savingHand !== null || prefs === null}
+                style={[styles.languageRow, active && styles.languageRowActive]}
+              >
+                <Text
+                  style={[styles.languageLabel, active && styles.languageLabelActive]}
+                >
+                  {hand === "right" ? t("Right-handed") : t("Left-handed")}
+                </Text>
+                {savingHand === hand ? (
+                  <ActivityIndicator size="small" color={colors.inkDim} />
+                ) : active ? (
+                  <Text style={styles.languageCheck}>✓</Text>
+                ) : null}
+              </Pressable>
+            );
+          })}
         </Section>
 
         <Section title={t("Status")}>

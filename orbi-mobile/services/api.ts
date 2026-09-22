@@ -1060,6 +1060,9 @@ export interface UserPreferences {
   reminders_enabled: boolean;
   lead_reminders_enabled: boolean;
   chase_reminders_enabled: boolean;
+  /** Mirrors where controls sit so the likely ones fall inside the thumb's
+   * arc. Presentation only — never what an action does. */
+  handedness: "right" | "left";
   // IANA zone. Quiet hours are zone-less times, so the background
   // dispatcher cannot interpret them without this — the client is the only
   // thing that knows where the device is.
@@ -1086,6 +1089,7 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   reminders_enabled: true,
   lead_reminders_enabled: true,
   chase_reminders_enabled: true,
+  handedness: "right",
   timezone: "UTC",
 };
 

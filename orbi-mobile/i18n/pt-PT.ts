@@ -603,4 +603,11 @@ export const ptPT: Record<string, string> = {
   "Automatic sync is part of Pro": "A sincronização automática faz parte do Pro",
   "Account limit reached on your plan": "Limite de contas atingido no teu plano",
   "See plans": "Ver planos",
+  // Handedness and the shared action bar.
+  "Handedness": "Mão dominante",
+  "Right-handed": "Destro",
+  "Left-handed": "Canhoto",
+  "Moves buttons to the side your thumb reaches. Nothing changes what they do.":
+    "Move os botões para o lado que o teu polegar alcança. Não muda o que fazem.",
+  "New category": "Nova categoria",
 };

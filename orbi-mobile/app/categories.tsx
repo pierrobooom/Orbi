@@ -39,6 +39,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { ActionBar } from "@/components/action-bar";
+import { ScreenHeader } from "@/components/screen-header";
 import { translate, useT } from "@/i18n";
 import {
   ApiError,
@@ -192,27 +194,10 @@ export default function CategoriesScreen() {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={styles.flex}
       >
-        <View style={styles.header}>
-          <Pressable onPress={() => router.back()} hitSlop={12} style={styles.headerSide}>
-            <MaterialIcons name="chevron-left" size={24} color={colors.inkDim} />
-          </Pressable>
-          <Text style={styles.headerTitle}>{t("Categories")}</Text>
-          <Pressable
-            onPress={() => {
-              setAdding((v) => !v);
-              setEditing(null);
-              setLabel("");
-            }}
-            hitSlop={12}
-            style={styles.headerSide}
-          >
-            <MaterialIcons
-              name={adding ? "close" : "add"}
-              size={24}
-              color={colors.accent}
-            />
-          </Pressable>
-        </View>
+        {/* No add button up here any more: adding is the reason people open
+            this screen, so it belongs in the action bar at the bottom where
+            a thumb already is. */}
+        <ScreenHeader title={t("Categories")} />
 
         <ScrollView
           contentContainerStyle={styles.body}
@@ -231,19 +216,6 @@ export default function CategoriesScreen() {
                 returnKeyType="done"
                 onSubmitEditing={onSave}
               />
-              <Pressable
-                onPress={onSave}
-                disabled={!label.trim() || busy}
-                style={[styles.addBtn, (!label.trim() || busy) && styles.disabled]}
-              >
-                {busy ? (
-                  <ActivityIndicator color={colors.canvas} size="small" />
-                ) : (
-                  <Text style={styles.addBtnText}>
-                    {editing ? t("Save") : t("Add")}
-                  </Text>
-                )}
-              </Pressable>
             </View>
           ) : null}
 
@@ -287,27 +259,44 @@ export default function CategoriesScreen() {
 
           {error ? <Text style={styles.error}>{error}</Text> : null}
 
-          <Pressable
-            onPress={onResort}
-            disabled={sorting}
-            style={[styles.resort, sorting && styles.disabled]}
-          >
-            {sorting ? (
-              <ActivityIndicator color={colors.ink} size="small" />
-            ) : (
-              <>
-                <MaterialIcons name="auto-fix-high" size={17} color={colors.ink} />
-                <Text style={styles.resortText}>{t("Sort what's left")}</Text>
-              </>
-            )}
-          </Pressable>
-
           <Text style={styles.footHint}>
             {t(
               "Tap to rename. Long-press one of your own to delete it. Changing a transaction's category teaches Orbi that shop for next time.",
             )}
           </Text>
         </ScrollView>
+
+        {/* Two actions, both within reach. Which is primary depends on what
+            the user is doing: mid-edit, saving is the only thing that
+            matters; otherwise adding is why they came. */}
+        {adding ? (
+          <ActionBar
+            primary={{
+              label: editing ? t("Save") : t("Add"),
+              onPress: onSave,
+              disabled: !label.trim(),
+              busy,
+            }}
+            secondary={{
+              label: t("Cancel"),
+              onPress: () => {
+                setAdding(false);
+                setEditing(null);
+                setLabel("");
+                Keyboard.dismiss();
+              },
+            }}
+          />
+        ) : (
+          <ActionBar
+            primary={{ label: t("New category"), onPress: () => setAdding(true) }}
+            secondary={{
+              label: t("Sort what's left"),
+              onPress: onResort,
+              busy: sorting,
+            }}
+          />
+        )}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -316,17 +305,6 @@ export default function CategoriesScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   flex: { flex: 1 },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderBottomColor: colors.line,
-    borderBottomWidth: 1,
-  },
-  headerSide: { minWidth: 40, alignItems: "center" },
-  headerTitle: { color: colors.ink, fontSize: 15, fontWeight: "600" },
   body: { padding: 16, paddingBottom: 48, gap: 8 },
   loader: { marginTop: 40 },
   form: { flexDirection: "row", gap: 10, marginBottom: 8 },
@@ -341,13 +319,6 @@ const styles = StyleSheet.create({
     borderColor: colors.line,
     backgroundColor: colors.panel,
   },
-  addBtn: {
-    justifyContent: "center",
-    paddingHorizontal: 20,
-    borderRadius: 10,
-    backgroundColor: colors.accent,
-  },
-  addBtnText: { color: colors.canvas, fontSize: 14, fontWeight: "700" },
   disabled: { opacity: 0.5 },
   row: {
     flexDirection: "row",
@@ -366,19 +337,6 @@ const styles = StyleSheet.create({
   dim: { color: colors.inkDim },
   rowNote: { color: colors.inkDim, fontSize: 10, marginTop: 2 },
   error: { color: colors.overdue, fontSize: 12, marginTop: 10 },
-  resort: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    marginTop: 18,
-    paddingVertical: 13,
-    borderRadius: 11,
-    borderWidth: 1,
-    borderColor: colors.line,
-    backgroundColor: colors.panel,
-  },
-  resortText: { color: colors.ink, fontSize: 14, fontWeight: "600" },
   footHint: {
     color: colors.inkDim,
     fontSize: 11,

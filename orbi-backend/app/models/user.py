@@ -57,6 +57,9 @@ class UserPreference(BaseModel):
     # the help and not the accountability, or the reverse.
     lead_reminders_enabled: bool = True
     chase_reminders_enabled: bool = True
+    # Which thumb reaches most comfortably. Presentation only: it mirrors
+    # where controls sit, never what any of them do.
+    handedness: str = "right"
     # IANA zone, e.g. "Europe/Lisbon". Required to interpret quiet_hours_*,
     # which are zone-less times. The client sets it from the device; the
     # background dispatcher has no request to read a zone from.

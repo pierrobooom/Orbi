@@ -25,6 +25,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { ActionBar } from "@/components/action-bar";
+import { ScreenHeader } from "@/components/screen-header";
 import { useT } from "@/i18n";
 import {
   ApiError,
@@ -193,29 +195,34 @@ export default function EntryDetailScreen() {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={styles.flex}
       >
-        <View style={styles.header}>
-          <Pressable
-            onPress={() => router.back()}
-            hitSlop={12}
-            style={styles.headerSideLeft}
-            accessibilityLabel="Close"
-          >
-            <Text style={styles.headerCloseText}>{t("Close")}</Text>
-          </Pressable>
-          <Text style={styles.headerTitle}>{t("Entry")}</Text>
-          {mode === "view" ? (
-            <Pressable
-              onPress={enterEdit}
-              hitSlop={12}
-              style={styles.headerSideRight}
-              accessibilityLabel="Edit entry"
-            >
-              <Text style={styles.editLinkText}>{t("Edit")}</Text>
-            </Pressable>
-          ) : (
-            <View style={styles.headerSideRight} />
-          )}
-        </View>
+        {/* Delete lives up here on purpose. Easy to reach and easy to press
+            by accident are the same property, and this is the one action on
+            the screen that cannot be undone. Everything reachable is at the
+            bottom. */}
+        <ScreenHeader
+          title={t("Entry")}
+          backIcon="close"
+          action={
+            mode === "view" ? (
+              <Pressable
+                onPress={onDelete}
+                disabled={busy !== null}
+                hitSlop={8}
+                accessibilityLabel="Delete entry"
+              >
+                {busy === "delete" ? (
+                  <ActivityIndicator size="small" color={colors.overdue} />
+                ) : (
+                  <MaterialIcons
+                    name="delete-outline"
+                    size={22}
+                    color={colors.overdue}
+                  />
+                )}
+              </Pressable>
+            ) : null
+          }
+        />
 
         <ScrollView
           keyboardDismissMode="on-drag"
@@ -362,42 +369,23 @@ export default function EntryDetailScreen() {
           {error ? <Text style={styles.error}>{error}</Text> : null}
         </ScrollView>
 
-        <View style={styles.footer}>
-          {mode === "view" ? (
-            <Pressable
-              onPress={onDelete}
-              disabled={busy !== null}
-              style={[styles.deleteBtn, busy && styles.btnDisabled]}
-            >
-              {busy === "delete" ? (
-                <ActivityIndicator color={colors.overdue} />
-              ) : (
-                <Text style={styles.deleteBtnText}>{t("Delete entry")}</Text>
-              )}
-            </Pressable>
-          ) : (
-            <>
-              <Pressable
-                onPress={cancelEdit}
-                disabled={busy !== null}
-                style={[styles.cancelBtn, busy && styles.btnDisabled]}
-              >
-                <Text style={styles.cancelBtnText}>{t("Cancel")}</Text>
-              </Pressable>
-              <Pressable
-                onPress={onSave}
-                disabled={busy !== null}
-                style={[styles.primaryBtn, busy && styles.btnDisabled]}
-              >
-                {busy === "save" ? (
-                  <ActivityIndicator color="white" />
-                ) : (
-                  <Text style={styles.primaryBtnText}>{t("Save changes")}</Text>
-                )}
-              </Pressable>
-            </>
-          )}
-        </View>
+        {mode === "view" ? (
+          <ActionBar primary={{ label: t("Edit"), onPress: enterEdit }} />
+        ) : (
+          <ActionBar
+            primary={{
+              label: t("Save changes"),
+              onPress: onSave,
+              busy: busy === "save",
+              disabled: busy !== null,
+            }}
+            secondary={{
+              label: t("Cancel"),
+              onPress: cancelEdit,
+              disabled: busy !== null,
+            }}
+          />
+        )}
 
         <Modal
           visible={pickingCategory}
@@ -462,20 +450,6 @@ export default function EntryDetailScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   flex: { flex: 1 },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomColor: colors.line,
-    borderBottomWidth: 1,
-  },
-  headerSideLeft: { minWidth: 60, alignItems: "flex-start" },
-  headerSideRight: { minWidth: 60, alignItems: "flex-end" },
-  headerTitle: { color: colors.ink, fontSize: 15, fontWeight: "600" },
-  headerCloseText: { color: colors.inkDim, fontSize: 14 },
-  editLinkText: { color: colors.accent, fontSize: 15, fontWeight: "600" },
   body: { paddingHorizontal: 24, paddingTop: 18, paddingBottom: 24 },
   bigAmount: { color: colors.ink, fontSize: 36, fontWeight: "700", marginBottom: 4 },
   merchant: { color: colors.ink, fontSize: 18, fontWeight: "500", marginBottom: 16 },
@@ -594,42 +568,4 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   secondaryText: { color: colors.ink, fontSize: 13, fontWeight: "600" },
-  footer: {
-    flexDirection: "row",
-    gap: 12,
-    paddingHorizontal: 24,
-    paddingVertical: 14,
-    borderTopColor: colors.line,
-    borderTopWidth: 1,
-    backgroundColor: colors.canvas,
-  },
-  primaryBtn: {
-    flex: 2,
-    backgroundColor: colors.accent,
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: "center",
-  },
-  primaryBtnText: { color: "white", fontSize: 15, fontWeight: "700" },
-  cancelBtn: {
-    flex: 1,
-    backgroundColor: "transparent",
-    borderColor: colors.line,
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: "center",
-  },
-  cancelBtnText: { color: colors.ink, fontSize: 15, fontWeight: "600" },
-  deleteBtn: {
-    flex: 1,
-    backgroundColor: "transparent",
-    borderColor: colors.overdue,
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: "center",
-  },
-  deleteBtnText: { color: colors.overdue, fontSize: 15, fontWeight: "600" },
-  btnDisabled: { opacity: 0.5 },
 });

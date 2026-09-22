@@ -26,6 +26,7 @@ import { usePushRegistration } from "@/hooks/usePushRegistration";
 // Importing the authStore here ensures supabase.auth.onAuthStateChange is
 // subscribed before any screen reads from it.
 import { useAuthStore } from "@/stores/authStore";
+import { useHandednessStore } from "@/stores/handednessStore";
 import { useLocaleStore, type UiLanguage } from "@/i18n";
 import { getMyPreferences } from "@/services/api";
 import { colors } from "@/theme/colors";
@@ -205,7 +206,15 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!session) return;
     getMyPreferences()
-      .then((p) => useLocaleStore.getState().setLanguage(p.language as UiLanguage))
+      .then((p) => {
+        useLocaleStore.getState().setLanguage(p.language as UiLanguage);
+        // Handedness rides along on the same call. It is a property of the
+        // person rather than the handset, so a reinstall or a second device
+        // should not make them find the setting again.
+        if (p.handedness === "left" || p.handedness === "right") {
+          useHandednessStore.getState().setHandedness(p.handedness);
+        }
+      })
       .catch(() => {});
   }, [session]);
 
