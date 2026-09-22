@@ -29,6 +29,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { ActionBar } from "@/components/action-bar";
+import { ScreenHeader } from "@/components/screen-header";
 import { translate, useT } from "@/i18n";
 import {
   ApiError,
@@ -235,23 +237,7 @@ export default function RecurringScreen() {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={styles.flex}
       >
-        <View style={styles.header}>
-          <Pressable onPress={() => router.back()} hitSlop={12} style={styles.headerSide}>
-            <MaterialIcons name="chevron-left" size={24} color={colors.inkDim} />
-          </Pressable>
-          <Text style={styles.headerTitle}>{t("Recurring")}</Text>
-          <Pressable
-            onPress={() => setAdding((v) => !v)}
-            hitSlop={12}
-            style={styles.headerSide}
-          >
-            <MaterialIcons
-              name={adding ? "close" : "add"}
-              size={24}
-              color={colors.accent}
-            />
-          </Pressable>
-        </View>
+        <ScreenHeader title={t("Memberships")} />
 
         <ScrollView
           contentContainerStyle={styles.body}
@@ -388,19 +374,8 @@ export default function RecurringScreen() {
                 </>
               ) : null}
 
-              <Pressable
-                onPress={onAdd}
-                disabled={!canAdd}
-                style={[styles.addBtn, !canAdd && styles.btnDisabled]}
-              >
-                {busy ? (
-                  <ActivityIndicator color={colors.canvas} />
-                ) : (
-                  <Text style={styles.addBtnText}>{t("Add rule")}</Text>
-                )}
-              </Pressable>
               <Text style={styles.hint}>
-                {t("Starts today. The first entry appears the next time Orbi updates your finances.")}
+                {t("The first entry appears the next time Orbi updates your finances.")}
               </Text>
             </View>
           ) : null}
@@ -469,6 +444,28 @@ export default function RecurringScreen() {
           ) : null}
         </ScrollView>
 
+        {adding ? (
+          <ActionBar
+            primary={{
+              label: t("Add rule"),
+              onPress: onAdd,
+              disabled: !canAdd,
+              busy,
+            }}
+            secondary={{
+              label: t("Cancel"),
+              onPress: () => {
+                setAdding(false);
+                Keyboard.dismiss();
+              },
+            }}
+          />
+        ) : (
+          <ActionBar
+            primary={{ label: t("New membership"), onPress: () => setAdding(true) }}
+          />
+        )}
+
         {/* Rendered outside the list so one picker serves every row. */}
         {editingDate ? (
           <DateTimePicker
@@ -492,17 +489,6 @@ export default function RecurringScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   flex: { flex: 1 },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderBottomColor: colors.line,
-    borderBottomWidth: 1,
-  },
-  headerSide: { minWidth: 40, alignItems: "center" },
-  headerTitle: { color: colors.ink, fontSize: 15, fontWeight: "600" },
   body: { padding: 16, paddingBottom: 48, gap: 12 },
   loader: { marginTop: 40 },
   form: {
@@ -539,15 +525,7 @@ const styles = StyleSheet.create({
   pipActive: { borderColor: colors.accent, backgroundColor: colors.accent },
   pipText: { color: colors.inkDim, fontSize: 13, fontWeight: "600" },
   pipTextActive: { color: colors.canvas },
-  addBtn: {
-    marginTop: 4,
-    paddingVertical: 13,
-    borderRadius: 10,
-    backgroundColor: colors.accent,
-    alignItems: "center",
-  },
   btnDisabled: { opacity: 0.5 },
-  addBtnText: { color: colors.canvas, fontSize: 14, fontWeight: "700" },
   hint: { color: colors.inkDim, fontSize: 11, lineHeight: 16 },
   empty: { alignItems: "center", paddingVertical: 48, gap: 10 },
   emptyTitle: { color: colors.ink, fontSize: 16, fontWeight: "700" },

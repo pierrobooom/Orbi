@@ -35,6 +35,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { ActionBar } from "@/components/action-bar";
+import { ScreenHeader } from "@/components/screen-header";
 import { translate, useT } from "@/i18n";
 import { ApiError, connectAccount } from "@/services/api";
 import { colors } from "@/theme/colors";
@@ -107,13 +109,7 @@ export default function ConnectBankScreen() {
 
   return (
     <SafeAreaView style={styles.root} edges={["top", "bottom"]}>
-      <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={12} style={styles.headerSide}>
-          <Text style={styles.headerCancel}>{t("Cancel")}</Text>
-        </Pressable>
-        <Text style={styles.headerTitle}>{t("Automatic updates")}</Text>
-        <View style={styles.headerSide} />
-      </View>
+      <ScreenHeader title={t("Automatic updates")} backIcon="close" />
 
       <ScrollView contentContainerStyle={styles.body}>
         <Text style={styles.lede}>
@@ -195,23 +191,6 @@ export default function ConnectBankScreen() {
           {t("Orbi reaches your bank through a licensed open-banking provider — the same rules every banking app follows. Your finance data is never shared with anyone.")}
         </Text>
 
-        <Pressable
-          onPress={onContinue}
-          disabled={busy || !accountId}
-          style={[styles.cta, (busy || !accountId) && styles.ctaDisabled]}
-        >
-          {busy ? (
-            <ActivityIndicator color={colors.canvas} />
-          ) : (
-            <Text style={styles.ctaText}>{institution
-                ? t("Continue to {bank}", { bank: institution })
-                : t("Continue to my bank")}</Text>
-          )}
-        </Pressable>
-
-        <Pressable onPress={() => router.back()} style={styles.secondary}>
-          <Text style={styles.secondaryText}>{t("Not now")}</Text>
-        </Pressable>
 
         {/* The honest alternative, offered rather than buried. Someone who
             does not want a standing connection should not be left feeling
@@ -220,24 +199,28 @@ export default function ConnectBankScreen() {
           {t("Prefer not to connect? You can import a statement from your bank instead — it works the same way, just manually.")}
         </Text>
       </ScrollView>
+
+      {/* Pinned rather than at the end of the explainer. It used to sit
+          below five paragraphs of consent copy, which put the one button
+          the screen exists for below the fold AND out of thumb reach on a
+          small phone. */}
+      <ActionBar
+        primary={{
+          label: institution
+            ? t("Continue to {bank}", { bank: institution })
+            : t("Continue to my bank"),
+          onPress: onContinue,
+          disabled: !accountId,
+          busy,
+        }}
+        secondary={{ label: t("Not now"), onPress: () => router.back() }}
+      />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderBottomColor: colors.line,
-    borderBottomWidth: 1,
-  },
-  headerSide: { minWidth: 64 },
-  headerTitle: { color: colors.ink, fontSize: 15, fontWeight: "600" },
-  headerCancel: { color: colors.inkDim, fontSize: 14 },
   body: { padding: 20, paddingBottom: 48 },
   lede: {
     color: colors.ink,
@@ -300,16 +283,6 @@ const styles = StyleSheet.create({
     marginTop: 16,
     marginBottom: 24,
   },
-  cta: {
-    paddingVertical: 15,
-    borderRadius: 12,
-    backgroundColor: colors.accent,
-    alignItems: "center",
-  },
-  ctaDisabled: { opacity: 0.5 },
-  ctaText: { color: colors.canvas, fontSize: 15, fontWeight: "700" },
-  secondary: { alignItems: "center", paddingVertical: 14 },
-  secondaryText: { color: colors.inkDim, fontSize: 14, fontWeight: "600" },
   altHint: {
     color: colors.inkDim,
     fontSize: 11,

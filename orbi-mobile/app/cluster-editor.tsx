@@ -37,6 +37,8 @@ import {
   deleteCluster,
   updateCluster,
 } from "@/services/api";
+import { ActionBar } from "@/components/action-bar";
+import { ScreenHeader } from "@/components/screen-header";
 import { translate, useT } from "@/i18n";
 import { useUniverseStore } from "@/stores/universeStore";
 import { colors } from "@/theme/colors";
@@ -176,37 +178,10 @@ export default function ClusterEditorScreen() {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={styles.flex}
       >
-        <View style={styles.header}>
-          <Pressable
-            onPress={() => router.back()}
-            hitSlop={12}
-            style={styles.headerSide}
-            accessibilityLabel="Close"
-          >
-            <View style={styles.headerCloseGroup}>
-              <MaterialIcons name="chevron-left" size={22} color={colors.inkDim} />
-              <Text style={styles.headerCloseText}>{t("Cancel")}</Text>
-            </View>
-          </Pressable>
-          <Text style={styles.headerTitle}>
-            {isNew ? t("New cluster") : t("Edit cluster")}
-          </Text>
-          <Pressable
-            onPress={onSave}
-            disabled={!canSave}
-            hitSlop={12}
-            style={styles.headerSide}
-            accessibilityLabel="Save cluster"
-          >
-            {busy === "save" ? (
-              <ActivityIndicator color={colors.accent} />
-            ) : (
-              <Text style={[styles.saveText, !canSave && styles.saveDisabled]}>
-                {t("Save")}
-              </Text>
-            )}
-          </Pressable>
-        </View>
+        <ScreenHeader
+          title={isNew ? t("New cluster") : t("Edit cluster")}
+          backIcon="close"
+        />
 
         <ScrollView
           keyboardDismissMode="on-drag" contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
@@ -321,6 +296,16 @@ export default function ClusterEditorScreen() {
             </>
           )}
         </ScrollView>
+
+        <ActionBar
+          primary={{
+            label: t("Save"),
+            onPress: onSave,
+            disabled: !canSave,
+            busy: busy === "save",
+          }}
+          secondary={{ label: t("Cancel"), onPress: () => router.back() }}
+        />
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -329,21 +314,6 @@ export default function ClusterEditorScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   flex: { flex: 1 },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderBottomColor: colors.line,
-    borderBottomWidth: 1,
-  },
-  headerSide: { minWidth: 72 },
-  headerTitle: { color: colors.ink, fontSize: 15, fontWeight: "600" },
-  headerCloseGroup: { flexDirection: "row", alignItems: "center", marginLeft: -6 },
-  headerCloseText: { color: colors.inkDim, fontSize: 14 },
-  saveText: { color: colors.accent, fontSize: 14, fontWeight: "700", textAlign: "right" },
-  saveDisabled: { color: colors.inkDim },
   body: { padding: 20, paddingBottom: 40 },
   label: { color: colors.inkDim, fontSize: 11, fontWeight: "700", letterSpacing: 1, textTransform: "uppercase" },
   labelSpaced: { marginTop: 24 },

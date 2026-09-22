@@ -610,4 +610,7 @@ export const ptPT: Record<string, string> = {
   "Moves buttons to the side your thumb reaches. Nothing changes what they do.":
     "Move os botões para o lado que o teu polegar alcança. Não muda o que fazem.",
   "New category": "Nova categoria",
+  // Action bars introduced with the one-handed pass.
+  "New limit": "Novo limite",
+  "New membership": "Nova subscrição",
 };

@@ -25,6 +25,7 @@ import {
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { ScreenHeader } from "@/components/screen-header";
 import { useT } from "@/i18n";
 import { ApiError, updateTask } from "@/services/api";
 import { useUniverseStore } from "@/stores/universeStore";
@@ -95,13 +96,7 @@ export default function MoveTaskScreen() {
 
   return (
     <SafeAreaView style={styles.root} edges={["top", "bottom"]}>
-      <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={12}>
-          <Text style={styles.headerCancel} numberOfLines={1}>{t("Cancel")}</Text>
-        </Pressable>
-        <Text style={styles.headerTitle}>{t("Move task")}</Text>
-        <View style={{ minWidth: 64 }} />
-      </View>
+      <ScreenHeader title={t("Move task")} backIcon="close" />
 
       <ScrollView
           keyboardDismissMode="on-drag"
@@ -142,17 +137,6 @@ export default function MoveTaskScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderBottomColor: colors.line,
-    borderBottomWidth: 1,
-  },
-  headerTitle: { color: colors.ink, fontSize: 15, fontWeight: "600" },
-  headerCancel: { color: colors.inkDim, fontSize: 14, minWidth: 64 },
   body: { padding: 24 },
   taskTitle: { color: colors.ink, fontSize: 19, fontWeight: "700" },
   label: {

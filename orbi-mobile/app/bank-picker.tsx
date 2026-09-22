@@ -35,6 +35,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { ScreenHeader } from "@/components/screen-header";
 import { useT } from "@/i18n";
 import { ApiError, listInstitutions, type Institution } from "@/services/api";
 import { colors } from "@/theme/colors";
@@ -124,13 +125,7 @@ export default function BankPickerScreen() {
 
   return (
     <SafeAreaView style={styles.root} edges={["top"]}>
-      <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={12} style={styles.headerSide}>
-          <MaterialIcons name="chevron-left" size={24} color={colors.inkDim} />
-        </Pressable>
-        <Text style={styles.headerTitle}>{t("Choose your bank")}</Text>
-        <View style={styles.headerSide} />
-      </View>
+      <ScreenHeader title={t("Choose your bank")} />
 
       <View style={styles.searchRow}>
         <MaterialIcons name="search" size={18} color={colors.inkDim} />
@@ -263,17 +258,6 @@ export default function BankPickerScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderBottomColor: colors.line,
-    borderBottomWidth: 1,
-  },
-  headerSide: { minWidth: 40, alignItems: "center" },
-  headerTitle: { color: colors.ink, fontSize: 15, fontWeight: "600" },
   searchRow: {
     flexDirection: "row",
     alignItems: "center",

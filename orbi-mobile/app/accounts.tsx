@@ -33,6 +33,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { ActionBar } from "@/components/action-bar";
+import { ScreenHeader } from "@/components/screen-header";
 import { translate, useT } from "@/i18n";
 import {
   ApiError,
@@ -343,20 +345,7 @@ export default function AccountsScreen() {
 
   return (
     <SafeAreaView style={styles.root} edges={["top", "bottom"]}>
-      <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={12} style={styles.headerSide}>
-          <MaterialIcons name="chevron-left" size={24} color={colors.inkDim} />
-        </Pressable>
-        <Text style={styles.headerTitle}>{t("Accounts")}</Text>
-        <Pressable
-          onPress={() => router.push("/account-editor?id=new" as Href)}
-          hitSlop={12}
-          style={styles.headerSide}
-          accessibilityLabel="Add account"
-        >
-          <MaterialIcons name="add" size={24} color={colors.accent} />
-        </Pressable>
-      </View>
+      <ScreenHeader title={t("Accounts")} />
 
       <ScrollView
         contentContainerStyle={styles.body}
@@ -791,23 +780,19 @@ export default function AccountsScreen() {
         {error ? <Text style={styles.error}>{error}</Text> : null}
         <Text style={styles.footHint}>{t("Long-press an account to delete it.")}</Text>
       </ScrollView>
+
+      <ActionBar
+        primary={{
+          label: t("New account"),
+          onPress: () => router.push("/account-editor?id=new" as Href),
+        }}
+      />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderBottomColor: colors.line,
-    borderBottomWidth: 1,
-  },
-  headerSide: { minWidth: 40, alignItems: "center" },
-  headerTitle: { color: colors.ink, fontSize: 15, fontWeight: "600" },
   body: { padding: 16, paddingBottom: 48, gap: 12 },
   loader: { marginTop: 40 },
   empty: { alignItems: "center", paddingVertical: 48, gap: 10 },

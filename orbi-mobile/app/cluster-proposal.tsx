@@ -27,6 +27,7 @@ import {
   proposeOrganisation,
   type ProposalAction,
 } from "@/services/api";
+import { ScreenHeader } from "@/components/screen-header";
 import { translate, useT } from "@/i18n";
 import { useUniverseStore } from "@/stores/universeStore";
 import { colors } from "@/theme/colors";
@@ -113,16 +114,7 @@ export default function ClusterProposalScreen() {
 
   return (
     <SafeAreaView style={styles.root} edges={["top", "bottom"]}>
-      <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={12} disabled={applying}>
-          <View style={styles.headerCloseGroup}>
-            <MaterialIcons name="chevron-left" size={22} color={colors.inkDim} />
-            <Text style={styles.headerCloseText}>{t("Close")}</Text>
-          </View>
-        </Pressable>
-        <Text style={styles.headerTitle}>{t("Organise clusters")}</Text>
-        <View style={{ width: 90 }} />
-      </View>
+      <ScreenHeader title={t("Organise clusters")} />
 
       <ScrollView
           keyboardDismissMode="on-drag"
@@ -287,18 +279,6 @@ function ActionRow({
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderBottomColor: colors.line,
-    borderBottomWidth: 1,
-  },
-  headerTitle: { color: colors.ink, fontSize: 15, fontWeight: "600" },
-  headerCloseGroup: { flexDirection: "row", alignItems: "center", marginLeft: -6 },
-  headerCloseText: { color: colors.inkDim, fontSize: 14 },
   body: { padding: 16, paddingBottom: 40 },
   intro: { color: colors.inkDim, fontSize: 12, marginBottom: 14, lineHeight: 17 },
   center: { alignItems: "center", justifyContent: "center", paddingVertical: 60 },

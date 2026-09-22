@@ -23,6 +23,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Dashboard } from "@/components/finance/Dashboard";
+import { ScreenHeader } from "@/components/screen-header";
 import { useT } from "@/i18n";
 import {
   getFinanceDashboard,
@@ -77,13 +78,7 @@ export default function SpendingScreen() {
 
   return (
     <SafeAreaView style={styles.root} edges={["top"]}>
-      <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={12} style={styles.headerSide}>
-          <MaterialIcons name="chevron-left" size={24} color={colors.inkDim} />
-        </Pressable>
-        <Text style={styles.headerTitle}>{t("Dashboard")}</Text>
-        <View style={styles.headerSide} />
-      </View>
+      <ScreenHeader title={t("Dashboard")} />
 
       {accounts.length > 1 ? (
         <ScrollView
@@ -139,17 +134,6 @@ export default function SpendingScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderBottomColor: colors.line,
-    borderBottomWidth: 1,
-  },
-  headerSide: { minWidth: 40, alignItems: "center" },
-  headerTitle: { color: colors.ink, fontSize: 15, fontWeight: "600" },
   filterRow: { paddingHorizontal: 18, paddingVertical: 12, gap: 8 },
   filterPip: {
     paddingVertical: 7,

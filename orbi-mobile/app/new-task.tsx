@@ -18,6 +18,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { ScreenHeader } from "@/components/screen-header";
 import { useT } from "@/i18n";
 import { ApiError, createTask } from "@/services/api";
 import { useUniverseStore } from "@/stores/universeStore";
@@ -116,13 +117,7 @@ export default function NewTaskScreen() {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={styles.flex}
       >
-        <View style={styles.header}>
-          <Pressable onPress={() => router.back()} hitSlop={12}>
-            <Text style={styles.headerCancel} numberOfLines={1}>{t("Cancel")}</Text>
-          </Pressable>
-          <Text style={styles.headerTitle}>{t("New task")}</Text>
-          <View style={{ minWidth: 64 }} />
-        </View>
+        <ScreenHeader title={t("New task")} backIcon="close" />
 
         <ScrollView
           keyboardDismissMode="on-drag"
@@ -276,17 +271,6 @@ function ClusterChip({ label, selected, color, onPress }: ChipProps) {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   flex: { flex: 1 },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderBottomColor: colors.line,
-    borderBottomWidth: 1,
-  },
-  headerTitle: { color: colors.ink, fontSize: 15, fontWeight: "600" },
-  headerCancel: { color: colors.inkDim, fontSize: 14, minWidth: 64 },
   scrollContent: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 40 },
   titleInput: {
     color: colors.ink,

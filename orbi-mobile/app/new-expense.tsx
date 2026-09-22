@@ -24,6 +24,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { ActionBar } from "@/components/action-bar";
+import { ScreenHeader } from "@/components/screen-header";
 import { useT } from "@/i18n";
 import { ApiError, createFinanceEntry } from "@/services/api";
 import { useFinanceStore } from "@/stores/financeStore";
@@ -86,13 +88,7 @@ export default function NewExpenseScreen() {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={styles.flex}
       >
-        <View style={styles.header}>
-          <Pressable onPress={() => router.back()} hitSlop={12}>
-            <Text style={styles.headerCancel} numberOfLines={1}>{t("Cancel")}</Text>
-          </Pressable>
-          <Text style={styles.headerTitle}>{t("New expense")}</Text>
-          <View style={{ minWidth: 64 }} />
-        </View>
+        <ScreenHeader title={t("New expense")} backIcon="close" />
 
         <ScrollView
           keyboardDismissMode="on-drag"
@@ -171,19 +167,14 @@ export default function NewExpenseScreen() {
           {error ? <Text style={styles.error}>{error}</Text> : null}
         </ScrollView>
 
-        <View style={styles.footer}>
-          <Pressable
-            onPress={onSubmit}
-            disabled={!canSubmit}
-            style={[styles.primary, !canSubmit && styles.primaryDisabled]}
-          >
-            {submitting ? (
-              <ActivityIndicator color="white" />
-            ) : (
-              <Text style={styles.primaryText}>{t("Log expense")}</Text>
-            )}
-          </Pressable>
-        </View>
+        <ActionBar
+          primary={{
+            label: t("Log expense"),
+            onPress: onSubmit,
+            disabled: !canSubmit,
+            busy: submitting,
+          }}
+        />
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -192,17 +183,6 @@ export default function NewExpenseScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   flex: { flex: 1 },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderBottomColor: colors.line,
-    borderBottomWidth: 1,
-  },
-  headerTitle: { color: colors.ink, fontSize: 15, fontWeight: "600" },
-  headerCancel: { color: colors.inkDim, fontSize: 14, minWidth: 64 },
   scrollContent: { paddingHorizontal: 24, paddingTop: 20, paddingBottom: 40 },
   label: {
     color: colors.inkDim,
@@ -248,13 +228,4 @@ const styles = StyleSheet.create({
   doneRow: { alignSelf: "flex-end", paddingVertical: 8, paddingHorizontal: 12 },
   doneText: { color: colors.accent, fontSize: 14, fontWeight: "600" },
   error: { color: colors.overdue, fontSize: 13, marginTop: 14 },
-  footer: { paddingHorizontal: 24, paddingVertical: 12 },
-  primary: {
-    backgroundColor: colors.accent,
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: "center",
-  },
-  primaryDisabled: { opacity: 0.5 },
-  primaryText: { color: "white", fontSize: 15, fontWeight: "700" },
 });

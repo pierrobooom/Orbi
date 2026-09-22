@@ -35,6 +35,7 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 
+import { ScreenHeader } from "@/components/screen-header";
 import { translate, useT } from "@/i18n";
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
 import {
@@ -325,36 +326,30 @@ export default function TaskDetailScreen() {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={styles.flex}
       >
-        <View style={styles.header}>
-          <Pressable
-            onPress={() => router.back()}
-            hitSlop={12}
-            style={styles.headerSideLeft}
-            accessibilityLabel="Close"
-          >
-            <View style={styles.headerCloseGroup}>
-              <MaterialIcons name="chevron-left" size={22} color={colors.inkDim} />
-              <Text style={styles.headerCloseText}>{t("Close")}</Text>
-            </View>
-          </Pressable>
-          <Text style={styles.headerTitle}>{t("Task")}</Text>
-          {mode === "view" ? (
-            <Pressable
-              onPress={enterEdit}
-              hitSlop={12}
-              style={styles.headerSideRight}
-              accessibilityLabel="Edit task"
-            >
-              <Text style={styles.editLinkText}>{t("Edit")}</Text>
-            </Pressable>
-          ) : (
-            // In edit mode the mic moved to its own circular button
-            // centered above the action buttons (see footer block).
-            // We leave a sized spacer here so the header title stays
-            // visually centered.
-            <View style={styles.headerSideRight} />
-          )}
-        </View>
+        <ScreenHeader
+          title={t("Task")}
+          backIcon="close"
+          action={
+            mode === "view" ? (
+              <Pressable
+                onPress={onDelete}
+                disabled={busy !== null}
+                hitSlop={8}
+                accessibilityLabel="Delete task"
+              >
+                {busy === "delete" ? (
+                  <ActivityIndicator size="small" color={colors.overdue} />
+                ) : (
+                  <MaterialIcons
+                    name="delete-outline"
+                    size={22}
+                    color={colors.overdue}
+                  />
+                )}
+              </Pressable>
+            ) : null
+          }
+        />
 
         <ScrollView
           keyboardDismissMode="on-drag"
@@ -543,17 +538,12 @@ export default function TaskDetailScreen() {
           {mode === "view" ? (
             <>
               <Pressable
-                onPress={onDelete}
+                onPress={enterEdit}
                 disabled={busy !== null}
-                style={[styles.deleteIconBtn, busy && styles.btnDisabled]}
-                accessibilityLabel="Delete task"
-                hitSlop={6}
+                style={[styles.editBtn, busy && styles.btnDisabled]}
+                accessibilityLabel="Edit task"
               >
-                {busy === "delete" ? (
-                  <ActivityIndicator color={colors.overdue} />
-                ) : (
-                  <MaterialIcons name="delete-outline" size={26} color={colors.overdue} />
-                )}
+                <Text style={styles.editBtnText}>{t("Edit")}</Text>
               </Pressable>
               {isCompleted ? (
                 <Pressable
@@ -642,21 +632,6 @@ function ClusterChip({ label, selected, color, onPress }: ChipProps) {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   flex: { flex: 1 },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomColor: colors.line,
-    borderBottomWidth: 1,
-  },
-  headerSideLeft: { minWidth: 90, alignItems: "flex-start" },
-  headerSideRight: { minWidth: 60, alignItems: "flex-end" },
-  headerTitle: { color: colors.ink, fontSize: 15, fontWeight: "600" },
-  headerCloseGroup: { flexDirection: "row", alignItems: "center", marginLeft: -6 },
-  headerCloseText: { color: colors.inkDim, fontSize: 14 },
-  editLinkText: { color: colors.accent, fontSize: 15, fontWeight: "600" },
   micButton: { justifyContent: "center", alignItems: "center", minHeight: 28 },
   micButtonActive: { transform: [{ scale: 1.15 }] },
   micButtonBusy: { opacity: 0.6 },
@@ -832,6 +807,17 @@ const styles = StyleSheet.create({
   },
   holdBtnText: { color: colors.ink, fontSize: 15, fontWeight: "700" },
   // Delete bin — small circular button, accent of overdue color.
+  editBtn: {
+    height: 52,
+    paddingHorizontal: 20,
+    borderRadius: 13,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.panel,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  editBtnText: { color: colors.ink, fontSize: 15, fontWeight: "600" },
   deleteIconBtn: {
     width: 50,
     height: 50,

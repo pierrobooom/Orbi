@@ -30,6 +30,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { ScreenHeader } from "@/components/screen-header";
 import { useT } from "@/i18n";
 import {
   dismissInsight,
@@ -108,15 +109,17 @@ export default function InsightsScreen() {
 
   return (
     <SafeAreaView style={styles.root} edges={["top"]}>
-      <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={12} style={styles.headerSide}>
-          <MaterialIcons name="chevron-left" size={24} color={colors.inkDim} />
-        </Pressable>
-        <Text style={styles.headerTitle}>{t("Insights")}</Text>
-        <Pressable onPress={onRefresh} hitSlop={12} style={styles.headerSide}>
-          <MaterialIcons name="refresh" size={20} color={colors.inkDim} />
-        </Pressable>
-      </View>
+      {/* Refresh stays in the header: pull-to-refresh already covers the
+          reachable path, so this is the redundant copy for people who don't
+          think to pull. */}
+      <ScreenHeader
+        title={t("Insights")}
+        action={
+          <Pressable onPress={onRefresh} hitSlop={10} accessibilityLabel="Refresh">
+            <MaterialIcons name="refresh" size={20} color={colors.inkDim} />
+          </Pressable>
+        }
+      />
 
       <ScrollView
         contentContainerStyle={styles.body}
@@ -197,17 +200,6 @@ export default function InsightsScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderBottomColor: colors.line,
-    borderBottomWidth: 1,
-  },
-  headerSide: { minWidth: 40, alignItems: "center" },
-  headerTitle: { color: colors.ink, fontSize: 15, fontWeight: "600" },
   body: { padding: 16, paddingBottom: 48, gap: 10 },
   loader: { marginTop: 40 },
   card: {

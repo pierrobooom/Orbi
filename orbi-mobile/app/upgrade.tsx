@@ -18,6 +18,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { ScreenHeader } from "@/components/screen-header";
 import { translate, useT } from "@/i18n";
 import { registerPushDevice } from "@/hooks/usePushRegistration";
 import { ApiError, sendTestPush } from "@/services/api";
@@ -115,13 +116,7 @@ export default function UpgradeScreen() {
 
   return (
     <SafeAreaView style={styles.root} edges={["top", "bottom"]}>
-      <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={12}>
-          <Text style={styles.headerCancel} numberOfLines={1}>{t("Close")}</Text>
-        </Pressable>
-        <Text style={styles.headerTitle}>{t("Your plan")}</Text>
-        <View style={{ minWidth: 64 }} />
-      </View>
+      <ScreenHeader title={t("Your plan")} backIcon="close" />
 
       <ScrollView
           keyboardDismissMode="on-drag"
@@ -206,17 +201,6 @@ export default function UpgradeScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderBottomColor: colors.line,
-    borderBottomWidth: 1,
-  },
-  headerTitle: { color: colors.ink, fontSize: 15, fontWeight: "600" },
-  headerCancel: { color: colors.inkDim, fontSize: 14, minWidth: 64 },
   scroll: { padding: 20, paddingBottom: 60 },
   intro: { color: colors.inkDim, fontSize: 14, marginBottom: 18 },
   card: {

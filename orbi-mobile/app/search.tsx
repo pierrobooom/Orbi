@@ -21,6 +21,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { ScreenHeader } from "@/components/screen-header";
 import { useT } from "@/i18n";
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
 import { ApiError, searchTasks, transcribeAudio } from "@/services/api";
@@ -100,21 +101,7 @@ export default function SearchScreen() {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={styles.flex}
       >
-        <View style={styles.header}>
-          <Pressable
-            onPress={() => router.back()}
-            hitSlop={12}
-            style={styles.headerSide}
-            accessibilityLabel="Close"
-          >
-            <View style={styles.headerCloseGroup}>
-              <MaterialIcons name="chevron-left" size={22} color={colors.inkDim} />
-              <Text style={styles.headerCloseText}>{t("Close")}</Text>
-            </View>
-          </Pressable>
-          <Text style={styles.headerTitle}>{t("Search")}</Text>
-          <View style={styles.headerSide} />
-        </View>
+        <ScreenHeader title={t("Search")} />
 
         <View style={styles.body}>
           <Text style={styles.label}>{t("What are you looking for?")}</Text>
@@ -186,19 +173,6 @@ export default function SearchScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   flex: { flex: 1 },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderBottomColor: colors.line,
-    borderBottomWidth: 1,
-  },
-  headerSide: { minWidth: 72 },
-  headerTitle: { color: colors.ink, fontSize: 15, fontWeight: "600" },
-  headerCloseGroup: { flexDirection: "row", alignItems: "center", marginLeft: -6 },
-  headerCloseText: { color: colors.inkDim, fontSize: 14 },
   body: { padding: 20 },
   label: { color: colors.inkDim, fontSize: 11, fontWeight: "700", letterSpacing: 1, textTransform: "uppercase" },
   input: {

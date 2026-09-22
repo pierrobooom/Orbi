@@ -35,6 +35,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { ActionBar } from "@/components/action-bar";
+import { ScreenHeader } from "@/components/screen-header";
 import { translate, useT } from "@/i18n";
 import {
   ApiError,
@@ -176,24 +178,7 @@ export default function LimitsScreen() {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={styles.flex}
       >
-        <View style={styles.header}>
-          <Pressable onPress={() => router.back()} hitSlop={12} style={styles.headerSide}>
-            <MaterialIcons name="chevron-left" size={24} color={colors.inkDim} />
-          </Pressable>
-          <Text style={styles.headerTitle}>{t("Spending limits")}</Text>
-          <Pressable
-            onPress={() => setAdding((v) => !v)}
-            hitSlop={12}
-            style={styles.headerSide}
-            disabled={available.length === 0}
-          >
-            <MaterialIcons
-              name={adding ? "close" : "add"}
-              size={24}
-              color={available.length === 0 ? colors.line : colors.accent}
-            />
-          </Pressable>
-        </View>
+        <ScreenHeader title={t("Spending limits")} />
 
         <ScrollView
           contentContainerStyle={styles.body}
@@ -233,17 +218,6 @@ export default function LimitsScreen() {
                 autoFocus
               />
 
-              <Pressable
-                onPress={onAdd}
-                disabled={!canAdd}
-                style={[styles.addBtn, !canAdd && styles.btnDisabled]}
-              >
-                {busy ? (
-                  <ActivityIndicator color={colors.canvas} />
-                ) : (
-                  <Text style={styles.addBtnText}>{t("Set limit")}</Text>
-                )}
-              </Pressable>
               <Text style={styles.hint}>
                 {t("You'll be told once when you reach 80%, and once if you go over. Never more than that.")}
               </Text>
@@ -319,6 +293,35 @@ export default function LimitsScreen() {
             <Text style={styles.footHint}>{t("Long-press a limit to remove it.")}</Text>
           ) : null}
         </ScrollView>
+
+        {adding ? (
+          <ActionBar
+            primary={{
+              label: t("Set limit"),
+              onPress: onAdd,
+              disabled: !canAdd,
+              busy,
+            }}
+            secondary={{
+              label: t("Cancel"),
+              onPress: () => {
+                setAdding(false);
+                Keyboard.dismiss();
+              },
+            }}
+          />
+        ) : (
+          <ActionBar
+            primary={{
+              label: t("New limit"),
+              onPress: () => setAdding(true),
+              // Every category already has one. Disabled rather than hidden:
+              // a button that vanishes reads as a bug, where a dimmed one
+              // reads as "nothing left to add".
+              disabled: available.length === 0,
+            }}
+          />
+        )}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -327,17 +330,6 @@ export default function LimitsScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   flex: { flex: 1 },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderBottomColor: colors.line,
-    borderBottomWidth: 1,
-  },
-  headerSide: { minWidth: 40, alignItems: "center" },
-  headerTitle: { color: colors.ink, fontSize: 15, fontWeight: "600" },
   body: { padding: 16, paddingBottom: 48, gap: 12 },
   loader: { marginTop: 40 },
   form: {
@@ -372,15 +364,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontVariant: ["tabular-nums"],
   },
-  addBtn: {
-    marginTop: 4,
-    paddingVertical: 13,
-    borderRadius: 10,
-    backgroundColor: colors.accent,
-    alignItems: "center",
-  },
   btnDisabled: { opacity: 0.5 },
-  addBtnText: { color: colors.canvas, fontSize: 14, fontWeight: "700" },
   hint: { color: colors.inkDim, fontSize: 11, lineHeight: 16 },
   empty: { alignItems: "center", paddingVertical: 48, gap: 10 },
   emptyTitle: { color: colors.ink, fontSize: 16, fontWeight: "700" },

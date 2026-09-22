@@ -41,6 +41,7 @@ import {
 } from "@/services/api";
 import { TIER_DISPLAY } from "@/services/tierGate";
 import { useAuthStore } from "@/stores/authStore";
+import { ScreenHeader } from "@/components/screen-header";
 import { useLocaleStore, useT, type UiLanguage, translate } from "@/i18n";
 import {
   useHandednessStore,
@@ -340,13 +341,7 @@ export default function SettingsScreen() {
 
   return (
     <SafeAreaView style={styles.root} edges={["top", "bottom"]}>
-      <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={12}>
-          <Text style={styles.headerCancel} numberOfLines={1}>{t("Done")}</Text>
-        </Pressable>
-        <Text style={styles.headerTitle}>{t("Settings")}</Text>
-        <View style={{ minWidth: 64 }} />
-      </View>
+      <ScreenHeader title={t("Settings")} backIcon="close" />
 
       <ScrollView
           keyboardDismissMode="on-drag"
@@ -742,17 +737,6 @@ function Row({ label, value }: { label: string; value: string }) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderBottomColor: colors.line,
-    borderBottomWidth: 1,
-  },
-  headerTitle: { color: colors.ink, fontSize: 15, fontWeight: "600" },
-  headerCancel: { color: colors.accent, fontSize: 14, fontWeight: "600", minWidth: 64 },
   body: { padding: 20, paddingBottom: 60 },
   section: { marginBottom: 22 },
   languageRow: {

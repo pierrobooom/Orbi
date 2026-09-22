@@ -33,6 +33,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { ActionBar } from "@/components/action-bar";
+import { ScreenHeader } from "@/components/screen-header";
 import { translate, useT } from "@/i18n";
 import {
   ApiError,
@@ -150,28 +152,10 @@ export default function AccountEditorScreen() {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={styles.flex}
       >
-        <View style={styles.header}>
-          <Pressable onPress={() => router.back()} hitSlop={12} style={styles.headerSide}>
-            <Text style={styles.headerCancel}>{t("Cancel")}</Text>
-          </Pressable>
-          <Text style={styles.headerTitle}>
-            {isNew ? t("New account") : t("Edit account")}
-          </Text>
-          <Pressable
-            onPress={onSave}
-            disabled={!canSave}
-            hitSlop={12}
-            style={styles.headerSide}
-          >
-            {busy ? (
-              <ActivityIndicator color={colors.accent} />
-            ) : (
-              <Text style={[styles.saveText, !canSave && styles.saveDisabled]}>
-                {t("Save")}
-              </Text>
-            )}
-          </Pressable>
-        </View>
+        <ScreenHeader
+          title={isNew ? t("New account") : t("Edit account")}
+          backIcon="close"
+        />
 
         {loading ? (
           <ActivityIndicator color={colors.accent} style={styles.loader} />
@@ -309,6 +293,11 @@ export default function AccountEditorScreen() {
             {error ? <Text style={styles.error}>{error}</Text> : null}
           </ScrollView>
         )}
+
+        <ActionBar
+          primary={{ label: t("Save"), onPress: onSave, disabled: !canSave, busy }}
+          secondary={{ label: t("Cancel"), onPress: () => router.back() }}
+        />
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -317,20 +306,6 @@ export default function AccountEditorScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   flex: { flex: 1 },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderBottomColor: colors.line,
-    borderBottomWidth: 1,
-  },
-  headerSide: { minWidth: 64 },
-  headerTitle: { color: colors.ink, fontSize: 15, fontWeight: "600" },
-  headerCancel: { color: colors.inkDim, fontSize: 14 },
-  saveText: { color: colors.accent, fontSize: 14, fontWeight: "700", textAlign: "right" },
-  saveDisabled: { color: colors.inkDim },
   loader: { marginTop: 40 },
   body: { padding: 20, paddingBottom: 60 },
   label: { color: colors.ink, fontSize: 13, fontWeight: "600", marginBottom: 8 },
