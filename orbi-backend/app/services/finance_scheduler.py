@@ -25,6 +25,7 @@ from app.services import recurring
 from app.services.bank_sync import sync_due_accounts
 from app.services.budget_alerts import run_budget_alerts
 from app.services.connection_alerts import run_connection_alerts
+from app.services import membership_alerts
 
 logger = logging.getLogger(__name__)
 
@@ -67,10 +68,25 @@ async def materialise_recurring(today: date | None = None) -> dict:
                 patch = {"next_run_on": next_run.isoformat()}
             if occurrences:
                 patch["last_run_on"] = occurrences[-1].on.isoformat()
+                # A fresh occurrence resets the warning ladder: next month's
+                # renewal has had nothing said about it yet.
+                patch["notified_stage"] = None
+                patch["notified_for"] = None
 
             await accounts_db.update_recurring(
                 rule["id"], rule["owner_id"], patch
             )
+
+            # Said only once something was actually written. "This renewed"
+            # is a receipt, and a receipt for an entry that did not appear
+            # would be a lie about the user's money.
+            if occurrences:
+                try:
+                    await membership_alerts.notify_renewed(rule)
+                except Exception as exc:  # noqa: BLE001 — a push must not undo a write
+                    logger.warning(
+                        "Renewal notice failed for %s: %s", rule.get("id"), exc
+                    )
         except Exception as exc:  # noqa: BLE001 — one rule must not stop the rest
             logger.error("Recurring rule %s failed: %s", rule.get("id"), exc)
 
@@ -101,11 +117,21 @@ async def run_once(now: datetime | None = None) -> dict:
         logger.error("Connection alerts failed: %s", exc)
         connection_result = {"checked": 0, "notified": 0}
 
+    # Renewal warnings run last, after materialisation has advanced any rule
+    # that fired today — otherwise a rule that just renewed would still look
+    # like it renews in zero days.
+    try:
+        membership_result = await membership_alerts.run_membership_alerts(now)
+    except Exception as exc:  # noqa: BLE001 — alerts must not break the tick
+        logger.error("Membership alerts failed: %s", exc)
+        membership_result = {"checked": 0, "notified": 0}
+
     return {
         "recurring": recurring_result,
         "bank_sync": sync_result,
         "budgets": budget_result,
         "connections": connection_result,
+        "memberships": membership_result,
     }
 
 
@@ -121,6 +147,7 @@ async def run_forever() -> None:
                 or result["bank_sync"]["imported"]
                 or result["budgets"]["notified"]
                 or result["connections"]["notified"]
+                or result["memberships"]["notified"]
             ):
                 logger.info("Finance tick: %s", result)
         except asyncio.CancelledError:

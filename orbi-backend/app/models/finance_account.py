@@ -91,6 +91,9 @@ class RecurringTransaction(BaseModel):
     last_run_on: Optional[date] = None
     end_on: Optional[date] = None
     active: bool = True
+    # Warn before this renews. On by default: an unwanted renewal costs far
+    # more than one notification the user then switches off.
+    notify_enabled: bool = True
 
 
 class RecurringCreate(BaseModel):
@@ -110,6 +113,10 @@ class RecurringCreate(BaseModel):
 
 
 class RecurringUpdate(BaseModel):
+    # Whether to warn before this renews. Separate from `active`: a rule can
+    # be live and silent (rent, which nobody wants four reminders about) or
+    # live and loud (a gym you might cancel).
+    notify_enabled: Optional[bool] = None
     account_id: Optional[UUID] = None
     merchant: Optional[str] = Field(default=None, min_length=1, max_length=120)
     category: Optional[str] = None

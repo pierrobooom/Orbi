@@ -191,6 +191,31 @@ export default function RecurringScreen() {
     }
   };
 
+  /** Warn before this renews, or stay quiet about it.
+   *
+   * Deliberately not the same switch as `active`. Rent is live and silent —
+   * nobody wants four reminders about rent. A gym is live and loud, because
+   * it is the kind you might want to stop. Only the user knows which is
+   * which, so pausing a rule and silencing it have to be separate.
+   */
+  const onToggleNotify = async (rule: RecurringTransaction) => {
+    setRules((current) =>
+      (current ?? []).map((r) =>
+        r.id === rule.id ? { ...r, notify_enabled: !r.notify_enabled } : r,
+      ),
+    );
+    try {
+      await updateRecurring(rule.id, { notify_enabled: !rule.notify_enabled });
+    } catch (e) {
+      setRules((current) =>
+        (current ?? []).map((r) =>
+          r.id === rule.id ? { ...r, notify_enabled: rule.notify_enabled } : r,
+        ),
+      );
+      Alert.alert(translate("Could not save"), e instanceof ApiError ? e.message : String(e));
+    }
+  };
+
   const onToggleActive = async (rule: RecurringTransaction) => {
     // Optimistic: the switch animates now and reverts if the save fails.
     setRules((current) =>
@@ -431,6 +456,38 @@ export default function RecurringScreen() {
                     </Text>
                     <MaterialIcons name="edit-calendar" size={14} color={colors.accent} />
                   </Pressable>
+                ) : null}
+                {rule.active ? (
+                  <Pressable
+                    onPress={() => onToggleNotify(rule)}
+                    hitSlop={10}
+                    style={styles.notifyRow}
+                    accessibilityLabel={
+                      rule.notify_enabled
+                        ? "Turn off renewal reminders"
+                        : "Turn on renewal reminders"
+                    }
+                  >
+                    <MaterialIcons
+                      name={
+                        rule.notify_enabled
+                          ? "notifications-active"
+                          : "notifications-off"
+                      }
+                      size={14}
+                      color={rule.notify_enabled ? colors.accent : colors.inkDim}
+                    />
+                    <Text
+                      style={[
+                        styles.notifyText,
+                        rule.notify_enabled && styles.notifyTextOn,
+                      ]}
+                    >
+                      {rule.notify_enabled
+                        ? t("Warns before it renews")
+                        : t("No renewal warning")}
+                    </Text>
+                  </Pressable>
                 ) : (
                   <Text style={styles.cardNext}>{t("Paused")}</Text>
                 )}
@@ -568,6 +625,9 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   cardMeta: { color: colors.inkDim, fontSize: 12, flexShrink: 1 },
+  notifyRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 6 },
+  notifyText: { color: colors.inkDim, fontSize: 11 },
+  notifyTextOn: { color: colors.accent, fontWeight: "600" },
   nextRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 6 },
   dateRow: { alignItems: "flex-start", marginBottom: 4 },
   dateBtn: {

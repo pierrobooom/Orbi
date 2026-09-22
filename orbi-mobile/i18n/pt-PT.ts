@@ -614,4 +614,7 @@ export const ptPT: Record<string, string> = {
   "New limit": "Novo limite",
   "New membership": "Nova subscrição",
   "Spoken": "Falado",
+  // Membership renewal warnings.
+  "Warns before it renews": "Avisa antes de renovar",
+  "No renewal warning": "Sem aviso de renovação",
 };

@@ -417,6 +417,10 @@ export interface RecurringTransaction {
   last_run_on: string | null;
   end_on: string | null;
   active: boolean;
+  /** Warn before this renews — 4 days out, 2, 1, and a receipt on the day.
+   * Separate from `active`: rent is live and silent, a gym is live and
+   * loud, and only the user knows which is which. */
+  notify_enabled: boolean;
 }
 
 export interface CreateRecurringInput {
@@ -452,7 +456,10 @@ export async function createRecurring(
 
 export async function updateRecurring(
   id: string,
-  patch: Partial<CreateRecurringInput> & { active?: boolean },
+  patch: Partial<CreateRecurringInput> & {
+    active?: boolean;
+    notify_enabled?: boolean;
+  },
 ): Promise<RecurringTransaction> {
   const res = await authFetch(`${V1}/finance/recurring/${id}`, {
     method: "PATCH",

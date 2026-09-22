@@ -9,6 +9,16 @@ import { HapticTab } from "@/components/haptic-tab";
 import { useT } from "@/i18n";
 import { colors } from "@/theme/colors";
 
+// How wide each tab's touch target is, and therefore how tightly the four sit
+// together. Tabs default to sharing the full width equally, which on a modern
+// phone puts the outer two near the corners — the two hardest places for a
+// thumb to reach without a regrip.
+//
+// TO RESTORE THE ORIGINAL SPREAD: delete tabBarItemStyle and the
+// justifyContent line below, or `git checkout tabbar-full-width -- app/(tabs)/_layout.tsx`.
+// The tag exists for exactly that.
+const TAB_WIDTH = 76;
+
 export default function TabLayout() {
   const t = useT();
   return (
@@ -18,9 +28,13 @@ export default function TabLayout() {
         tabBarButton: HapticTab,
         tabBarActiveTintColor: colors.accent,
         tabBarInactiveTintColor: colors.inkDim,
+        // flex:0 stops each item stretching to fill its share, so the row
+        // collapses to its natural width and centres.
+        tabBarItemStyle: { flex: 0, width: TAB_WIDTH },
         tabBarStyle: {
           backgroundColor: colors.bg,
           borderTopColor: colors.line,
+          justifyContent: "center",
         },
       }}>
       <Tabs.Screen
