@@ -677,6 +677,38 @@ export default function AccountsScreen() {
                   }
 
                   if (!provider?.automatic_import) return null;
+
+                  // Not yet switched on, or not on this plan. Said as a line
+                  // of text rather than a button, because a button that
+                  // always refuses is a worse experience than no button —
+                  // and the statement-import route directly underneath is
+                  // genuinely the same data by another road.
+                  if (!provider.can_connect) {
+                    return (
+                      <View style={styles.gateRow}>
+                        <MaterialIcons
+                          name={
+                            provider.gate === "upgrade" ? "lock-outline" : "schedule"
+                          }
+                          size={14}
+                          color={colors.inkDim}
+                        />
+                        <Text style={styles.gateText}>
+                          {provider.gate === "upgrade"
+                            ? t("Automatic sync is part of Pro")
+                            : provider.gate === "limit"
+                              ? t("Account limit reached on your plan")
+                              : t("Automatic sync — coming soon")}
+                        </Text>
+                        {provider.gate === "upgrade" ? (
+                          <Pressable onPress={() => router.push("/upgrade" as Href)}>
+                            <Text style={styles.resumeText}>{t("See plans")}</Text>
+                          </Pressable>
+                        ) : null}
+                      </View>
+                    );
+                  }
+
                   return (
                     <Pressable
                       onPress={() => onConnect(row.account)}
@@ -872,6 +904,16 @@ const styles = StyleSheet.create({
   connectText: { color: colors.inkDim, fontSize: 11, flex: 1 },
   disconnectText: { color: colors.overdue, fontSize: 11, fontWeight: "600" },
   resumeText: { color: colors.accent, fontSize: 11, fontWeight: "700" },
+  gateRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    marginTop: 4,
+    paddingTop: 10,
+    borderTopColor: colors.line,
+    borderTopWidth: 1,
+  },
+  gateText: { color: colors.inkDim, fontSize: 11, flex: 1 },
   expiringRow: {
     flexDirection: "row",
     alignItems: "center",

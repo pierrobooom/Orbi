@@ -561,6 +561,14 @@ export async function getFinanceDashboard(
 
 export interface ProviderStatus {
   provider: string;
+  /** What the client should render where a Connect button would go.
+   *
+   * A button that produces a refusal is worse than a line of text saying
+   * why — so the server decides, and the UI renders the reason. */
+  can_connect: boolean;
+  gate: "ok" | "coming_soon" | "upgrade" | "limit" | "no_provider";
+  account_limit: number;
+  connected_accounts: number;
   /** False when no aggregator is configured — nothing will sync, and the
    * UI should say so rather than offering a Connect button to nowhere. */
   automatic_import: boolean;

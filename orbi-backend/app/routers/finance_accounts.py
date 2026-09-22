@@ -38,6 +38,7 @@ from app.services.bank_providers import (
     get_provider,
 )
 from app.services.bank_sync import connections_needing_attention, sync_user_now
+from app.services.entitlements import check_bank_sync
 from app.services import categories as categories_service
 from app.services.finance_categorizer import categorize_merchant
 from app.services.finance_dashboard import build_dashboard
@@ -465,17 +466,39 @@ async def recategorise(auth: dict = Depends(get_current_user_with_tier)):
 
 
 @router.get("/provider")
-async def provider_status(user_id: UUID = Depends(get_current_user)):
-    """Which bank provider this deployment is configured against.
+async def provider_status(auth: dict = Depends(get_current_user_with_tier)):
+    """Which bank provider this deployment is configured against, and whether
+    this user may actually use it.
 
     "manual" means no aggregator is configured and no automatic import will
     happen — reported plainly so the client can say so rather than showing a
-    Connect button that leads nowhere.
+    Connect button that leads nowhere. The gate is reported the same way and
+    for the same reason: a button that produces a refusal is worse than a
+    line of text saying "coming soon".
     """
+    user_id = auth["user_id"]
     name = configured_provider_name()
+
+    live = [
+        c
+        for c in await accounts_db.list_connections(user_id)
+        if c.get("status") in {"pending", "active", "choose"}
+    ]
+    gate = check_bank_sync(
+        user_id,
+        auth["tier"],
+        connected_accounts=len(live),
+        provider_configured=name != "manual",
+    )
+
     return {
         "provider": name,
         "automatic_import": name != "manual",
+        # What the client should render where a Connect button would go.
+        "can_connect": gate.allowed,
+        "gate": gate.reason,
+        "account_limit": gate.limit,
+        "connected_accounts": len(live),
         "note": (
             "No bank provider configured. Transactions arrive from manual "
             "entry, receipts, and recurring rules."
@@ -1116,11 +1139,33 @@ class ConnectRequest(BaseModel):
     country: Optional[str] = Field(default=None, min_length=2, max_length=2)
 
 
+_GATE_MESSAGES = {
+    "coming_soon": (
+        "Automatic bank sync is coming soon. You can import a statement from "
+        "your bank in the meantime — it brings in the same transactions.",
+        "BANK_SYNC_COMING_SOON",
+    ),
+    "upgrade": (
+        "Automatic bank sync is part of Pro. Statement import and manual "
+        "entry stay free on every plan.",
+        "BANK_SYNC_REQUIRES_PRO",
+    ),
+    "limit": (
+        "You've connected as many accounts as your plan allows.",
+        "BANK_SYNC_ACCOUNT_LIMIT",
+    ),
+    "no_provider": (
+        "Automatic bank import isn't available on this deployment.",
+        "PROVIDER_NOT_CONFIGURED",
+    ),
+}
+
+
 @router.post("/accounts/{account_id}/connect", response_model=ConnectResponse)
 async def connect_account(
     account_id: UUID,
     body: ConnectRequest | None = None,
-    user_id: UUID = Depends(get_current_user),
+    auth: dict = Depends(get_current_user_with_tier),
 ):
     """Start linking an account to the configured bank provider.
 
@@ -1135,7 +1180,39 @@ async def connect_account(
     connection sits at 'pending' until the user returns. The sandbox is the
     only one that can come back 'active' immediately, because it speaks to no
     bank at all.
+
+    Gated twice over: by whether the feature is switched on at all — a
+    business decision about a per-account monthly bill — and by whether this
+    subscription includes it. See services/entitlements.py for why those are
+    separate.
     """
+    user_id = auth["user_id"]
+    tier = auth["tier"]
+
+    live = [
+        c
+        for c in await accounts_db.list_connections(user_id)
+        if c.get("status") in {"pending", "active", "choose"}
+    ]
+    gate = check_bank_sync(
+        user_id,
+        tier,
+        connected_accounts=len(live),
+        provider_configured=configured_provider_name() != "manual",
+    )
+    if not gate.allowed:
+        message, code = _GATE_MESSAGES[gate.reason]
+        # 402 for "pay for it", 403 for "not yet". Both are refusals the
+        # client renders rather than errors it retries.
+        raise HTTPException(
+            status_code=(
+                status.HTTP_402_PAYMENT_REQUIRED
+                if gate.reason == "upgrade"
+                else status.HTTP_403_FORBIDDEN
+            ),
+            detail=_error(message, code),
+        )
+
     account = await accounts_db.fetch_account(account_id, user_id)
     if account is None:
         raise HTTPException(

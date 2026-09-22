@@ -598,4 +598,9 @@ export const ptPT: Record<string, string> = {
     "Toca para mudar o nome. Mantém premida uma das tuas para apagar. Mudar a categoria de um movimento ensina o Orbi essa loja para a próxima.",
   "File {merchant} under": "Arquivar {merchant} em",
   "Manage categories": "Gerir categorias",
+  // Bank sync gating.
+  "Automatic sync — coming soon": "Sincronização automática — em breve",
+  "Automatic sync is part of Pro": "A sincronização automática faz parte do Pro",
+  "Account limit reached on your plan": "Limite de contas atingido no teu plano",
+  "See plans": "Ver planos",
 };
