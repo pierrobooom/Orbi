@@ -12,7 +12,7 @@
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -36,13 +36,17 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { ScreenHeader } from "@/components/screen-header";
+import { ShareTaskSheet } from "@/components/share-task-sheet";
 import { translate, useT } from "@/i18n";
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
 import {
   ApiError,
   deleteTask,
   transcribeAudio,
+  completeTask,
+  getTaskSharing,
   updateTask,
+  type SharingState,
   voiceUpdateTask,
 } from "@/services/api";
 import { useUniverseStore } from "@/stores/universeStore";
@@ -94,6 +98,11 @@ export default function TaskDetailScreen() {
   }, [task, serverClusters]);
 
   const [mode, setMode] = useState<"view" | "edit">("view");
+  // Who else is on this task and where the completion vote stands. Null
+  // until loaded, and null forever for a task nobody shares — the screen
+  // must not grow a "0 of 1 agreed" line for an ordinary task.
+  const [sharing, setSharing] = useState<SharingState | null>(null);
+  const [shareOpen, setShareOpen] = useState(false);
   const isCompleted = task?.status === "completed";
   const [busy, setBusy] = useState<"complete" | "delete" | "save" | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -134,6 +143,30 @@ export default function TaskDetailScreen() {
       </SafeAreaView>
     );
   }
+
+  // Has THIS user already said it is done? Their vote lives in a different
+  // place depending on whether they own the task or were invited to it, and
+  // the screen has to answer the same question either way.
+  const iSaidDone = Boolean(
+    task?.shared_with_me ? task?.i_completed_at : task?.owner_completed_at,
+  );
+
+  const refreshSharing = useCallback(async () => {
+    if (!taskId) return;
+    try {
+      const state = await getTaskSharing(taskId);
+      // Only kept when there is actually something shared. A solo task
+      // returns participants: 1, and rendering that as a vote would invent
+      // a social feature on a private to-do.
+      setSharing(state.participants > 1 || state.shares.length > 0 ? state : null);
+    } catch {
+      setSharing(null);
+    }
+  }, [taskId]);
+
+  useEffect(() => {
+    void refreshSharing();
+  }, [refreshSharing]);
 
   const enterEdit = () => {
     setError(null);
@@ -178,13 +211,28 @@ export default function TaskDetailScreen() {
     }
   };
 
+  /** Say this is done — which on a shared task is a vote, not a verdict.
+   *
+   * The same gesture does both, because from the user's side the intent is
+   * identical: this is finished. What changes is the consequence, and the
+   * screen has to be honest about it — closing the sheet and removing the
+   * bubble when the task is still open for two other people would be the
+   * app telling them something untrue about their own list.
+   */
   const onMarkComplete = async () => {
     setError(null);
     setBusy("complete");
     try {
-      await updateTask(task.id, { status: "completed" });
-      removeTask(task.id);
-      router.back();
+      const state = await completeTask(task.id);
+      if (state.complete) {
+        removeTask(task.id);
+        router.back();
+        return;
+      }
+      // Still open. Stay put, show where the vote stands, and let them see
+      // that their part is done.
+      setSharing(state);
+      setBusy(null);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : String(e));
       setBusy(null);
@@ -356,6 +404,43 @@ export default function TaskDetailScreen() {
               {task.label ? (
                 <View style={styles.labelPillRow}>
                   <Text style={styles.labelPill}>{task.label}</Text>
+                </View>
+              ) : null}
+
+              {/* Where the vote stands, shown only once somebody else is on
+                  this. "1 of 2 — waiting on them" is the whole point: the
+                  user needs to know their tap registered AND that the task
+                  is not finished, and a silent screen says neither. */}
+              {sharing && sharing.participants > 1 ? (
+                <View style={styles.sharedBox}>
+                  <View style={styles.sharedHead}>
+                    <MaterialIcons name="group" size={16} color={colors.accent} />
+                    <Text style={styles.sharedTitle}>
+                      {t("Shared with {n} others", {
+                        n: String(sharing.participants - 1),
+                      })}
+                    </Text>
+                  </View>
+                  <Text style={styles.sharedState}>
+                    {sharing.votes === 0
+                      ? t("Nobody has marked it done yet.")
+                      : t("{votes} of {needed} agree it's done.", {
+                          votes: String(sharing.votes),
+                          needed: String(sharing.needed),
+                        })}
+                  </Text>
+                  {iSaidDone ? (
+                    <View style={styles.sharedYou}>
+                      <MaterialIcons
+                        name="check-circle"
+                        size={14}
+                        color={colors.health}
+                      />
+                      <Text style={styles.sharedYouText}>
+                        {t("You've said it's done — waiting on the others.")}
+                      </Text>
+                    </View>
+                  ) : null}
                 </View>
               ) : null}
 
@@ -537,6 +622,19 @@ export default function TaskDetailScreen() {
               >
                 <Text style={styles.editBtnText}>{t("Edit")}</Text>
               </Pressable>
+              {/* Only the owner can invite. A participant adding more people
+                  to somebody else's task would change how many votes that
+                  person needs to finish their own errand. */}
+              {!task.shared_with_me ? (
+                <Pressable
+                  onPress={() => setShareOpen(true)}
+                  disabled={busy !== null}
+                  style={[styles.editBtn, busy && styles.btnDisabled]}
+                  accessibilityLabel="Share this task"
+                >
+                  <MaterialIcons name="person-add" size={20} color={colors.ink} />
+                </Pressable>
+              ) : null}
               {isCompleted ? (
                 <Pressable
                   onPress={onReopen}
@@ -592,6 +690,14 @@ export default function TaskDetailScreen() {
             </>
           )}
         </View>
+        <ShareTaskSheet
+          visible={shareOpen}
+          taskId={task.id}
+          taskTitle={task.label || task.title}
+          sharing={sharing}
+          onClose={() => setShareOpen(false)}
+          onShared={refreshSharing}
+        />
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -799,6 +905,19 @@ const styles = StyleSheet.create({
   },
   holdBtnText: { color: colors.ink, fontSize: 15, fontWeight: "700" },
   // Delete bin — small circular button, accent of overdue color.
+  sharedBox: {
+    marginTop: 14,
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.panel,
+  },
+  sharedHead: { flexDirection: "row", alignItems: "center", gap: 8 },
+  sharedTitle: { color: colors.ink, fontSize: 13, fontWeight: "700" },
+  sharedState: { color: colors.inkDim, fontSize: 12.5, marginTop: 6, lineHeight: 18 },
+  sharedYou: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 8 },
+  sharedYouText: { color: colors.health, fontSize: 11.5, fontWeight: "600", flex: 1 },
   editBtn: {
     height: 52,
     paddingHorizontal: 20,

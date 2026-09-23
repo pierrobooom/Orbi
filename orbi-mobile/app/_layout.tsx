@@ -148,6 +148,10 @@ export default function RootLayout() {
                 options={{ presentation: "modal", headerShown: false }}
               />
               <Stack.Screen
+                name="invitations"
+                options={{ presentation: "modal", headerShown: false }}
+              />
+              <Stack.Screen
                 name="categories"
                 options={{ presentation: "modal", headerShown: false }}
               />

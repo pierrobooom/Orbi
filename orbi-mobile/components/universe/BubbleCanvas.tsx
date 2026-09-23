@@ -1052,6 +1052,11 @@ const BubbleNode: React.FC<BubbleProps> = ({
   // Color resolution order: overdue (red pulse) > bubble.color override
   // (used in search view so each match keeps its origin cluster color)
   // > the bubble's current cluster color.
+  // A shared task wears a ring. Colour was the other option and is already
+  // spoken for — it says which cluster a bubble belongs to, and overriding
+  // that would trade one piece of information for another rather than
+  // adding any.
+  const shared = Boolean(bubble.shared);
   const baseColor = bubble.overdue
     ? colors.overdue
     : bubble.color ?? cluster.color;
@@ -1077,9 +1082,25 @@ const BubbleNode: React.FC<BubbleProps> = ({
   // "stroke on the outside" mode, so we draw a second circle with the
   // outline color/width and the fill on top.
   const outlineRadius = useDerivedValue(() => radius.value + 1);
+  // Sits outside the bubble with a gap, so it reads as a ring around the
+  // task rather than as a thicker edge on it — a thicker edge would just
+  // look like a rendering difference.
+  const sharedRingRadius = useDerivedValue(() => radius.value + 4);
 
   return (
     <Group>
+      {/* Shared-task ring. Drawn first, so the bubble sits inside it. */}
+      {shared ? (
+        <Circle
+          cx={cx}
+          cy={cy}
+          r={sharedRingRadius}
+          color={colors.accent}
+          opacity={0.55}
+          style="stroke"
+          strokeWidth={2}
+        />
+      ) : null}
       {/* Soft outline ring */}
       <Circle
         cx={cx}

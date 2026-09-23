@@ -801,6 +801,12 @@ export type ServerVisibility = "private" | "shared" | "collaborative";
 export interface ServerTask {
   id: string;
   owner_id: string;
+  /** Set only on tasks reaching this user through a share. A shared bubble
+   * that looks identical to an owned one is one people delete by accident. */
+  shared_with_me?: boolean | null;
+  shared_by_user_id?: string | null;
+  i_completed_at?: string | null;
+  owner_completed_at?: string | null;
   /** Where the user dropped this, as a 0..1 fraction of the canvas.
    *
    * Null means they never moved it and the layout pass still owns its
@@ -1572,4 +1578,98 @@ export async function recategorise(): Promise<RecategoriseResult> {
   });
   if (!res.ok) throw await parseError(res);
   return (await res.json()) as RecategoriseResult;
+}
+
+// ---------------------------------------------------------------------------
+// Sharing a task
+// ---------------------------------------------------------------------------
+
+export interface TaskShare {
+  id: string;
+  task_id: string;
+  shared_by_user_id: string;
+  invited_email: string;
+  shared_with_user_id: string | null;
+  status: "pending" | "accepted" | "declined" | "revoked";
+  cluster_id: string | null;
+  /** When THIS participant said it was done. */
+  completed_at: string | null;
+  created_at: string;
+}
+
+export interface SharingState {
+  task_id: string;
+  shares: TaskShare[];
+  /** The owner plus everyone who accepted. Pending invitations do not count:
+   * someone who has not answered cannot be waited on. */
+  participants: number;
+  votes: number;
+  /** A majority — 2 of 2, 2 of 3, 3 of 4. */
+  needed: number;
+  complete: boolean;
+  pending_user_ids: string[];
+}
+
+export interface ShareInvitation {
+  share: TaskShare;
+  task: ServerTask;
+  shared_by_name: string | null;
+}
+
+/** Invite someone to a task by email.
+ *
+ * The response deliberately never reveals whether that address has an
+ * account — see the endpoint for why. */
+export async function shareTask(taskId: string, email: string): Promise<void> {
+  const res = await authFetch(`${V1}/tasks/${taskId}/share`, {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
+  if (!res.ok) throw await parseError(res);
+}
+
+export async function getIncomingShares(): Promise<ShareInvitation[]> {
+  const res = await authFetch(`${V1}/tasks/shared/incoming`);
+  if (!res.ok) throw await parseError(res);
+  const body = (await res.json()) as { invitations: ShareInvitation[] };
+  return body.invitations ?? [];
+}
+
+export async function acceptShare(
+  shareId: string,
+  clusterId?: string | null,
+): Promise<TaskShare> {
+  const res = await authFetch(`${V1}/tasks/shares/${shareId}/accept`, {
+    method: "POST",
+    body: JSON.stringify({ cluster_id: clusterId ?? null }),
+  });
+  if (!res.ok) throw await parseError(res);
+  return (await res.json()) as TaskShare;
+}
+
+export async function declineShare(shareId: string): Promise<void> {
+  const res = await authFetch(`${V1}/tasks/shares/${shareId}/decline`, {
+    method: "POST",
+  });
+  if (!res.ok && res.status !== 404) throw await parseError(res);
+}
+
+export async function getTaskSharing(taskId: string): Promise<SharingState> {
+  const res = await authFetch(`${V1}/tasks/${taskId}/sharing`);
+  if (!res.ok) throw await parseError(res);
+  return (await res.json()) as SharingState;
+}
+
+/** Say a task is done, on behalf of whoever is asking.
+ *
+ * On an unshared task this completes it. On a shared one it is a vote, and
+ * the returned state says whether that was enough to close it — which is
+ * what lets the screen say "1 of 2, waiting on Ana" rather than pretending
+ * the task is finished. */
+export async function completeTask(taskId: string): Promise<SharingState> {
+  const res = await authFetch(`${V1}/tasks/${taskId}/complete`, {
+    method: "POST",
+  });
+  if (!res.ok) throw await parseError(res);
+  return (await res.json()) as SharingState;
 }

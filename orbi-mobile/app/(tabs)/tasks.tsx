@@ -27,7 +27,7 @@
 // The semantic layer is additive: local hits always rank first and the
 // list stays usable if the network or the embedding provider is down.
 
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter, type Href } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -48,7 +48,7 @@ import { SettingsButton } from "@/components/settings-button";
 import { useT } from "@/i18n";
 import { useUniverseStore } from "@/stores/universeStore";
 import { colors } from "@/theme/colors";
-import { searchTasks, type ServerTask } from "@/services/api";
+import { getIncomingShares, searchTasks, type ServerTask } from "@/services/api";
 
 type SortMode = "pressure" | "due" | "cluster";
 
@@ -122,6 +122,18 @@ export default function TasksScreen() {
   const [semanticBusy, setSemanticBusy] = useState(false);
   const [overdueOnly, setOverdueOnly] = useState(false);
   const [showDone, setShowDone] = useState(false);
+
+  // How many task invitations are waiting. Counted on focus rather than
+  // kept in a store: it changes rarely, and a stale badge claiming somebody
+  // is waiting when they are not is worse than one request per visit.
+  const [invites, setInvites] = useState(0);
+  useFocusEffect(
+    useCallback(() => {
+      getIncomingShares()
+        .then((rows) => setInvites(rows.length))
+        .catch(() => setInvites(0));
+    }, []),
+  );
 
   const clusterLookup = useMemo(() => {
     const map = new Map<string, ClusterMeta>();
@@ -327,6 +339,21 @@ export default function TasksScreen() {
       <View style={styles.header}>
         <Text style={styles.headerTitle}>{t("Tasks")}</Text>
         <View style={styles.headerRight}>
+          {/* Only shown when something is actually waiting.
+              An always-present inbox icon teaches people to ignore it; one
+              that appears with a count is the only thing on the screen that
+              has changed, and it reads as "someone is waiting on you"
+              rather than as navigation. */}
+          {invites > 0 ? (
+            <Pressable
+              onPress={() => router.push("/invitations" as Href)}
+              style={styles.invitesBtn}
+              accessibilityLabel="Task invitations"
+            >
+              <MaterialIcons name="group-add" size={18} color={colors.accent} />
+              <Text style={styles.invitesCount}>{invites}</Text>
+            </Pressable>
+          ) : null}
           <Text style={styles.headerCount}>
             {filtering
               ? t("{n} of {total}", { n: sorted.length, total: pool.length })
@@ -569,6 +596,17 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
   },
   headerRight: { flexDirection: "row", alignItems: "center", gap: 12 },
+  invitesBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    height: 32,
+    paddingHorizontal: 10,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.accent,
+  },
+  invitesCount: { color: colors.accent, fontSize: 13, fontWeight: "700" },
   headerTitle: { color: colors.ink, fontSize: 22, fontWeight: "700" },
   headerCount: { color: colors.inkDim, fontSize: 12, fontWeight: "500" },
   searchRow: {

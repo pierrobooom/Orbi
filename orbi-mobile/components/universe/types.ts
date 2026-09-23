@@ -44,6 +44,11 @@ export interface Bubble {
   // its primary label per the sketch's resolved design. Used in
   // drilled (task) view only; cluster bubbles never have it.
   isDominant?: boolean;
+  /** This task belongs to someone else and reached the user through a
+   * share. Drawn with a ring so a joint task is never mistaken for a
+   * private one — deleting or ignoring somebody else's task by accident is
+   * a social mistake, not just a data one. */
+  shared?: boolean;
   // Starting offset (pixels) from the cluster center. Physics takes
   // over after the first frame.
   /** An absolute position the user chose, as a 0..1 fraction of the canvas.

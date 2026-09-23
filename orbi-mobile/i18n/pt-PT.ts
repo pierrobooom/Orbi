@@ -620,4 +620,40 @@ export const ptPT: Record<string, string> = {
   // Renewal date editor.
   "Renews {date}": "Renova a {date}",
   "When does {merchant} renew?": "Quando renova {merchant}?",
+  // Sharing a task.
+  "Invitations": "Convites",
+  "Nothing waiting": "Nada à espera",
+  "When someone shares a task with you, it turns up here before it joins your universe.":
+    "Quando alguém partilhar uma tarefa contigo, aparece aqui antes de entrar no teu universo.",
+  "{who} shared this with you": "{who} partilhou isto contigo",
+  "Someone": "Alguém",
+  "No date": "Sem data",
+  "If you join, it closes only when you both agree it's done.":
+    "Se entrares, só fecha quando ambos concordarem que está feita.",
+  "No thanks": "Não, obrigado",
+  "Join": "Entrar",
+  "Decline this?": "Recusar isto?",
+  "They won't be told. You can be invited again later.":
+    "A outra pessoa não é avisada. Podes ser convidado outra vez.",
+  "Decline": "Recusar",
+  "Could not accept": "Não foi possível aceitar",
+  // Share sheet.
+  "Share “{title}”": "Partilhar “{title}”",
+  "They get their own copy of this bubble. It closes when most of you agree it's done.":
+    "Recebem a sua própria bolha. Fecha quando a maioria concordar que está feita.",
+  "their@email.com": "email@deles.com",
+  "Send invitation": "Enviar convite",
+  "Invitation sent": "Convite enviado",
+  "They'll see it when they next open Orbi.":
+    "Vão vê-lo da próxima vez que abrirem o Orbi.",
+  "Could not share": "Não foi possível partilhar",
+  "says done": "diz feita",
+  "on it": "a tratar",
+  "not answered": "sem resposta",
+  // Shared state on a task.
+  "Shared with {n} others": "Partilhada com mais {n}",
+  "Nobody has marked it done yet.": "Ainda ninguém a marcou como feita.",
+  "{votes} of {needed} agree it's done.": "{votes} de {needed} concordam que está feita.",
+  "You've said it's done — waiting on the others.":
+    "Já disseste que está feita — a aguardar os outros.",
 };

@@ -355,6 +355,7 @@ export function layoutUniverse(
         clusterId: drilledCluster.id,
         pressureScore: t.pressure_score,
         overdue: isOverdue(t, now),
+        shared: Boolean(t.shared_with_me),
         // No dominant in drilled view — the cluster name is in the
         // header overlay, every task bubble shows its own label only.
         isDominant: false,
