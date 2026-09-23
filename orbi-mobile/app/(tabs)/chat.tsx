@@ -90,6 +90,29 @@ export default function ChatScreen() {
   const [error, setError] = useState<string | null>(null);
   const voice = useVoiceRecorder();
 
+  // Whether the soft keyboard is up.
+  //
+  // A multiline TextInput on iOS has no Return key that dismisses — Return
+  // inserts a newline, which is the whole point of multiline — so the OS
+  // offers no way out. Dragging the message list down works, but nothing
+  // on screen says so, and while the keyboard is up it covers the tab bar,
+  // so the user is stuck on this screen with no visible exit.
+  const [keyboardUp, setKeyboardUp] = useState(false);
+  useEffect(() => {
+    // "will" on iOS so the button arrives with the keyboard rather than a
+    // frame late; Android only emits the "did" pair.
+    const showEvent =
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvent =
+      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+    const show = Keyboard.addListener(showEvent, () => setKeyboardUp(true));
+    const hide = Keyboard.addListener(hideEvent, () => setKeyboardUp(false));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
+
   useEffect(() => {
     hydrate();
   }, [hydrate]);
@@ -330,6 +353,23 @@ export default function ChatScreen() {
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
         <View style={styles.composer}>
+          {/* The way out. Only while the keyboard is up: a permanently
+              visible dismiss button is clutter that explains nothing when
+              there is nothing to dismiss. */}
+          {keyboardUp ? (
+            <Pressable
+              onPress={() => Keyboard.dismiss()}
+              style={styles.hideKeyboardBtn}
+              accessibilityLabel={t("Hide keyboard")}
+              hitSlop={8}
+            >
+              <MaterialIcons
+                name="keyboard-hide"
+                size={20}
+                color={colors.inkDim}
+              />
+            </Pressable>
+          ) : null}
           <TextInput
             value={draft}
             onChangeText={setDraft}
@@ -506,6 +546,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingTop: 10,
     paddingBottom: 10,
+  },
+  hideKeyboardBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.panel,
+    borderWidth: 1,
+    borderColor: colors.line,
   },
   sendBtn: {
     width: 40,

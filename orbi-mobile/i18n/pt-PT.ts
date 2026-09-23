@@ -248,6 +248,7 @@ export const ptPT: Record<string, string> = {
   "Chat": "Conversa",
   "New": "Nova",
   "Message Orbi": "Escreve ao Orbi",
+  "Hide keyboard": "Fechar teclado",
   "Ask Orbi anything": "Pergunta o que quiseres ao Orbi",
   "Capture a task, ask what's overdue, or mark something done — typed or spoken.": "Cria uma tarefa, pergunta o que está atrasado, ou marca algo como feito — escrito ou falado.",
   "Not sent": "Não enviada",

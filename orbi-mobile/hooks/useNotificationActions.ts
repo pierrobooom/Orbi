@@ -190,6 +190,39 @@ async function openTaskInUniverse(taskId: string): Promise<void> {
 }
 
 
+/** Clear every delivered notification about one task.
+ *
+ * Reminders stack. A lead warning, the due one and a chase can all be
+ * sitting in Notification Centre at once, and they are all asking the same
+ * question. Answering any of them answers all of them, so leaving the
+ * siblings there asks a question the user has already dealt with — and the
+ * pile is what makes people turn reminders off altogether.
+ *
+ * iOS only auto-dismisses the exact notification that was actioned, so the
+ * rest have to be cleared explicitly. Matching is on taskId from the push
+ * payload rather than on the category, because the point is "this task",
+ * not "this kind of reminder".
+ */
+async function dismissDeliveredFor(taskId: string): Promise<void> {
+  try {
+    const delivered = await Notifications.getPresentedNotificationsAsync();
+    await Promise.all(
+      delivered
+        .filter((n) => {
+          const d = (n.request.content.data ?? {}) as ReminderData;
+          return d.taskId === taskId;
+        })
+        .map((n) =>
+          Notifications.dismissNotificationAsync(n.request.identifier),
+        ),
+    );
+  } catch (e) {
+    // Best effort, and never fatal: tidying the tray must not be able to
+    // undo the action the user actually asked for.
+    console.warn("Could not clear delivered notifications:", e);
+  }
+}
+
 /** Act on a button press. Exported so the background task can reuse it. */
 export async function handleNotificationResponse(
   response: Notifications.NotificationResponse,
@@ -216,6 +249,7 @@ export async function handleNotificationResponse(
     ) {
       // Tapping the notification body, or choosing "Pick a time". Both
       // mean the same thing: take me to this task.
+      await dismissDeliveredFor(taskId);
       await openTaskInUniverse(taskId);
       return;
     } else if (action === ACTION_REPLY) {
@@ -235,6 +269,10 @@ export async function handleNotificationResponse(
       // A dismissal, or an action from a future build we don't know yet.
       return;
     }
+
+    // Done, snoozed or replied — whichever it was, the other reminders
+    // about this task are now stale.
+    await dismissDeliveredFor(taskId);
 
     // Pull the change back into the canvas so the bubble is already
     // correct if the app is open behind the notification.
