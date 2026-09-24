@@ -29,6 +29,7 @@ from datetime import date, datetime, timedelta, timezone
 from uuid import UUID
 
 from app.db import finance as finance_db, finance_accounts as accounts_db
+from app.services import bank_reconcile
 from app.services.bank_providers import (
     BankTransaction,
     ConsentExpired,
@@ -327,9 +328,50 @@ async def _store(
         entry["sort_key"] = base + position
         rows.append(entry)
 
-    if not rows:
-        return 0
-    return await finance_db.insert_entries(rows)
+    written = await finance_db.insert_entries(rows) if rows else 0
+
+    # Then check the window against the feed we are already holding. No extra
+    # API call, and it clears copies left behind by whatever the identity rule
+    # got wrong BEFORE this sync — the failure mode that has bitten twice and
+    # both times was found by a person rather than by the code.
+    await _trim_surplus(
+        owner_id=owner_id,
+        account_id=account_id,
+        keys=keys,
+        since=min(dates),
+        until=max(dates),
+    )
+    return written
+
+
+async def _trim_surplus(
+    *, owner_id, account_id, keys: list[str], since: str, until: str
+) -> None:
+    """Delete rows held in excess of what the bank reports for this window.
+
+    The counting rule and its one hard limit live in bank_reconcile; this
+    only supplies the two counts and carries out the result.
+    """
+    expected: dict[str, int] = {}
+    for key in keys:
+        expected[key] = expected.get(key, 0) + 1
+
+    stored = await finance_db.entries_in_window(owner_id, account_id, since, until)
+    doomed = bank_reconcile.surplus_ids(
+        stored,
+        expected,
+        lambda row: natural_key(
+            entry_date=str(row.get("entry_date")),
+            amount=float(row.get("amount") or 0),
+            description=row.get("raw_description") or row.get("merchant") or "",
+        ),
+    )
+    if not doomed:
+        return
+    removed = await finance_db.delete_entries(doomed, owner_id)
+    logger.info(
+        "Removed %s duplicate bank rows for account %s", removed, account_id
+    )
 
 
 def _to_entry(transaction: BankTransaction, *, owner_id: UUID, account_id) -> dict:

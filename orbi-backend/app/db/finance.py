@@ -263,3 +263,24 @@ async def entries_in_window(
     if account_id:
         query = query.eq("account_id", str(account_id))
     return query.execute().data or []
+
+
+async def delete_entries(entry_ids: list[str], user_id: UUID) -> int:
+    """Delete several entries at once, scoped to their owner.
+
+    Scoped by user_id as well as id, the same guard delete_entry carries: a
+    stale or mistaken id must not be able to reach another person's ledger.
+    """
+    if not entry_ids:
+        return 0
+    rows = (
+        get_client()
+        .table("finance_entries")
+        .delete()
+        .in_("id", entry_ids)
+        .eq("user_id", str(user_id))
+        .execute()
+        .data
+        or []
+    )
+    return len(rows)

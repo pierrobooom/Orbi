@@ -149,7 +149,29 @@ def _parse_amount(transaction: dict) -> float | None:
 
 
 def _parse_booked_on(transaction: dict) -> date | None:
-    for field in ("booking_date", "value_date", "transaction_date"):
+    """When the transaction happened, by the most STABLE date the bank sends.
+
+    value_date first, and the order matters more than it looks.
+
+    booking_date is when the bank got round to processing it, and it MOVES.
+    Bankinter reported one purchase like this:
+
+        sync at 23rd 21:50   value_date 2026-09-23   booking_date 2026-09-23
+        sync at 24th 00:30   value_date 2026-09-23   booking_date 2026-09-24
+
+    Same purchase, same amount, same text — a different date. Since identity
+    is (date, amount, text), a moving date means a second row, and the user
+    sees one dinner twice. entry_reference cannot rescue it either: this bank
+    issues a fresh one on every single fetch.
+
+    value_date is the economic date — when the money counted — and it did not
+    move. It is also the date a person recognises: they went on the 23rd, so
+    a row saying the 24th is wrong even when it is not duplicated.
+
+    booking_date stays as the fallback for banks that omit value_date, and
+    transaction_date after that.
+    """
+    for field in ("value_date", "booking_date", "transaction_date"):
         raw = transaction.get(field)
         if not raw:
             continue

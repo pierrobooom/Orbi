@@ -101,3 +101,53 @@ def test_the_decision_does_not_mutate_what_it_was_given():
     stored = {k: 2}
     unstored_indices([k, k, k], stored)
     assert stored == {k: 2}
+
+
+# ---------------------------------------------------------------------------
+# The date the identity is built from has to be the one that does not move
+# ---------------------------------------------------------------------------
+
+def parse(transaction: dict):
+    from app.services.bank_provider_enablebanking import _parse_booked_on
+    return _parse_booked_on(transaction)
+
+
+def test_value_date_is_preferred_because_booking_date_moves():
+    """The second duplicate bug, and why the first fix did not catch it.
+
+    Bankinter reported one dinner twice: the same amount and the same text,
+    but booking_date advanced from the 23rd to the 24th between a sync at
+    21:50 and one at 00:30. Identity includes the date, so the row was
+    genuinely new by every test we had — and entry_reference, which changes
+    on every fetch, could not break the tie.
+
+    value_date stayed on the 23rd through both reads.
+    """
+    pending_read = {"value_date": "2026-09-23", "booking_date": "2026-09-23"}
+    booked_read = {"value_date": "2026-09-23", "booking_date": "2026-09-24"}
+    assert parse(pending_read) == parse(booked_read)
+
+
+def test_the_same_dinner_read_twice_is_not_imported_twice():
+    """End to end over the dedup, with the real payload shape."""
+    first = parse({"value_date": "2026-09-23", "booking_date": "2026-09-23"})
+    second = parse({"value_date": "2026-09-23", "booking_date": "2026-09-24"})
+
+    stored = {key(first.isoformat(), 42.50, "COMPRA 8430968.24 HAMBURGUERIAS ENIGMA"): 1}
+    incoming = [key(second.isoformat(), 42.50, "COMPRA 8430968.24 HAMBURGUERIAS ENIGMA")]
+
+    assert unstored_indices(incoming, stored) == []
+
+
+def test_booking_date_still_used_when_the_bank_omits_value_date():
+    """Not every bank sends value_date, and those feeds must keep working."""
+    assert parse({"booking_date": "2026-09-24"}).isoformat() == "2026-09-24"
+
+
+def test_transaction_date_is_the_last_resort():
+    assert parse({"transaction_date": "2026-09-20"}).isoformat() == "2026-09-20"
+
+
+def test_a_transaction_with_no_usable_date_is_rejected():
+    """Better to drop it than to file it under today and invent a spend."""
+    assert parse({"value_date": None, "booking_date": None}) is None
