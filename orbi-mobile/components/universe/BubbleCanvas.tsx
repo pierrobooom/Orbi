@@ -58,6 +58,7 @@ import { useReduceMotion } from "@/hooks/useReduceMotion";
 import { colors } from "@/theme/colors";
 import { BREATHE_MS, BREATHE_SCALE, PULSE_MS } from "@/theme/motion";
 import { useUniverseStore } from "@/stores/universeStore";
+import { DRIFT_ID } from "@/services/universeLayout";
 import BubbleHitArea from "./BubbleHitArea";
 import BubbleLabel from "./BubbleLabel";
 import StarField from "./StarField";
@@ -635,7 +636,7 @@ export default function BubbleCanvas({
               cluster you're inside is discoverable (long-press from
               the top level still works too). Drift can't be edited
               so we hide the pencil there. */}
-          {focusedCluster.kind !== "drift" && onEditFocusedCluster ? (
+          {focusedCluster.id !== DRIFT_ID && onEditFocusedCluster ? (
             <Pressable
               onPress={() => onEditFocusedCluster(focusedCluster.id)}
               hitSlop={10}
@@ -922,11 +923,11 @@ function BubbleField({
               label={cluster.name}
               subtitle={clusterSubtitle(b, t)}
               size="dominant"
-              tone={cluster.kind === "drift" ? "muted" : "light"}
+              tone={cluster.id === DRIFT_ID ? "muted" : "light"}
             />
           );
         }
-        const showAsDominant = b.isDominant && cluster.kind !== "drift";
+        const showAsDominant = b.isDominant && cluster.id !== DRIFT_ID;
         return (
           <BubbleLabel
             key={`label-${b.id}`}
@@ -1184,7 +1185,10 @@ const BubbleNode: React.FC<BubbleProps> = ({
   // "unfiled" were one of the areas of your life. Dashed and hollow says
   // "a slot waiting to be sorted". Only the top-level cluster bubble: the
   // task bubbles inside it are ordinary tasks.
-  if (bubble.kind === "cluster" && cluster.kind === "drift") {
+  // By id, never by kind — see DRIFT_ID. Keying on kind drew "Shopping" and
+  // "Carros E Oficina" as empty rings, because an unrecognised name
+  // classifies as kind "drift" while being a perfectly real cluster.
+  if (bubble.kind === "cluster" && cluster.id === DRIFT_ID) {
     return (
       <Group>
         <Circle cx={cx} cy={cy} r={radius} color={colors.panel} />

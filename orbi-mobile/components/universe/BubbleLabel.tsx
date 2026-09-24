@@ -88,49 +88,49 @@ export default function BubbleLabel({
   );
 }
 
+// A thin, even outline round every letter.
+//
+// Zero offset is what makes it an outline rather than a shadow: the halo
+// sits equally on all sides, so it hugs the glyph instead of dropping away
+// from it. It is there for the light fills — a lime or cyan cluster is
+// bright enough that white on it all but disappears, and clusters can be
+// any colour their owner chose. 45% is enough to separate a letter from a
+// pale fill and faint enough to vanish on a dark one.
+const OUTLINE = {
+  textShadowColor: "rgba(20, 22, 28, 0.45)",
+  textShadowOffset: { width: 0, height: 0 },
+  textShadowRadius: 2.5,
+} as const;
+
 const styles = StyleSheet.create({
-  // A light shadow, not the heavy 70% one this used to carry. That was
-  // there to lift white text off pale fills against a black universe; the
-  // retuned cluster colours are all deep enough to hold white on their
-  // own, and a thick dark halo round every letter reads as smudged on
-  // paper. What is left is just enough to separate small text from the
-  // brightest fills.
   label: {
     color: "white",
     fontSize: 11,
     fontWeight: "600",
     textAlign: "center",
-    textShadowColor: "rgba(0,0,0,0.22)",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
+    ...OUTLINE,
   },
   dominantLabel: {
     color: "white",
     fontSize: 14,
     fontWeight: "700",
     textAlign: "center",
-    textShadowColor: "rgba(0,0,0,0.22)",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
+    ...OUTLINE,
   },
-  // Same colour and family as the title, a step smaller and lighter.
-  //
-  // It used to be colors.ink at 85% — a light grey chosen for a dark ground.
-  // Once the palette flipped, ink became near-black, so the count under
-  // every cluster name turned into dark text on a coloured fill. One voice
-  // for both lines also reads as a single label rather than as a name with
-  // a caption stuck to it.
+  // Same colour and family as the title, a step smaller and lighter. It was
+  // once colors.ink, chosen as a light grey for a dark ground — which turned
+  // near-black when the palette flipped.
   subtitle: {
     color: "white",
     fontSize: 11,
     fontWeight: "500",
     textAlign: "center",
-    opacity: 0.9,
+    opacity: 0.95,
     marginTop: 1,
-    textShadowColor: "rgba(0,0,0,0.22)",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
+    ...OUTLINE,
   },
+  // Adrift's hollow ring sits on the paper ground, so its text is grey and
+  // needs no outline at all.
   muted: {
     color: colors.inkDim,
     textShadowColor: "transparent",

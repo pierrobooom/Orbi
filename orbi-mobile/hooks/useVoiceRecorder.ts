@@ -25,7 +25,7 @@ import {
   useAudioRecorder,
 } from "expo-audio";
 import { useRef, useState } from "react";
-import { cue } from "@/services/feedback";
+import { cue, restorePlaybackMode } from "@/services/feedback";
 
 export interface RecordingResult {
   uri: string;
@@ -150,6 +150,10 @@ export function useVoiceRecorder() {
       // the state below still has to be cleared.
     }
     setIsRecording(false);
+    // Session back to sound-effect mode BEFORE the closing cue, so that cue
+    // obeys the silent switch like every other — recording had to turn that
+    // off, and it stays off until something turns it back on.
+    await restorePlaybackMode();
     cue("listenStop");
 
     const durationMs = startedAt ? Date.now() - startedAt : 0;

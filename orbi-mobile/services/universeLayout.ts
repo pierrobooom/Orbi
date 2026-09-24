@@ -20,7 +20,10 @@ import { colors } from "@/theme/colors";
 import type { ServerCluster, ServerTask } from "@/services/api";
 
 // ID for the synthetic catch-all cluster. Doesn't exist on the backend.
-const DRIFT_ID = "synthetic-drift";
+// Exported because "is this the Adrift catch-all" must be asked by id
+// everywhere. Asking by kind is wrong: classifyKind returns "drift" for any
+// name it does not recognise, so real clusters like "Shopping" carry it too.
+export const DRIFT_ID = "synthetic-drift";
 // ID for the synthetic "search results" cluster — only present when a
 // search is active. Hosts every matched task bubble in a single tight
 // orbit at canvas centre.

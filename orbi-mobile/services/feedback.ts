@@ -57,6 +57,21 @@ const HAPTICS: Record<Cue, () => Promise<void>> = {
 // -24, which is where a UI sound stops competing with the content.
 const VOLUME = 0.35;
 
+// Every player keeps the audio session alive when it finishes.
+//
+// THIS IS WHAT BROKE VOICE CAPTURE. By default, an expo-audio player that
+// finishes on iOS calls AVAudioSession.setActive(false) about 100ms later.
+// Its check is "is any PLAYER still playing" — it never asks whether a
+// RECORDER is recording. So the "listen" cue, which fires the instant
+// recording starts, ended ~280ms in and switched the session off under the
+// microphone. The recorder carried on "recording" silence, the transcript
+// came back empty, and every voice capture ended in "couldn't hear that".
+// (Read in node_modules/expo-audio/ios/AudioModule.swift, deactivateSession.)
+//
+// The session is shared by the whole app, so a sound effect is never the
+// right thing to decide when it ends.
+const PLAYER_OPTIONS = { keepAudioSessionActive: true } as const;
+
 // One sound per this many milliseconds. Six completions in a second is one
 // chime, not six.
 const THROTTLE_MS = 120;
@@ -73,14 +88,20 @@ let ready = false;
  * on first use adds a delay to the very press the sound is meant to
  * acknowledge, which is exactly the press people judge the app on.
  */
-export async function initFeedback(): Promise<void> {
-  if (ready) return;
-  ready = true;
+/** Put the audio session back into sound-effect mode.
+ *
+ * Called at startup, and again whenever a recording ends. Recording needs
+ * playsInSilentMode: true (iOS refuses to record otherwise), and the audio
+ * mode is global — so without this, the first voice capture left the whole
+ * app ignoring the silent switch for every sound after it.
+ */
+export async function restorePlaybackMode(): Promise<void> {
   try {
     await setAudioModeAsync({
       // The silent switch must win. This is the single most important line
       // in the file: an app that chimes on a silenced phone is uninstalled.
       playsInSilentMode: false,
+      allowsRecording: false,
       // Sound effects sit alongside other audio rather than taking focus,
       // so nobody's music stops for a tick.
       interruptionMode: "mixWithOthers",
@@ -91,10 +112,16 @@ export async function initFeedback(): Promise<void> {
     // the defaults may well ignore the silent switch.
     soundEnabled = false;
   }
+}
+
+export async function initFeedback(): Promise<void> {
+  if (ready) return;
+  ready = true;
+  await restorePlaybackMode();
 
   for (const cue of Object.keys(FILES) as Cue[]) {
     try {
-      const player = createAudioPlayer(FILES[cue]);
+      const player = createAudioPlayer(FILES[cue], PLAYER_OPTIONS);
       player.volume = VOLUME;
       players[cue] = player;
     } catch {
@@ -179,7 +206,7 @@ let humPlayer: AudioPlayer | null = null;
 export function startHum(): void {
   if (humPlayer || !soundEnabled || inQuietHours()) return;
   try {
-    humPlayer = createAudioPlayer(require("../assets/sounds/hum.wav"));
+    humPlayer = createAudioPlayer(require("../assets/sounds/hum.wav"), PLAYER_OPTIONS);
     humPlayer.loop = true;
     humPlayer.volume = 0.18;
     humPlayer.play();

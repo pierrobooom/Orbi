@@ -35,13 +35,12 @@ import {
 import { canCreateBubble, formatTurnsChip, isAtAiCap, isNearAiCap } from "@/services/tierGate";
 import { firstPriority, needsYouToday } from "@/services/attention";
 import { PriorityCard } from "@/components/universe/PriorityCard";
+import { SettingsButton } from "@/components/settings-button";
 import { useLocaleStore } from "@/i18n";
 import { useAuthStore } from "@/stores/authStore";
 import { cue, startHum, stopHum } from "@/services/feedback";
 import { useSoundStore } from "@/stores/soundStore";
 import Feather from "@expo/vector-icons/Feather";
-import { Avatar } from "@/components/avatar";
-import { useProfileStore } from "@/stores/profileStore";
 import { useUniverseStore } from "@/stores/universeStore";
 import { useUsageStore } from "@/stores/usageStore";
 import { colors } from "@/theme/colors";
@@ -90,16 +89,6 @@ export default function UniverseScreen() {
   // before the closing modal finished its animation produced a
   // glitch loop where modals opened/closed themselves.
   const [navLocked, setNavLocked] = useState(false);
-  // The face in the corner. Loaded through the store so the header, the
-  // settings button and the Settings screen all show the same thing without
-  // three separate requests.
-  const avatarUrl = useProfileStore((s) => s.avatarUrl);
-  const profileName = useProfileStore((s) => s.name);
-  const loadProfile = useProfileStore((s) => s.load);
-  useEffect(() => {
-    void loadProfile();
-  }, [loadProfile]);
-
   const lockTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // What today asks of the user. Derived from the tasks already in the
@@ -416,10 +405,6 @@ export default function UniverseScreen() {
     [],
   );
 
-  const openSettings = () => {
-    router.push("/settings" as Href);
-  };
-
   // One way to open a task, shared by bubble taps and the priority card.
   //
   // Two guards:
@@ -470,18 +455,7 @@ export default function UniverseScreen() {
         >
           <Feather name="search" size={17} color={colors.ink} />
         </Pressable>
-        <Pressable
-          onPress={openSettings}
-          style={[styles.circleBtn, avatarUrl ? styles.circleBtnPhoto : null]}
-          accessibilityRole="button"
-          accessibilityLabel={t("Settings")}
-        >
-          {avatarUrl ? (
-            <Avatar url={avatarUrl} name={profileName} size={36} />
-          ) : (
-            <Feather name="settings" size={17} color={colors.ink} />
-          )}
-        </Pressable>
+        <SettingsButton />
       </View>
 
       <View style={styles.canvasWrap}>
@@ -677,9 +651,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     overflow: "hidden",
   },
-  // A photo fills its circle edge to edge; the outline would only draw a
-  // second ring around the avatar's own.
-  circleBtnPhoto: { borderWidth: 0 },
   turnsChip: { color: colors.inkDim, fontSize: 12, fontWeight: "500" },
   turnsChipFull: { color: colors.overdue, fontWeight: "700" },
   canvasWrap: { flex: 1, position: "relative" },

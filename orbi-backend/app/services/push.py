@@ -31,6 +31,7 @@ async def send_push(
     subtitle: str | None = None,
     category_id: str | None = None,
     interruption_level: str | None = None,
+    replace_key: str | None = None,
 ) -> list[dict]:
     """Fan out a push to every token. Returns the list of tickets Expo returned.
 
@@ -58,6 +59,14 @@ async def send_push(
     entitlement, which only exists in a real build of the app — not in Expo
     Go. Sending it anyway is safe: without the entitlement iOS quietly treats
     it as `active`, so this is correct now and louder later with no change.
+
+    `replace_key` makes a new push REPLACE an earlier one with the same key
+    that is still sitting in the tray, instead of stacking beneath it. Sent
+    as both Expo fields, because each platform only honours one:
+      collapseId — iOS; maps to apns-collapse-id, which replaces a displayed
+                   notification in place. (On Android it only coalesces
+                   messages still in transit.)
+      tag        — Android; replaces a displayed notification with that tag.
     """
     token_list = [t for t in tokens if t]
     if not token_list:
@@ -76,6 +85,11 @@ async def send_push(
                     "sound": "default",
                     **({"subtitle": subtitle} if subtitle else {}),
                     **({"categoryId": category_id} if category_id else {}),
+                    **(
+                        {"collapseId": replace_key, "tag": replace_key}
+                        if replace_key
+                        else {}
+                    ),
                     **(
                         {"interruptionLevel": interruption_level}
                         if interruption_level

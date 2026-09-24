@@ -491,6 +491,14 @@ async def _dispatch_for_owner(
             body=body,
             category_id=_CATEGORIES.get(kind, _CATEGORIES["due"]),
             interruption_level=_INTERRUPTION.get(kind, "active"),
+            # One tray slot per task. Reminders about the same task used to
+            # stack — lead, then due, then chase — so the tray held several
+            # notifications all asking one question, in an order that did
+            # not read as newest-first, and clearing one left the rest. Now
+            # each new reminder replaces the last in place: the tray only
+            # ever shows the task's current state, and dismissing it clears
+            # the lot because there is nothing else left.
+            replace_key=f"task-{plan['task_id']}",
             data={
                 "kind": kind,
                 "planId": plan["id"],
