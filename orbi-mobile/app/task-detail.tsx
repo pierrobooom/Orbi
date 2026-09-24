@@ -50,6 +50,7 @@ import {
   voiceUpdateTask,
 } from "@/services/api";
 import { useUniverseStore } from "@/stores/universeStore";
+import { dismissDeliveredFor } from "@/hooks/useNotificationActions";
 import { colors } from "@/theme/colors";
 
 // Mark-complete hold duration. Keeps the user from accidentally
@@ -225,6 +226,12 @@ export default function TaskDetailScreen() {
     try {
       const state = await completeTask(task.id);
       if (state.complete) {
+        // The task is closed, so any reminder about it still sitting in
+        // Notification Centre is now asking about something that is done.
+        // Acting from a notification already clears these; finishing the
+        // same task in the app should leave the tray in the same state,
+        // or the user gets nagged about work they just did here.
+        await dismissDeliveredFor(task.id);
         removeTask(task.id);
         router.back();
         return;
@@ -903,7 +910,16 @@ const styles = StyleSheet.create({
     bottom: 0,
     backgroundColor: colors.accent,
   },
-  holdBtnText: { color: colors.ink, fontSize: 15, fontWeight: "700" },
+  // textAlign matters because this label wraps. The button centres the
+  // Text box, but the LINES inside it default to left — so a two-line
+  // label renders ragged against the left edge and reads as broken.
+  // Same bug that was fixed in action-bar.tsx for "Organizar o resto".
+  holdBtnText: {
+    color: colors.ink,
+    fontSize: 15,
+    fontWeight: "700",
+    textAlign: "center",
+  },
   // Delete bin — small circular button, accent of overdue color.
   sharedBox: {
     marginTop: 14,

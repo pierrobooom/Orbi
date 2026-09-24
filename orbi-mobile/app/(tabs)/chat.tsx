@@ -145,7 +145,16 @@ export default function ChatScreen() {
   const onMicPressIn = async () => {
     setError(null);
     const ok = await voice.start();
-    if (!ok) setError(voice.permissionError ?? t("Could not start recording."));
+    if (!ok) {
+      // A denied permission is the one mic failure worth naming, because it
+      // is the only one the user can actually fix. Everything else — a busy
+      // audio session, a codec refusal — is our problem, not theirs.
+      setError(
+        voice.permissionError
+          ? t("Orbi needs microphone access. You can turn it on in Settings.")
+          : t("Could not start recording."),
+      );
+    }
   };
 
   const onMicPressOut = async () => {
@@ -164,9 +173,16 @@ export default function ChatScreen() {
       await submit(transcript, "voice");
     } catch (e) {
       if (isQuotaError(e)) {
+        // The one server message worth showing verbatim: it says which
+        // limit was hit and when it resets, which is information, not noise.
         setError(e.message);
       } else {
-        setError(e instanceof ApiError ? e.message : String(e));
+        // Everything else is infrastructure — a dead socket, a 500, a JSON
+        // parse failure. String(e) put things like "TypeError: Network
+        // request failed" in front of someone who just wanted to talk to
+        // their phone. The detail goes to the console for us instead.
+        console.warn("Voice transcription failed:", e);
+        setError(t("Couldn't use the mic just now. Try again."));
       }
     } finally {
       setVoiceBusy(false);
@@ -320,7 +336,12 @@ export default function ChatScreen() {
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 88 : 0}
+        // Zero, not a header height. With behavior="padding" the view
+        // already pads by (keyboard height - whatever sits below it),
+        // so the composer lands exactly on the keyboard. Any offset is
+        // added on top of that and simply floats it, which is what the
+        // old 88 did: a gap the width of a header that is not here.
+        keyboardVerticalOffset={0}
       >
         {status === "loading" && messages.length === 0 ? (
           <View style={styles.centered}>

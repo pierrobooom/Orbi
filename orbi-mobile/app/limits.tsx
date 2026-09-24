@@ -106,14 +106,34 @@ export default function LimitsScreen() {
     }, [load]),
   );
 
+  const used = new Set((limits ?? []).map((l) => l.category));
+  const available = CATEGORIES.filter((c) => !used.has(c));
+
+  // The category actually saved, forced to one that is on screen.
+  //
+  // `category` starts at CATEGORIES[0] — groceries — which drops out of
+  // `available` the moment it has a limit. That left no pip highlighted and
+  // the state still pointing at groceries, so typing an amount and saving
+  // quietly OVERWROTE the groceries limit instead of creating the one the
+  // user was looking at. The limit they thought they made never existed,
+  // and one they had already set changed behind them.
+  //
+  // Derived rather than corrected in an effect: state that disagrees with
+  // what is rendered is the bug itself, so there should be no moment where
+  // the two can differ.
+  const effectiveCategory = available.includes(category)
+    ? category
+    : available[0];
+
   const parsed = Number(amount.replace(",", "."));
-  const canAdd = Number.isFinite(parsed) && parsed > 0 && !busy;
+  const canAdd =
+    Number.isFinite(parsed) && parsed > 0 && !busy && Boolean(effectiveCategory);
 
   const onAdd = async () => {
     if (!canAdd) return;
     setBusy(true);
     try {
-      await upsertLimit(category, parsed);
+      await upsertLimit(effectiveCategory, parsed);
       setAmount("");
       setAdding(false);
       Keyboard.dismiss();
@@ -169,9 +189,6 @@ export default function LimitsScreen() {
     );
   };
 
-  const used = new Set((limits ?? []).map((l) => l.category));
-  const available = CATEGORIES.filter((c) => !used.has(c));
-
   return (
     <SafeAreaView style={styles.root} edges={["top", "bottom"]}>
       <KeyboardAvoidingView
@@ -191,7 +208,7 @@ export default function LimitsScreen() {
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                 <View style={styles.pipRow}>
                   {available.map((option) => {
-                    const active = category === option;
+                    const active = effectiveCategory === option;
                     return (
                       <Pressable
                         key={option}

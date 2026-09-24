@@ -203,7 +203,7 @@ async function openTaskInUniverse(taskId: string): Promise<void> {
  * payload rather than on the category, because the point is "this task",
  * not "this kind of reminder".
  */
-async function dismissDeliveredFor(taskId: string): Promise<void> {
+export async function dismissDeliveredFor(taskId: string): Promise<void> {
   try {
     const delivered = await Notifications.getPresentedNotificationsAsync();
     await Promise.all(

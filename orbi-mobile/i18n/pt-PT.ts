@@ -249,6 +249,10 @@ export const ptPT: Record<string, string> = {
   "New": "Nova",
   "Message Orbi": "Escreve ao Orbi",
   "Hide keyboard": "Fechar teclado",
+  "Orbi needs microphone access. You can turn it on in Settings.":
+    "O Orbi precisa de acesso ao microfone. Podes activar nas Definições.",
+  "Couldn't use the mic just now. Try again.":
+    "Não foi possível usar o microfone agora. Tenta de novo.",
   "Ask Orbi anything": "Pergunta o que quiseres ao Orbi",
   "Capture a task, ask what's overdue, or mark something done — typed or spoken.": "Cria uma tarefa, pergunta o que está atrasado, ou marca algo como feito — escrito ou falado.",
   "Not sent": "Não enviada",

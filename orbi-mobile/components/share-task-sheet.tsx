@@ -17,7 +17,9 @@ import React, { useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -96,80 +98,91 @@ export function ShareTaskSheet({
       animationType="fade"
       onRequestClose={onClose}
     >
-      <Pressable style={styles.backdrop} onPress={onClose}>
-        <Pressable style={styles.sheet} onPress={() => undefined}>
-          <Text style={styles.title} numberOfLines={2}>
-            {t("Share “{title}”", { title: taskTitle })}
-          </Text>
+      {/* The sheet is pinned to the bottom, which is exactly where the
+          keyboard appears — so focusing the email field buried the whole
+          thing, title and participants included. Lifting it keeps the
+          context visible while typing, which is the point of showing who
+          is already on the task. */}
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+      >
+        <Pressable style={styles.backdrop} onPress={onClose}>
+          <Pressable style={styles.sheet} onPress={() => undefined}>
+            <Text style={styles.title} numberOfLines={2}>
+              {t("Share “{title}”", { title: taskTitle })}
+            </Text>
 
-          <Text style={styles.explainer}>
-            {t(
-              "They get their own copy of this bubble. It closes when most of you agree it's done.",
-            )}
-          </Text>
+            <Text style={styles.explainer}>
+              {t(
+                "They get their own copy of this bubble. It closes when most of you agree it's done.",
+              )}
+            </Text>
 
-          <View style={styles.inputRow}>
-            <MaterialIcons name="alternate-email" size={18} color={colors.inkDim} />
-            <TextInput
-              value={email}
-              onChangeText={setEmail}
-              placeholder={t("their@email.com")}
-              placeholderTextColor={colors.inkDim}
-              style={styles.input}
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType="email-address"
-              returnKeyType="send"
-              onSubmitEditing={onSend}
-            />
-          </View>
-
-          {accepted.length > 0 || pending.length > 0 ? (
-            <View style={styles.people}>
-              {accepted.map((s) => (
-                <View key={s.id} style={styles.person}>
-                  <MaterialIcons
-                    name={s.completed_at ? "check-circle" : "person"}
-                    size={16}
-                    color={s.completed_at ? colors.health : colors.inkDim}
-                  />
-                  <Text style={styles.personText} numberOfLines={1}>
-                    {s.invited_email}
-                  </Text>
-                  <Text style={styles.personState}>
-                    {s.completed_at ? t("says done") : t("on it")}
-                  </Text>
-                </View>
-              ))}
-              {pending.map((s) => (
-                <View key={s.id} style={styles.person}>
-                  <MaterialIcons name="schedule" size={16} color={colors.inkDim} />
-                  <Text style={styles.personText} numberOfLines={1}>
-                    {s.invited_email}
-                  </Text>
-                  <Text style={styles.personState}>{t("not answered")}</Text>
-                </View>
-              ))}
+            <View style={styles.inputRow}>
+              <MaterialIcons name="alternate-email" size={18} color={colors.inkDim} />
+              <TextInput
+                value={email}
+                onChangeText={setEmail}
+                placeholder={t("their@email.com")}
+                placeholderTextColor={colors.inkDim}
+                style={styles.input}
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="email-address"
+                returnKeyType="send"
+                onSubmitEditing={onSend}
+              />
             </View>
-          ) : null}
 
-          <ActionBar
-            primary={{
-              label: t("Send invitation"),
-              onPress: onSend,
-              disabled: !looksLikeEmail(email),
-              busy,
-            }}
-            secondary={{ label: t("Close"), onPress: onClose }}
-            style={styles.actions}
-          />
+            {accepted.length > 0 || pending.length > 0 ? (
+              <View style={styles.people}>
+                {accepted.map((s) => (
+                  <View key={s.id} style={styles.person}>
+                    <MaterialIcons
+                      name={s.completed_at ? "check-circle" : "person"}
+                      size={16}
+                      color={s.completed_at ? colors.health : colors.inkDim}
+                    />
+                    <Text style={styles.personText} numberOfLines={1}>
+                      {s.invited_email}
+                    </Text>
+                    <Text style={styles.personState}>
+                      {s.completed_at ? t("says done") : t("on it")}
+                    </Text>
+                  </View>
+                ))}
+                {pending.map((s) => (
+                  <View key={s.id} style={styles.person}>
+                    <MaterialIcons name="schedule" size={16} color={colors.inkDim} />
+                    <Text style={styles.personText} numberOfLines={1}>
+                      {s.invited_email}
+                    </Text>
+                    <Text style={styles.personState}>{t("not answered")}</Text>
+                  </View>
+                ))}
+              </View>
+            ) : null}
+
+            <ActionBar
+              primary={{
+                label: t("Send invitation"),
+                onPress: onSend,
+                disabled: !looksLikeEmail(email),
+                busy,
+              }}
+              secondary={{ label: t("Close"), onPress: onClose }}
+              style={styles.actions}
+            />
+            </Pressable>
         </Pressable>
-      </Pressable>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
+  flex: { flex: 1 },
   backdrop: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",
