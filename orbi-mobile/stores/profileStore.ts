@@ -18,16 +18,21 @@ import { getMyProfile } from "@/services/api";
 interface ProfileState {
   avatarUrl: string | null;
   name: string;
+  username: string | null;
+  usernameTag: number | null;
   loaded: boolean;
   load: () => Promise<void>;
   /** Applied straight away when the user changes their picture, so the
    * header updates without waiting for another round trip. */
   setAvatar: (url: string | null) => void;
+  setUsername: (name: string | null, tag: number | null) => void;
 }
 
 export const useProfileStore = create<ProfileState>((set, get) => ({
   avatarUrl: null,
   name: "",
+  username: null,
+  usernameTag: null,
   loaded: false,
 
   load: async () => {
@@ -39,6 +44,8 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
       set({
         avatarUrl: profile.avatar_url,
         name: profile.full_name || "",
+        username: profile.username,
+        usernameTag: profile.username_tag,
         loaded: true,
       });
     } catch {
@@ -49,4 +56,5 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
   },
 
   setAvatar: (url) => set({ avatarUrl: url }),
+  setUsername: (name, tag) => set({ username: name, usernameTag: tag }),
 }));

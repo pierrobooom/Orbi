@@ -22,7 +22,7 @@ from pydantic import BaseModel, Field
 
 from app.db import device_tokens as device_tokens_db, users as users_db
 from app.models.user import UsageSnapshot, UserPreference, UserProfile
-from app.services import avatars
+from app.services import avatars, usernames
 from app.services.auth import get_current_user, get_current_user_with_tier
 from app.services.locale import get_locale
 from app.services.push import send_push
@@ -87,6 +87,36 @@ async def set_my_avatar(
     # deleting the picture the profile still points at.
     await avatars.discard((previous or {}).get("avatar_url"))
     return row
+
+
+class UsernameInput(BaseModel):
+    username: str = Field(min_length=1, max_length=64)
+
+
+@router.put("/me/username", response_model=UserProfile)
+async def set_my_username(
+    body: UsernameInput,
+    user_id: UUID = Depends(get_current_user),
+):
+    """Choose a username. The tag is assigned by the server, never chosen.
+
+    Letting people pick their own number would let them pick someone
+    else's, which is the one thing the number exists to prevent.
+    """
+    try:
+        await usernames.claim(user_id, body.username)
+    except usernames.InvalidUsername as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=_error(str(exc), "INVALID_USERNAME"),
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Username claim failed for %s", user_id)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=_error("Could not save that username.", "USERNAME_FAILED"),
+        ) from exc
+    return await users_db.fetch_profile(user_id)
 
 
 @router.delete("/me/avatar", response_model=UserProfile)

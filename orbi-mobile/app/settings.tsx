@@ -46,6 +46,7 @@ import { cue } from "@/services/feedback";
 import { useSoundStore } from "@/stores/soundStore";
 import { useProfileStore } from "@/stores/profileStore";
 import { ProfileAvatar } from "@/components/profile-avatar";
+import { UsernameField } from "@/components/username-field";
 import { ScreenHeader } from "@/components/screen-header";
 import { useLocaleStore, useT, type UiLanguage, translate } from "@/i18n";
 import {
@@ -116,6 +117,9 @@ export default function SettingsScreen() {
       .then((profile) => {
         setAvatarUrl(profile.avatar_url);
         setDisplayName(profile.full_name || "");
+        useProfileStore
+          .getState()
+          .setUsername(profile.username, profile.username_tag);
       })
       // Silent: a profile that will not load is not a reason to block the
       // rest of Settings, and the initials fallback still renders.
@@ -387,6 +391,7 @@ export default function SettingsScreen() {
               useProfileStore.getState().setAvatar(url);
             }}
           />
+          <UsernameField />
           <Row label={t("Email")} value={email} />
           <Row label={t("Plan")} value={TIER_DISPLAY[tier]} />
           <Pressable

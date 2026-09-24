@@ -249,6 +249,30 @@ export const ptPT: Record<string, string> = {
   "New": "Nova",
   "Message Orbi": "Escreve ao Orbi",
   "Hide keyboard": "Fechar teclado",
+  "A username needs at least 3 characters.":
+    "Um nome de utilizador precisa de pelo menos 3 caracteres.",
+  "A username can be at most 20 characters.":
+    "Um nome de utilizador pode ter no máximo 20 caracteres.",
+  "Use letters, numbers, dots and underscores only.":
+    "Usa apenas letras, números, pontos e traços baixos.",
+  "Dots can only go between other characters.":
+    "Os pontos só podem ficar entre outros caracteres.",
+  "A username needs at least one letter.":
+    "Um nome de utilizador precisa de pelo menos uma letra.",
+  "That name is reserved.":
+    "Esse nome está reservado.",
+  "Username":
+    "Nome de utilizador",
+  "Choose a username":
+    "Escolher um nome de utilizador",
+  "Choose":
+    "Escolher",
+  "your name":
+    "o teu nome",
+  "Could not save that username.":
+    "Não foi possível guardar esse nome.",
+  "Anyone can pick any name. The number is added for you, so no one else can be you.":
+    "Qualquer pessoa pode escolher qualquer nome. O número é acrescentado automaticamente, para que mais ninguém possa ser tu.",
   "All": "Todas",
   "1 overdue": "1 atrasada",
   "1 open": "1 aberta",

@@ -124,8 +124,33 @@ export interface UserProfile {
   /** Public URL of the profile picture, or null. Lives on the profile rather
    * than on the device, so it comes back on a reinstall or a new phone. */
   avatar_url: string | null;
+  /** Chosen name and its server-assigned number: "lucas" + 1 is shown as
+   * lucas#0001. Null until chosen — email stays the account; the handle is
+   * how other people find you. */
+  username: string | null;
+  username_tag: number | null;
   created_at: string;
   updated_at: string;
+}
+
+/** lucas#0001 — four digits, more once there are more than 9999. Mirrors
+ * format_tag on the server so both ends always write it the same way. */
+export function formatHandle(
+  name: string | null | undefined,
+  tag: number | null | undefined,
+): string | null {
+  if (!name || tag === null || tag === undefined) return null;
+  return `${name}#${String(tag).padStart(4, "0")}`;
+}
+
+/** Choose a username. The number is always assigned by the server. */
+export async function setUsername(username: string): Promise<UserProfile> {
+  const res = await authFetch(`${V1}/users/me/username`, {
+    method: "PUT",
+    body: JSON.stringify({ username }),
+  });
+  if (!res.ok) throw await parseError(res);
+  return (await res.json()) as UserProfile;
 }
 
 // Routers are mounted under /api/v1 in orbi-backend/main.py. The /health

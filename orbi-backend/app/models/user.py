@@ -19,6 +19,10 @@ class UserProfile(BaseModel):
     # Public URL of the profile picture, or None. Optional with a default so
     # a profile row written before migration 0024 still validates.
     avatar_url: str | None = None
+    # lucas + 1 -> "lucas#0001". Both None until a name is chosen: email
+    # remains the account, and a username is how other people find you.
+    username: str | None = None
+    username_tag: int | None = None
     created_at: datetime
     updated_at: datetime
 
