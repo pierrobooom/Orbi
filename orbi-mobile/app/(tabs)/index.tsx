@@ -34,6 +34,8 @@ import {
 } from "@/services/api";
 import { canCreateBubble, formatTurnsChip, isAtAiCap } from "@/services/tierGate";
 import { useAuthStore, type SubscriptionTier } from "@/stores/authStore";
+import { startHum, stopHum } from "@/services/feedback";
+import { useSoundStore } from "@/stores/soundStore";
 import { useUniverseStore } from "@/stores/universeStore";
 import { useUsageStore } from "@/stores/usageStore";
 import { colors } from "@/theme/colors";
@@ -90,6 +92,17 @@ export default function UniverseScreen() {
   // glitch loop where modals opened/closed themselves.
   const [navLocked, setNavLocked] = useState(false);
   const lockTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // The universe hum runs only while this screen is the one you are looking
+  // at. Tied to focus rather than to app lifetime because it is scenery for
+  // one place — hearing it over the Money tab would make it noise.
+  const humOn = useSoundStore((s) => s.hum);
+  useFocusEffect(
+    useCallback(() => {
+      if (humOn) startHum();
+      return stopHum;
+    }, [humOn]),
+  );
 
   useFocusEffect(
     useCallback(() => {

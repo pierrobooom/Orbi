@@ -27,6 +27,8 @@ import { usePushRegistration } from "@/hooks/usePushRegistration";
 // subscribed before any screen reads from it.
 import { useAuthStore } from "@/stores/authStore";
 import { useHandednessStore } from "@/stores/handednessStore";
+import { useSoundStore } from "@/stores/soundStore";
+import { initFeedback, setQuietHours } from "@/services/feedback";
 import { useLocaleStore, type UiLanguage } from "@/i18n";
 import { getMyPreferences } from "@/services/api";
 import { colors } from "@/theme/colors";
@@ -212,11 +214,27 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   // Seed UI language from the server-side preference once signed in.
   // Failure is silent and leaves English — a missing preferences row
   // is the normal state for a new user, not an error worth surfacing.
+  // Audio session and cue players, once. Independent of auth: the sign-in
+  // screen's buttons should feel like the rest of the app, and building a
+  // player on first press adds a delay to the very tap it acknowledges.
+  useEffect(() => {
+    void initFeedback();
+    void useSoundStore.getState().hydrate();
+  }, []);
+
   useEffect(() => {
     if (!session) return;
     getMyPreferences()
       .then((p) => {
         useLocaleStore.getState().setLanguage(p.language as UiLanguage);
+        // The app should be consistent about when it is allowed to speak, so
+        // sound observes the same window that already silences reminders
+        // rather than inventing a second quiet-hours setting.
+        const hour = (value: string | undefined) => {
+          const parsed = Number((value ?? "").slice(0, 2));
+          return Number.isFinite(parsed) ? parsed : null;
+        };
+        setQuietHours(hour(p.quiet_hours_start), hour(p.quiet_hours_end));
         // Handedness rides along on the same call. It is a property of the
         // person rather than the handset, so a reinstall or a second device
         // should not make them find the setting again.

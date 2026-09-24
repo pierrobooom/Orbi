@@ -38,6 +38,7 @@ import {
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
 import { useUniverseStore } from "@/stores/universeStore";
 import { colors } from "@/theme/colors";
+import { cue } from "@/services/feedback";
 
 interface ParsedTask {
   title: string;
@@ -264,6 +265,7 @@ export default function VoiceConfirmScreen() {
         due_at: current.due_at ?? null,
         importance: current.importance,
       });
+      cue("capture");
       addTask(created);
       setAddedCount((n) => n + 1);
       setSubmitting(false);

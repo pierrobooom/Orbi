@@ -23,6 +23,7 @@ import { useT } from "@/i18n";
 import { ApiError, createTask } from "@/services/api";
 import { useUniverseStore } from "@/stores/universeStore";
 import { colors } from "@/theme/colors";
+import { cue } from "@/services/feedback";
 
 const SYNTHETIC_DRIFT_ID = "synthetic-drift";
 
@@ -102,6 +103,7 @@ export default function NewTaskScreen() {
         parent_cluster_id: clusterId,
         due_at: dueAt ? dueAt.toISOString() : null,
       });
+      cue("capture");
       addTask(created);
       router.back();
     } catch (e) {

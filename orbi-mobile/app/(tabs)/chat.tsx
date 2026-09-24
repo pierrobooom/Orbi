@@ -41,6 +41,7 @@ import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
 import { ApiError, isQuotaError, transcribeAudio } from "@/services/api";
 import { useChatStore, type ChatMessage } from "@/stores/chatStore";
 import { colors } from "@/theme/colors";
+import { cue } from "@/services/feedback";
 
 interface ParsedTask {
   title?: string;
@@ -175,6 +176,7 @@ export default function ChatScreen() {
       if (isQuotaError(e)) {
         // The one server message worth showing verbatim: it says which
         // limit was hit and when it resets, which is information, not noise.
+        cue("refuse");
         setError(e.message);
       } else {
         // Everything else is infrastructure — a dead socket, a 500, a JSON

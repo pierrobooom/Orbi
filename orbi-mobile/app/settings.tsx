@@ -42,6 +42,8 @@ import {
 } from "@/services/api";
 import { TIER_DISPLAY } from "@/services/tierGate";
 import { useAuthStore } from "@/stores/authStore";
+import { cue } from "@/services/feedback";
+import { useSoundStore } from "@/stores/soundStore";
 import { ProfileAvatar } from "@/components/profile-avatar";
 import { ScreenHeader } from "@/components/screen-header";
 import { useLocaleStore, useT, type UiLanguage, translate } from "@/i18n";
@@ -118,6 +120,13 @@ export default function SettingsScreen() {
       // rest of Settings, and the initials fallback still renders.
       .catch(() => {});
   }, []);
+
+  // Sound is a per-device choice, so it comes from local storage rather
+  // than from the server preferences fetched below.
+  const effectsOn = useSoundStore((s) => s.effects);
+  const humOn = useSoundStore((s) => s.hum);
+  const setEffects = useSoundStore((s) => s.setEffects);
+  const setHum = useSoundStore((s) => s.setHum);
 
   const [notifsGranted, setNotifsGranted] = useState<boolean | null>(null);
   const [busy, setBusy] = useState<"signout" | "test" | "register" | null>(null);
@@ -426,6 +435,40 @@ export default function SettingsScreen() {
               value={notifsGranted === true}
               onValueChange={onToggleNotifs}
               disabled={notifsGranted === null}
+              trackColor={{ false: colors.line, true: colors.accent }}
+            />
+          </View>
+        </Section>
+
+        <Section title={t("Sound")}>
+          <View style={styles.toggleRow}>
+            <View style={styles.toggleLabelGroup}>
+              <Text style={styles.rowLabel}>{t("Sound effects")}</Text>
+              <Text style={styles.rowHint}>
+                {t("Quiet cues when you capture, complete or speak. Always silent when your phone is, and never during quiet hours.")}
+              </Text>
+            </View>
+            <Switch
+              value={effectsOn}
+              onValueChange={(on) => {
+                setEffects(on);
+                // Play the cue the moment it is switched on, so the choice is
+                // answered by the thing itself rather than by a label.
+                if (on) cue("tap");
+              }}
+              trackColor={{ false: colors.line, true: colors.accent }}
+            />
+          </View>
+          <View style={styles.toggleRow}>
+            <View style={styles.toggleLabelGroup}>
+              <Text style={styles.rowLabel}>{t("Universe hum")}</Text>
+              <Text style={styles.rowHint}>
+                {t("A soft drone while the universe is open. Off unless you want it.")}
+              </Text>
+            </View>
+            <Switch
+              value={humOn}
+              onValueChange={setHum}
               trackColor={{ false: colors.line, true: colors.accent }}
             />
           </View>

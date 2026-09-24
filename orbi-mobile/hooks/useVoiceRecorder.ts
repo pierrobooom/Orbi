@@ -25,6 +25,7 @@ import {
   useAudioRecorder,
 } from "expo-audio";
 import { useRef, useState } from "react";
+import { cue } from "@/services/feedback";
 
 export interface RecordingResult {
   uri: string;
@@ -92,6 +93,10 @@ export function useVoiceRecorder() {
         isRecordingRef.current = true;
         startedAtRef.current = Date.now();
         setIsRecording(true);
+        // Fired here rather than at the button, so every mic in the app —
+        // universe, chat, task detail — says the same thing, and says it
+        // only once recording has actually begun.
+        cue("listen");
         return true;
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
@@ -145,6 +150,7 @@ export function useVoiceRecorder() {
       // the state below still has to be cleared.
     }
     setIsRecording(false);
+    cue("listenStop");
 
     const durationMs = startedAt ? Date.now() - startedAt : 0;
     if (durationMs < MIN_RECORDING_MS) {

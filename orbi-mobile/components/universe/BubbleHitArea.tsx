@@ -43,6 +43,7 @@ import Animated, {
 } from "react-native-reanimated";
 
 import type { PhysicsState } from "./types";
+import { cue } from "@/services/feedback";
 
 interface Props {
   index: number;
@@ -118,11 +119,18 @@ export default function BubbleHitArea({
     return physics.value.findIndex((e) => e.id === bubbleId);
   };
 
+  // Sound and haptic live with the gesture, not with each screen that
+  // renders a bubble, so every bubble in the app answers a tap identically.
+  const openBubble = () => {
+    cue("tap");
+    onPress();
+  };
+
   const tap = Gesture.Tap()
     .maxDuration(HOLD_MS)
     .onEnd((_e, success) => {
       "worklet";
-      if (success) runOnJS(onPress)();
+      if (success) runOnJS(openBubble)();
     });
 
   let drag = Gesture.Pan()

@@ -52,6 +52,7 @@ import {
 import { useUniverseStore } from "@/stores/universeStore";
 import { dismissDeliveredFor } from "@/hooks/useNotificationActions";
 import { colors } from "@/theme/colors";
+import { cue } from "@/services/feedback";
 
 // Mark-complete hold duration. Keeps the user from accidentally
 // completing a task with a stray tap.
@@ -226,6 +227,10 @@ export default function TaskDetailScreen() {
     try {
       const state = await completeTask(task.id);
       if (state.complete) {
+        // Only when it actually closed. On a shared task that still needs
+        // other people, a reward sound would be celebrating something that
+        // has not happened.
+        cue("complete");
         // The task is closed, so any reminder about it still sitting in
         // Notification Centre is now asking about something that is done.
         // Acting from a notification already clears these; finishing the

@@ -249,6 +249,16 @@ export const ptPT: Record<string, string> = {
   "New": "Nova",
   "Message Orbi": "Escreve ao Orbi",
   "Hide keyboard": "Fechar teclado",
+  "Sound":
+    "Som",
+  "Sound effects":
+    "Efeitos sonoros",
+  "Universe hum":
+    "Zumbido do universo",
+  "Quiet cues when you capture, complete or speak. Always silent when your phone is, and never during quiet hours.":
+    "Sinais discretos ao captar, concluir ou falar. Fica sempre em silêncio quando o telemóvel está, e nunca durante as horas de sossego.",
+  "A soft drone while the universe is open. Off unless you want it.":
+    "Um som suave e contínuo enquanto o universo está aberto. Desligado a menos que o queiras.",
   "Profile picture":
     "Foto de perfil",
   "Choose a photo":
