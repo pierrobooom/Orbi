@@ -78,25 +78,43 @@ interface ReminderData {
   taskId?: string;
 }
 
+// Whether Done / Snooze / Tomorrow / Reply act WITHOUT opening the app.
+//
+// FALSE, AND WHY — these buttons did nothing at all.
+// An action with opensAppToForeground: false is handled by iOS in the
+// background, and the app's JavaScript only hears about it through a
+// registered background task (Notifications.registerTaskAsync with
+// expo-task-manager). None was ever registered. The listener in this file
+// only runs while the app is open — so pressing "Tomorrow" on the lock
+// screen changed nothing, anywhere, and said nothing: the task stayed due
+// today, red, and the server log shows no request at all.
+//
+// Background tasks also do not run in Expo Go, so this could not have been
+// made to work in the environment the app is tested in. Opening the app is
+// the version that works everywhere, and it has a real upside: you see the
+// task move, rather than trusting that it did.
+//
+// Flip to true only together with a registered background task, and only
+// after checking it on a development build.
+const ACT_IN_BACKGROUND = false;
+const quietly = { opensAppToForeground: !ACT_IN_BACKGROUND };
+
 /** Register the action sets. Safe to call repeatedly — it's an upsert. */
 export async function registerNotificationCategories(): Promise<void> {
-  // opensAppToForeground: false is the whole point. "Done" that yanks you
-  // into the app has not saved you anything; the value is disposing of
-  // the thing without leaving your lock screen.
   const done = {
     identifier: ACTION_DONE,
     buttonTitle: translate("Done"),
-    options: { opensAppToForeground: false },
+    options: quietly,
   };
   const snooze = {
     identifier: ACTION_SNOOZE,
     buttonTitle: translate("Snooze 1h"),
-    options: { opensAppToForeground: false },
+    options: quietly,
   };
   const snoozeTomorrow = {
     identifier: ACTION_SNOOZE_TOMORROW,
     buttonTitle: translate("Tomorrow"),
-    options: { opensAppToForeground: false },
+    options: quietly,
   };
   // The escape hatch from a fixed menu. Two canned delays cover most
   // cases and nothing covers the rest, so this one deliberately DOES open
@@ -115,7 +133,7 @@ export async function registerNotificationCategories(): Promise<void> {
       submitButtonTitle: translate("Send"),
       placeholder: translate("What happened?"),
     },
-    options: { opensAppToForeground: false },
+    options: quietly,
   };
 
   // Order matters more than the list does: iOS shows only the first two
