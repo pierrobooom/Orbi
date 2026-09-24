@@ -6,6 +6,7 @@
 //
 // Triggered from the search icon top-right of the universe header.
 
+import Feather from "@expo/vector-icons/Feather";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { useRouter } from "expo-router";
 import React, { useRef, useState } from "react";
@@ -142,9 +143,9 @@ export default function SearchScreen() {
               accessibilityLabel="Hold to dictate search"
             >
               {busy === "voice" ? (
-                <ActivityIndicator color={colors.ink} />
+                <ActivityIndicator color={colors.canvas} />
               ) : (
-                <Text style={styles.micText}>🎙</Text>
+                <Feather name="mic" size={24} color={colors.canvas} />
               )}
             </Pressable>
             <Pressable
@@ -200,22 +201,21 @@ const styles = themed(() => StyleSheet.create({
     gap: 14,
     marginTop: 24,
   },
+  // The same mic as the universe: an ink circle and a stroke glyph, red while
+  // recording. It was the 🎙 emoji here — drawn by the system font, unable
+  // to take a colour, and a different shape on every OS version.
   micCircle: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    borderColor: colors.line,
-    borderWidth: 1.5,
-    backgroundColor: colors.panel,
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: colors.ink,
     alignItems: "center",
     justifyContent: "center",
   },
   micCircleActive: {
-    borderColor: colors.overdue,
-    backgroundColor: "rgba(190, 18, 60, 0.10)",
+    backgroundColor: colors.overdue,
   },
   micBusy: { opacity: 0.6 },
-  micText: { fontSize: 22 },
   searchBtn: {
     flex: 1,
     flexDirection: "row",

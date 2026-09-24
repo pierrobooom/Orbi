@@ -10,6 +10,7 @@
 // user bails halfway, what they already confirmed is safely saved, and
 // nothing they haven't seen gets written.
 
+import Feather from "@expo/vector-icons/Feather";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -449,9 +450,9 @@ export default function VoiceConfirmScreen() {
             {voiceBusy ? (
               <ActivityIndicator color={colors.accent} />
             ) : (
-              <MaterialIcons
+              <Feather
                 name="mic"
-                size={30}
+                size={28}
                 color={voice.isRecording ? "white" : colors.ink}
               />
             )}

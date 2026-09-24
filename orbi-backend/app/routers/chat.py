@@ -23,6 +23,7 @@ from app.db import (
     users as users_db,
 )
 from app.models.conversation import ConversationSource
+from app.services import day_scope
 from app.services.ai_router import AIRateLimited
 from app.services.auth import get_current_user, get_current_user_with_tier
 from app.services.chat_context import build_chat_context
@@ -70,6 +71,44 @@ class ChatResponse(BaseModel):
 
 
 _TASK_ACTIONS = frozenset({"complete", "delete", "update", "list"})
+
+# Filters that are a span of time rather than a topic. A topic filter is
+# widened with semantic search ("gym" finds "Leg day"); a date must not be,
+# or "today" would pull in anything that merely sounds like today.
+_DATE_FILTERS = frozenset({"overdue", "today", "tomorrow"})
+
+
+def _list_reply(count: int, task_filter: str | None, language: str | None) -> str:
+    """The line above a list of results, in the user's language.
+
+    It was "2 task(s)." / "Nothing matches that." whatever language the
+    user wrote in — one of the places English kept surfacing in a
+    Portuguese app.
+    """
+    pt = (language or "").lower().startswith("pt")
+    if pt:
+        if task_filter == "today":
+            return "Nada para hoje." if count == 0 else (
+                "Tens 1 tarefa para hoje." if count == 1 else f"Tens {count} tarefas para hoje."
+            )
+        if task_filter == "tomorrow":
+            return "Nada para amanhã." if count == 0 else (
+                "Tens 1 tarefa para amanhã." if count == 1 else f"Tens {count} tarefas para amanhã."
+            )
+        if count == 0:
+            return "Nada corresponde a isso."
+        return "1 tarefa." if count == 1 else f"{count} tarefas."
+    if task_filter == "today":
+        return "Nothing for today." if count == 0 else (
+            "You have 1 task for today." if count == 1 else f"You have {count} tasks for today."
+        )
+    if task_filter == "tomorrow":
+        return "Nothing for tomorrow." if count == 0 else (
+            "You have 1 task for tomorrow." if count == 1 else f"You have {count} tasks for tomorrow."
+        )
+    if count == 0:
+        return "Nothing matches that."
+    return "1 task." if count == 1 else f"{count} tasks."
 
 # A chat reply listing more than this is a wall of text, not an answer.
 # `count` still reports the true total, so the client can say
@@ -123,8 +162,9 @@ def _filter_tasks(
     task_filter: str | None,
     target: str,
     clusters: list[dict] | None = None,
+    tz_name: str | None = None,
 ) -> list[dict]:
-    """Apply a spoken filter ("overdue", "today", a cluster name)."""
+    """Apply a spoken filter ("overdue", "today", "tomorrow", a cluster name)."""
     now = datetime.now(timezone.utc)
     if task_filter == "overdue":
         out = []
@@ -138,19 +178,17 @@ def _filter_tasks(
             except ValueError:
                 continue
         return out
-    if task_filter == "today":
-        out = []
-        for task in tasks:
-            due = task.get("due_at")
-            if not due:
-                continue
-            try:
-                parsed = datetime.fromisoformat(str(due).replace("Z", "+00:00"))
-            except ValueError:
-                continue
-            if parsed.date() == now.date():
-                out.append(task)
-        return out
+    if task_filter in ("today", "tomorrow"):
+        # The user's calendar day, not UTC's — see services/day_scope.py.
+        # Comparing UTC dates counted a task due tomorrow morning as today
+        # whenever the question was asked near midnight in Lisbon.
+        return sorted(
+            (
+                t for t in tasks
+                if day_scope.in_scope(t.get("due_at"), task_filter, tz_name, now)
+            ),
+            key=lambda t: str(t.get("due_at") or ""),
+        )
     needle = (task_filter or target or "").lower().strip()
     if not needle:
         return tasks
@@ -321,8 +359,17 @@ async def chat(
     # Coordinator classifies intent. A rate limit here is reported as a
     # 429 rather than swallowed, so the client can say "wait a moment"
     # instead of "couldn't parse that".
+    # "What do I have today?" is a date range, and a date range is
+    # arithmetic. Recognised here and answered by the filter directly,
+    # without the model — which, given a next-seven-days slice as context,
+    # had answered "today" with the whole week.
+    scope = day_scope.detect(body.message)
     try:
-        classification = await coordinator.classify_intent(
+        classification = {
+            "intent": "query_tasks",
+            "agent": "task_action",
+            "data": {"action": "list", "filter": scope},
+        } if scope else await coordinator.classify_intent(
             user_message=body.message,
             user_id=user_id,
             user_tier=user_tier,
@@ -382,7 +429,9 @@ async def chat(
                 user_clusters = await clusters_db.fetch_clusters_for_user(user_id)
             except Exception:  # noqa: BLE001 — cluster names are a bonus
                 user_clusters = []
-            matches = _filter_tasks(active, task_filter, target, user_clusters)
+            matches = _filter_tasks(
+                active, task_filter, target, user_clusters, tz_name=body.user_timezone
+            )
             # Whether to widen the result depends on which field the
             # model filled in, and the prompt already distinguishes them:
             # `filter` is a category ("all the gym related stuff"),
@@ -395,8 +444,8 @@ async def chat(
             # wrong as returning one result for "show me everything
             # about X".
             needle = task_filter or target
-            is_topic = bool(task_filter) and task_filter not in {"overdue", "today"}
-            if needle and task_filter not in {"overdue", "today"}:
+            is_topic = bool(task_filter) and task_filter not in _DATE_FILTERS
+            if needle and task_filter not in _DATE_FILTERS:
                 if is_topic or not matches:
                     related = await search_tasks_semantic(
                         target=needle, user_id=user_id, active_tasks=active
@@ -435,9 +484,7 @@ async def chat(
                 ],
                 "count": len(matches),
             }
-            reply = (
-                f"{len(matches)} task(s)." if matches else "Nothing matches that."
-            )
+            reply = _list_reply(len(matches), task_filter, language)
         else:
             resolution = await resolve_task(
                 target=target, user_id=user_id, active_tasks=active

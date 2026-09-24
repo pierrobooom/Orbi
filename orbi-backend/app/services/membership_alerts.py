@@ -63,8 +63,8 @@ _COPY = {
             "{amount} will be charged on {date}.",
         ),
         "renewed": (
-            "{merchant} renewed today",
-            "{amount} charged. Cancel now if you don't want it again next {period}.",
+            "{merchant} renews today",
+            "{amount} due today. Cancel now if you don't want it again next {period}.",
         ),
     },
     "pt": {
@@ -81,8 +81,8 @@ _COPY = {
             "{amount} vão ser cobrados a {date}.",
         ),
         "renewed": (
-            "{merchant} renovou hoje",
-            "{amount} cobrados. Cancela agora se não quiseres outro {period}.",
+            "{merchant} renova hoje",
+            "{amount} a pagar hoje. Cancela agora se não quiseres outro {period}.",
         ),
     },
 }

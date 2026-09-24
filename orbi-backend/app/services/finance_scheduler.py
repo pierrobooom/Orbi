@@ -44,11 +44,16 @@ RUN_IN_PROCESS = os.environ.get("RUN_FINANCE_SCHEDULER", "1") != "0"
 
 
 async def materialise_recurring(today: date | None = None) -> dict:
-    """Create the finance entries that recurring rules say are owed.
+    """Move each recurring rule on to its next date, and say when it is due.
 
-    Idempotent through the deterministic external_id on each occurrence, so a
-    double run — two workers, a retry, a manual trigger — writes each entry
-    once and the unique index absorbs the rest.
+    RECURRING RULES DO NOT TOUCH THE LEDGER.
+    This used to insert a finance entry for every occurrence — a Claude
+    subscription on the 26th became a -24 row in the account on the 26th. Two
+    things were wrong with that. It is not what a subscription list is for:
+    it is a calendar of what will be charged, so you are not surprised, not a
+    record of what was. And on any account connected to a bank it counts the
+    same payment twice, because the bank sync imports the real charge as
+    well. The ledger is what actually happened; rules only warn.
     """
     today = today or datetime.now(timezone.utc).date()
     rules = await accounts_db.fetch_due_recurring(today)
@@ -59,9 +64,7 @@ async def materialise_recurring(today: date | None = None) -> dict:
     for rule in rules:
         try:
             occurrences, next_run = recurring.occurrences_due(rule, today)
-            if occurrences:
-                rows = [recurring.build_entry(rule, o) for o in occurrences]
-                written += await finance_db.insert_entries(rows)
+            # Nothing is written to finance_entries — see the docstring.
 
             # Advance the schedule even when nothing was written — a rule that
             # produced only duplicates has still moved on, and leaving
@@ -82,9 +85,9 @@ async def materialise_recurring(today: date | None = None) -> dict:
                 rule["id"], rule["owner_id"], patch
             )
 
-            # Said only once something was actually written. "This renewed"
-            # is a receipt, and a receipt for an entry that did not appear
-            # would be a lie about the user's money.
+            # Said on the day an occurrence falls due. Worded as "due today",
+            # not "charged": nothing here observed the charge, so claiming
+            # money moved would be a guess presented as a fact.
             if occurrences:
                 try:
                     await membership_alerts.notify_renewed(rule)
@@ -95,8 +98,8 @@ async def materialise_recurring(today: date | None = None) -> dict:
         except Exception as exc:  # noqa: BLE001 — one rule must not stop the rest
             logger.error("Recurring rule %s failed: %s", rule.get("id"), exc)
 
-    if written:
-        logger.info("Materialised %s recurring entries from %s rules", written, len(rules))
+    # Always 0 now; kept in the result so callers and the API shape are
+    # unchanged.
     return {"rules": len(rules), "entries": written}
 
 

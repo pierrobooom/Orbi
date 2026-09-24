@@ -36,7 +36,7 @@ import {
   updateTask,
   voiceUpdateTask,
 } from "@/services/api";
-import { translate } from "@/i18n";
+import { translate, useLocaleStore } from "@/i18n";
 import { useAuthStore } from "@/stores/authStore";
 import { useUniverseStore } from "@/stores/universeStore";
 
@@ -323,13 +323,20 @@ export function useNotificationActions() {
   // Truthy only once the root navigator exists. See the cold-start effect.
   const navigationReady = !!useRootNavigationState()?.key;
 
+  // Re-registered whenever the UI language changes, not only on sign-in.
+  //
+  // Button titles are baked in at registration. This used to run the moment
+  // a session existed — but the user's language arrives afterwards, from the
+  // server, and until it does the app is in its en-GB default. So the
+  // buttons were registered in English ("Done", "Tomorrow") while the text
+  // above them, written by the server in the user's language, was
+  // Portuguese: one notification, two languages. Registering again is an
+  // upsert, so following the language costs nothing.
+  const language = useLocaleStore((s) => s.language);
   useEffect(() => {
-    // Categories are per-app, not per-user, but registering only once
-    // signed in keeps the button labels in the language the user chose,
-    // which is loaded with their preferences.
     if (!session) return;
     registerNotificationCategories();
-  }, [session]);
+  }, [session, language]);
 
   useEffect(() => {
     if (!session) return;

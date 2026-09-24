@@ -10,7 +10,7 @@ from uuid import UUID, uuid4
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from fastapi.responses import HTMLResponse
 
@@ -1292,8 +1292,27 @@ async def delete_connection(
         )
 
 
+def _psu_from(request: Request) -> dict[str, str] | None:
+    """The user's own IP and user agent, from the request they just made.
+
+    Behind the Cloudflare tunnel the socket peer is the tunnel, not the
+    phone, so the real address comes from CF-Connecting-IP (or the first hop
+    of X-Forwarded-For). Sending the tunnel's address would misdescribe who
+    is present — and the point of these headers is to be true.
+    """
+    ip = (
+        request.headers.get("cf-connecting-ip")
+        or (request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
+        or (request.client.host if request.client else "")
+    )
+    agent = request.headers.get("user-agent") or ""
+    if not ip or not agent:
+        return None
+    return {"ip": ip, "user_agent": agent}
+
+
 @router.post("/run-jobs", response_model=FinanceJobResult)
-async def run_jobs(user_id: UUID = Depends(get_current_user)):
+async def run_jobs(request: Request, user_id: UUID = Depends(get_current_user)):
     """Run the daily finance jobs now.
 
     For development and for a "refresh" affordance. It does NOT bypass the
@@ -1306,7 +1325,9 @@ async def run_jobs(user_id: UUID = Depends(get_current_user)):
     # The USER'S connections, on the manual floor — not the background sweep.
     # Using the daily cadence here made Update a button that did nothing for
     # twenty-two hours after the first sync.
-    sync = await sync_user_now(user_id, now)
+    # Tapping Update means the user is here, so the read says so — and is
+    # not spent from the bank's small daily allowance for background reads.
+    sync = await sync_user_now(user_id, now, psu=_psu_from(request))
 
     return FinanceJobResult(
         recurring_rules=recurring["rules"],

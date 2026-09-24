@@ -9,6 +9,7 @@
 //   - View mode: Edit | Delete | Mark complete
 //   - Edit mode: Cancel | Save changes
 
+import Feather from "@expo/vector-icons/Feather";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -617,9 +618,9 @@ export default function TaskDetailScreen() {
               accessibilityLabel="Hold to dictate task update"
             >
               {voiceBusy ? (
-                <ActivityIndicator color={colors.ink} />
+                <ActivityIndicator color={colors.canvas} />
               ) : (
-                <Text style={styles.micText}>🎙</Text>
+                <Feather name="mic" size={24} color={colors.canvas} />
               )}
             </Pressable>
           </View>
@@ -747,7 +748,6 @@ const styles = themed(() => StyleSheet.create({
   micButton: { justifyContent: "center", alignItems: "center", minHeight: 28 },
   micButtonActive: { transform: [{ scale: 1.15 }] },
   micButtonBusy: { opacity: 0.6 },
-  micText: { fontSize: 20 },
   body: { paddingHorizontal: 24, paddingTop: 18, paddingBottom: 24 },
   title: { color: colors.ink, fontSize: 22, fontWeight: "700", marginBottom: 8 },
   description: { color: colors.inkDim, fontSize: 14, marginBottom: 14, lineHeight: 20 },
@@ -876,19 +876,19 @@ const styles = themed(() => StyleSheet.create({
     alignItems: "center",
     paddingBottom: 12,
   },
+  // The same mic as the universe: an ink circle and a stroke glyph, red while
+  // recording. It was the 🎙 emoji here — drawn by the system font, unable
+  // to take a colour, and a different shape on every OS version.
   micCircle: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    borderColor: colors.line,
-    borderWidth: 1.5,
-    backgroundColor: colors.panel,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: colors.ink,
     alignItems: "center",
     justifyContent: "center",
   },
   micCircleActive: {
-    borderColor: colors.overdue,
-    backgroundColor: "rgba(190, 18, 60, 0.10)",
+    backgroundColor: colors.overdue,
   },
   primaryBtn: {
     flex: 2,

@@ -14,6 +14,7 @@ from app.services.bank_providers import (
     BankTransaction,
     ConsentExpired,
     NullProvider,
+    RateLimited,
     get_provider,
     register,
 )
@@ -39,9 +40,10 @@ class FakeProvider:
         self.calls: list[tuple[date, date]] = []
 
     async def fetch_transactions(
-        self, *, external_account_id, consent_reference, since, until
+        self, *, external_account_id, consent_reference, since, until, psu=None
     ):
         self.calls.append((since, until))
+        self.psu = psu
         if self.raises:
             raise self.raises
         return self.transactions
@@ -257,3 +259,86 @@ def test_interruption_levels_match_the_push_api_spelling():
     # Reminders must never use 'critical' — Apple grants that entitlement case
     # by case for safety alerts, and it overrides the silent switch.
     assert "critical" not in _INTERRUPTION.values()
+
+
+
+# ---------------------------------------------------------------------------
+# The bank's daily read limit
+#
+# Regression: a 429 (ASPSP_RATE_LIMIT_EXCEEDED) marked a perfectly good
+# connection "error". The app showed it as broken, the user reconnected, and
+# a valid consent was thrown away over a limit that resets by itself.
+# ---------------------------------------------------------------------------
+
+async def _run_sync(monkeypatch, provider, psu=None):
+    """Run sync_connection against a fake provider, recording DB writes."""
+    from app.services import bank_sync
+
+    writes: list[dict] = []
+
+    async def update_connection(_connection_id, patch):
+        writes.append(patch)
+
+    monkeypatch.setattr(bank_sync.accounts_db, "update_connection", update_connection)
+    monkeypatch.setattr(bank_sync, "get_provider", lambda _name: provider)
+    connection = {
+        "id": "dddddddd-dddd-dddd-dddd-dddddddddddd",
+        "owner_id": OWNER,
+        "account_id": ACCOUNT,
+        "provider": "fake",
+        "external_account_id": "acc-1",
+        "consent_reference": "ref-1",
+    }
+    written = await bank_sync.sync_connection(connection, psu=psu)
+    return written, writes
+
+
+@pytest.mark.asyncio
+async def test_a_rate_limit_never_marks_the_connection_broken(monkeypatch):
+    written, writes = await _run_sync(monkeypatch, FakeProvider(raises=RateLimited("429")))
+    assert written == 0
+    statuses = [w["status"] for w in writes if "status" in w]
+    assert statuses == [], f"a 429 must not change status, got {statuses}"
+
+
+@pytest.mark.asyncio
+async def test_a_rate_limit_backs_off_about_six_hours(monkeypatch):
+    from app.services.bank_sync import RATE_LIMIT_BACKOFF_HOURS
+
+    before = datetime.now(timezone.utc)
+    _, writes = await _run_sync(monkeypatch, FakeProvider(raises=RateLimited("429")))
+    last = datetime.fromisoformat(writes[-1]["next_sync_after"])
+    assert timedelta(hours=RATE_LIMIT_BACKOFF_HOURS - 0.1) < last - before
+    assert "limit" in writes[-1]["last_error"].lower()
+
+
+@pytest.mark.asyncio
+async def test_a_real_failure_is_still_an_error(monkeypatch):
+    """The fix must be narrow: anything that is not a rate limit stays loud."""
+    with pytest.raises(RuntimeError):
+        await _run_sync(monkeypatch, FakeProvider(raises=RuntimeError("500")))
+
+
+@pytest.mark.asyncio
+async def test_a_user_present_read_passes_its_psu_through(monkeypatch):
+    provider = FakeProvider()
+    psu = {"ip": "203.0.113.7", "user_agent": "Orbi/1"}
+    monkeypatch.setattr("app.services.bank_sync._store", lambda *a, **k: _zero())
+    await _run_sync(monkeypatch, provider, psu=psu)
+    assert provider.psu == psu
+
+
+async def _zero():
+    return 0
+
+
+def test_psu_headers_are_all_or_nothing():
+    """A bank rejects a partial set, so one without the other sends neither."""
+    from app.services.bank_provider_enablebanking import _psu_headers
+
+    assert _psu_headers({"ip": "203.0.113.7", "user_agent": "Orbi/1"}) == {
+        "Psu-Ip-Address": "203.0.113.7",
+        "Psu-User-Agent": "Orbi/1",
+    }
+    assert _psu_headers({"ip": "203.0.113.7", "user_agent": ""}) == {}
+    assert _psu_headers(None) == {}

@@ -33,6 +33,7 @@ from app.services import bank_reconcile
 from app.services.bank_providers import (
     BankTransaction,
     ConsentExpired,
+    RateLimited,
     get_provider,
 )
 from app.services.finance_categorizer import categorize_merchant
@@ -65,6 +66,10 @@ RETRY_INTERVAL_HOURS = 3
 # still far below any provider's rate limit.
 MANUAL_REFRESH_MINUTES = 5
 
+# How long to leave an account alone after the bank says it has been read
+# too often today. Enable Banking's guidance for background reads.
+RATE_LIMIT_BACKOFF_HOURS = 6
+
 # Warn this far ahead of a consent expiring. PSD2 re-authentication is a trip
 # to the banking app, so it needs to be asked for before the feed dies, not
 # after — a stopped feed looks exactly like a month of not spending.
@@ -73,7 +78,11 @@ CONSENT_WARNING_DAYS = 7
 _MAX_PER_TICK = 50
 
 
-async def sync_user_now(owner_id: UUID, now: datetime | None = None) -> dict:
+async def sync_user_now(
+    owner_id: UUID,
+    now: datetime | None = None,
+    psu: dict[str, str] | None = None,
+) -> dict:
     """Sync this user's connections on demand, using the short manual floor.
 
     The background loop's daily cadence bounds a cost nobody asked for. A tap
@@ -100,7 +109,7 @@ async def sync_user_now(owner_id: UUID, now: datetime | None = None) -> dict:
     failed = 0
     for connection in connections:
         try:
-            imported += await sync_connection(connection, now=now)
+            imported += await sync_connection(connection, now=now, psu=psu)
         except Exception as exc:  # noqa: BLE001 — one account must not stop the rest
             failed += 1
             logger.error("Manual sync failed for %s: %s", connection.get("id"), exc)
@@ -136,7 +145,11 @@ async def sync_due_accounts(now: datetime | None = None) -> dict:
     return {"considered": len(connections), "imported": imported, "failed": failed}
 
 
-async def sync_connection(connection: dict, now: datetime | None = None) -> int:
+async def sync_connection(
+    connection: dict,
+    now: datetime | None = None,
+    psu: dict[str, str] | None = None,
+) -> int:
     """Sync one connection. Returns how many NEW entries were written.
 
     The cooldown is stamped before the fetch, not after. A provider call that
@@ -178,7 +191,23 @@ async def sync_connection(connection: dict, now: datetime | None = None) -> int:
             consent_reference=connection.get("consent_reference"),
             since=since,
             until=until,
+            psu=psu,
         )
+    except RateLimited:
+        # Still connected, still consented — just read too often today. Left
+        # ACTIVE: marking it "error" is what made the app present a working
+        # connection as broken, and the natural response to that is to
+        # reconnect or remove it, throwing a valid consent away over something
+        # that resets by itself. Six hours is Enable Banking's own advice.
+        await accounts_db.update_connection(
+            connection_id,
+            {
+                "last_error": "Bank daily limit reached — updates resume later.",
+                "next_sync_after": (now + timedelta(hours=RATE_LIMIT_BACKOFF_HOURS)).isoformat(),
+            },
+        )
+        logger.info("Rate-limited by the bank for connection %s", connection_id)
+        return 0
     except ConsentExpired:
         # Terminal until the user acts. Marked rather than retried, because no
         # amount of retrying renews a consent — only the user can, at their

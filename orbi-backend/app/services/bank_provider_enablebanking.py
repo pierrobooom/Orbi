@@ -50,6 +50,7 @@ from app.services.bank_providers import (
     BankTransaction,
     ConnectionDraft,
     ConsentExpired,
+    RateLimited,
     ProviderNotConfigured,
     register,
 )
@@ -126,6 +127,25 @@ def _build_jwt() -> str:
 
 def _headers() -> dict[str, str]:
     return {"Authorization": f"Bearer {_build_jwt()}", "Accept": "application/json"}
+
+
+def _psu_headers(psu: dict[str, str] | None) -> dict[str, str]:
+    """Headers telling the bank the user is present for this read.
+
+    PSD2 lets a bank cap reads at about four a day per account when the user
+    is NOT present, and exempts reads they asked for. Banks tell the two
+    apart by these headers: without them, every tap on Update was spent from
+    the background allowance, and a handful of taps locked the account out
+    for the day (ASPSP_RATE_LIMIT_EXCEEDED).
+
+    All or nothing — a bank that requires some headers rejects a partial set
+    — so both are sent together or neither is. Neither of the banks in use
+    lists any as required (required_psu_headers is null for both), so the
+    pair is a complete set for them.
+    """
+    if not psu or not psu.get("ip") or not psu.get("user_agent"):
+        return {}
+    return {"Psu-Ip-Address": psu["ip"], "Psu-User-Agent": psu["user_agent"]}
 
 
 def _parse_amount(transaction: dict) -> float | None:
@@ -338,6 +358,7 @@ class EnableBankingProvider:
         consent_reference: str | None,
         since: date,
         until: date,
+        psu: dict[str, str] | None = None,
     ) -> list[BankTransaction]:
         """One day's sync: a single windowed request, paged to completion."""
         if not external_account_id:
@@ -362,7 +383,7 @@ class EnableBankingProvider:
                 response = await client.get(
                     f"{_BASE_URL}/accounts/{external_account_id}/transactions",
                     params=params,
-                    headers=_headers(),
+                    headers={**_headers(), **_psu_headers(psu)},
                 )
 
                 if response.status_code in (401, 403):
@@ -372,6 +393,11 @@ class EnableBankingProvider:
                     raise ConsentExpired(
                         f"Enable Banking returned {response.status_code}; "
                         "the account needs reconnecting."
+                    )
+                if response.status_code == 429:
+                    raise RateLimited(
+                        "The bank's daily limit on reading this account has "
+                        "been reached; it resets on its own."
                     )
                 if response.status_code >= 400:
                     raise RuntimeError(

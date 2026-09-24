@@ -126,6 +126,7 @@ class BankProvider(Protocol):
         consent_reference: str | None,
         since: date,
         until: date,
+        psu: dict[str, str] | None = None,
     ) -> list[BankTransaction]:
         """Return transactions in [since, until]. Raises on a real failure.
 
@@ -135,6 +136,17 @@ class BankProvider(Protocol):
         errored and backs off.
         """
         ...
+
+
+class RateLimited(Exception):
+    """The bank has refused because we have read this account too often today.
+
+    Not an error with the connection. PSD2 lets a bank cap reads made while
+    the user is not present at about four a day per account; past that it
+    answers 429 until the window rolls over. The consent is still valid and
+    nothing about it needs fixing — which is exactly why this must never be
+    reported the way a broken connection is.
+    """
 
 
 class ConsentExpired(Exception):
@@ -165,6 +177,7 @@ class NullProvider:
         consent_reference: str | None,
         since: date,
         until: date,
+        psu: dict[str, str] | None = None,
     ) -> list[BankTransaction]:
         return []
 
@@ -216,6 +229,7 @@ class SandboxProvider:
         consent_reference: str | None,
         since: date,
         until: date,
+        psu: dict[str, str] | None = None,
     ) -> list[BankTransaction]:
         from datetime import timedelta
 
