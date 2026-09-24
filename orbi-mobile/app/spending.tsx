@@ -136,20 +136,36 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   filterRow: { paddingHorizontal: 18, paddingVertical: 12, gap: 8 },
   filterPip: {
-    paddingVertical: 7,
+    // Asymmetric on purpose. The balance is the last line and its glyph box
+    // sits lower than the name's, so equal padding reads as the number being
+    // pinned to the border. justifyContent centres the block for the
+    // single-line "All accounts" pill, which the horizontal scroller
+    // stretches to match its two-line neighbours.
+    paddingTop: 8,
+    paddingBottom: 10,
     paddingHorizontal: 13,
     borderRadius: 9,
     borderWidth: 1,
     borderColor: colors.line,
     backgroundColor: colors.panel,
     alignItems: "flex-start",
+    justifyContent: "center",
   },
   filterPipActive: { borderColor: colors.accent, backgroundColor: colors.accent },
-  filterText: { color: colors.ink, fontSize: 12, fontWeight: "600" },
+  // Explicit lineHeight on both: without one, small text on iOS gets the
+  // bottom of its glyph box trimmed inside a tight container, which is
+  // what clipped the balance.
+  filterText: {
+    color: colors.ink,
+    fontSize: 12,
+    fontWeight: "600",
+    lineHeight: 15,
+  },
   filterBalance: {
     color: colors.inkDim,
     fontSize: 10,
-    marginTop: 2,
+    lineHeight: 13,
+    marginTop: 3,
     fontVariant: ["tabular-nums"],
   },
   filterTextActive: { color: colors.canvas },

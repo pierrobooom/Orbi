@@ -26,6 +26,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useT } from "@/i18n";
 import { ApiError, deleteTask, updateTask } from "@/services/api";
 import { useUniverseStore } from "@/stores/universeStore";
+import { dismissDeliveredFor } from "@/hooks/useNotificationActions";
 import { colors } from "@/theme/colors";
 
 type VoiceAction = "complete" | "delete" | "update";
@@ -88,9 +89,13 @@ export default function VoiceActionScreen() {
     try {
       if (parsed.action === "delete") {
         await deleteTask(activeId);
+        // A reminder about a task that no longer exists is the worst of the
+        // stale ones: tapping it leads nowhere.
+        await dismissDeliveredFor(activeId);
         removeTask(activeId);
       } else if (parsed.action === "complete") {
         const updated = await updateTask(activeId, { status: "completed" });
+        await dismissDeliveredFor(activeId);
         replaceTask(updated);
       } else {
         const patch = parsed.patch ?? {};

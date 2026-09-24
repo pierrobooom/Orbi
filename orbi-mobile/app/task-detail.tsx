@@ -348,6 +348,7 @@ export default function TaskDetailScreen() {
     setBusy("delete");
     try {
       await deleteTask(task.id);
+      await dismissDeliveredFor(task.id);
       removeTask(task.id);
       router.back();
     } catch (e) {
