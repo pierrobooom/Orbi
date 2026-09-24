@@ -47,6 +47,7 @@ import {
 } from "@/services/api";
 import { formatCategory } from "@/services/categories";
 import { colors } from "@/theme/colors";
+import { themed } from "@/theme/themed";
 
 const CATEGORIES = [
   "groceries",
@@ -344,7 +345,7 @@ export default function LimitsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   flex: { flex: 1 },
   body: { padding: 16, paddingBottom: 48, gap: 12 },
@@ -433,4 +434,4 @@ const styles = StyleSheet.create({
   alertToggle: { flexDirection: "row", alignItems: "center", gap: 8 },
   error: { color: colors.overdue, fontSize: 12 },
   footHint: { color: colors.inkDim, fontSize: 11, textAlign: "center", marginTop: 4 },
-});
+}));

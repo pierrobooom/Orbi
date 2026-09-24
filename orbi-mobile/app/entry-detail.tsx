@@ -38,6 +38,7 @@ import {
 import { formatCategory, isUncategorized } from "@/services/categories";
 import { useFinanceStore } from "@/stores/financeStore";
 import { colors } from "@/theme/colors";
+import { themed } from "@/theme/themed";
 
 function isoDate(d: Date): string {
   const y = d.getFullYear();
@@ -439,7 +440,7 @@ export default function EntryDetailScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   flex: { flex: 1 },
   body: { paddingHorizontal: 24, paddingTop: 18, paddingBottom: 24 },
@@ -560,4 +561,4 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   secondaryText: { color: colors.ink, fontSize: 13, fontWeight: "600" },
-});
+}));

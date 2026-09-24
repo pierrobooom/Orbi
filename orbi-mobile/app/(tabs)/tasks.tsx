@@ -48,6 +48,7 @@ import { SettingsButton } from "@/components/settings-button";
 import { useT } from "@/i18n";
 import { useUniverseStore } from "@/stores/universeStore";
 import { colors } from "@/theme/colors";
+import { themed } from "@/theme/themed";
 import { getIncomingShares, searchTasks, type ServerTask } from "@/services/api";
 
 type SortMode = "pressure" | "due" | "cluster";
@@ -593,7 +594,7 @@ function TaskRow({ task, cluster, related, showCluster, done, onPress, now }: Ta
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   header: {
     flexDirection: "row",
@@ -648,7 +649,7 @@ const styles = StyleSheet.create({
   },
   filterChipActive: { backgroundColor: colors.accent, borderColor: colors.accent },
   filterChipText: { color: colors.inkDim, fontSize: 12, fontWeight: "600" },
-  filterChipTextActive: { color: "white" },
+  filterChipTextActive: { color: colors.canvas },
   sortRow: {
     flexDirection: "row",
     gap: 8,
@@ -667,7 +668,7 @@ const styles = StyleSheet.create({
   },
   sortChipActive: { backgroundColor: colors.accent, borderColor: colors.accent },
   sortChipText: { color: colors.inkDim, fontSize: 12, fontWeight: "600" },
-  sortChipTextActive: { color: "white" },
+  sortChipTextActive: { color: colors.canvas },
   centered: { flex: 1, justifyContent: "center", alignItems: "center", padding: 24 },
   errorTitle: { color: colors.overdue, fontSize: 15, fontWeight: "600", marginBottom: 6 },
   errorBody: { color: colors.inkDim, fontSize: 12, textAlign: "center", marginBottom: 16 },
@@ -722,4 +723,4 @@ const styles = StyleSheet.create({
   relatedText: { color: colors.inkDim, fontSize: 9, fontWeight: "700", letterSpacing: 0.4 },
   pressureScore: { color: colors.inkDim, fontSize: 13, fontWeight: "600", marginLeft: 8 },
   separator: { height: 1, backgroundColor: colors.line, marginLeft: 47 },
-});
+}));

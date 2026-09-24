@@ -36,6 +36,7 @@ import {
 } from "@/services/api";
 import { formatCategory, isUncategorized } from "@/services/categories";
 import { colors } from "@/theme/colors";
+import { themed } from "@/theme/themed";
 
 type View_ = "vendors" | "categories";
 
@@ -174,7 +175,7 @@ export default function BreakdownScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   total: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12 },
   totalLabel: { color: colors.inkDim, fontSize: 11 },
@@ -232,4 +233,4 @@ const styles = StyleSheet.create({
   empty: { alignItems: "center", paddingTop: 60, paddingHorizontal: 24, gap: 6 },
   emptyTitle: { color: colors.ink, fontSize: 16, fontWeight: "600" },
   emptyBody: { color: colors.inkDim, fontSize: 13, textAlign: "center", lineHeight: 19 },
-});
+}));

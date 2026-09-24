@@ -53,6 +53,7 @@ import {
 } from "@/services/api";
 import { useFinanceStore } from "@/stores/financeStore";
 import { colors } from "@/theme/colors";
+import { themed } from "@/theme/themed";
 
 function formatMoney(amount: number, currency: string): string {
   const symbol =
@@ -791,7 +792,7 @@ export default function AccountsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   body: { padding: 16, paddingBottom: 48, gap: 12 },
   loader: { marginTop: 40 },
@@ -984,4 +985,4 @@ const styles = StyleSheet.create({
   rowHint: { color: colors.inkDim, fontSize: 11, marginTop: 6, lineHeight: 16 },
   error: { color: colors.overdue, fontSize: 12 },
   footHint: { color: colors.inkDim, fontSize: 11, textAlign: "center", marginTop: 4 },
-});
+}));

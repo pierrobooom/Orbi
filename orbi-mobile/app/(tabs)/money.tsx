@@ -43,6 +43,7 @@ import {
 } from "@/services/api";
 import { useFinanceStore } from "@/stores/financeStore";
 import { colors } from "@/theme/colors";
+import { themed } from "@/theme/themed";
 
 interface Block {
   key: string;
@@ -288,7 +289,7 @@ export default function MoneyScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   body: { padding: 16, paddingBottom: 48 },
   titleRow: {
@@ -376,4 +377,4 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accent,
   },
   addBtnText: { color: colors.canvas, fontSize: 15, fontWeight: "700" },
-});
+}));

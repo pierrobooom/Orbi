@@ -23,6 +23,7 @@ import { useT } from "@/i18n";
 import { ApiError, createTask } from "@/services/api";
 import { useUniverseStore } from "@/stores/universeStore";
 import { colors } from "@/theme/colors";
+import { themed } from "@/theme/themed";
 import { cue } from "@/services/feedback";
 
 const SYNTHETIC_DRIFT_ID = "synthetic-drift";
@@ -235,7 +236,7 @@ export default function NewTaskScreen() {
             style={[styles.primary, !canSubmit && styles.primaryDisabled]}
           >
             {submitting ? (
-              <ActivityIndicator color="white" />
+              <ActivityIndicator color={colors.canvas} />
             ) : (
               <Text style={styles.primaryText}>{t("Add to universe")}</Text>
             )}
@@ -270,7 +271,7 @@ function ClusterChip({ label, selected, color, onPress }: ChipProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   flex: { flex: 1 },
   scrollContent: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 40 },
@@ -334,5 +335,5 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   primaryDisabled: { opacity: 0.5 },
-  primaryText: { color: "white", fontSize: 15, fontWeight: "700" },
-});
+  primaryText: { color: colors.canvas, fontSize: 15, fontWeight: "700" },
+}));

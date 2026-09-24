@@ -30,6 +30,7 @@ import { useT } from "@/i18n";
 import { ApiError, updateTask } from "@/services/api";
 import { useUniverseStore } from "@/stores/universeStore";
 import { colors } from "@/theme/colors";
+import { themed } from "@/theme/themed";
 
 export default function MoveTaskScreen() {
   const t = useT();
@@ -135,7 +136,7 @@ export default function MoveTaskScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   body: { padding: 24 },
   taskTitle: { color: colors.ink, fontSize: 19, fontWeight: "700" },
@@ -174,4 +175,4 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   secondaryText: { color: colors.ink, fontSize: 13, fontWeight: "600" },
-});
+}));

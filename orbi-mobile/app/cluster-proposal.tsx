@@ -31,6 +31,7 @@ import { ScreenHeader } from "@/components/screen-header";
 import { translate, useT } from "@/i18n";
 import { useUniverseStore } from "@/stores/universeStore";
 import { colors } from "@/theme/colors";
+import { themed } from "@/theme/themed";
 
 export default function ClusterProposalScreen() {
   const t = useT();
@@ -170,7 +171,7 @@ export default function ClusterProposalScreen() {
             ]}
           >
             {applying ? (
-              <ActivityIndicator color="white" />
+              <ActivityIndicator color={colors.canvas} />
             ) : (
               <Text style={styles.applyBtnText}>
                 Apply {selected.size > 0 ? `(${selected.size})` : ""}
@@ -257,7 +258,7 @@ function ActionRow({
     <Pressable onPress={onToggle} style={styles.row}>
       <View style={[styles.checkbox, checked && styles.checkboxChecked]}>
         {checked ? (
-          <MaterialIcons name="check" size={16} color="white" />
+          <MaterialIcons name="check" size={16} color={colors.canvas} />
         ) : null}
       </View>
       <View style={styles.rowBody}>
@@ -277,7 +278,7 @@ function ActionRow({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   body: { padding: 16, paddingBottom: 40 },
   intro: { color: colors.inkDim, fontSize: 12, marginBottom: 14, lineHeight: 17 },
@@ -327,5 +328,5 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   applyBtnDisabled: { opacity: 0.4 },
-  applyBtnText: { color: "white", fontSize: 15, fontWeight: "700" },
-});
+  applyBtnText: { color: colors.canvas, fontSize: 15, fontWeight: "700" },
+}));

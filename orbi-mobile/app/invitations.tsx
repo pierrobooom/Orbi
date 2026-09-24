@@ -41,6 +41,7 @@ import {
 } from "@/services/api";
 import { useUniverseStore } from "@/stores/universeStore";
 import { colors } from "@/theme/colors";
+import { themed } from "@/theme/themed";
 
 function dueLabel(iso: string | null, t: (k: string, v?: any) => string): string {
   if (!iso) return t("No date");
@@ -200,7 +201,7 @@ export default function InvitationsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   body: { padding: 16, paddingBottom: 48, gap: 12 },
   loader: { marginTop: 40 },
@@ -252,4 +253,4 @@ const styles = StyleSheet.create({
   empty: { alignItems: "center", paddingTop: 60, paddingHorizontal: 28, gap: 8 },
   emptyTitle: { color: colors.ink, fontSize: 16, fontWeight: "600" },
   emptyBody: { color: colors.inkDim, fontSize: 13, textAlign: "center", lineHeight: 19 },
-});
+}));

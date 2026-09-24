@@ -18,6 +18,7 @@ import { useT } from "@/i18n";
 import { describeDue } from "@/services/attention";
 import type { ServerTask } from "@/services/api";
 import { colors } from "@/theme/colors";
+import { themed } from "@/theme/themed";
 
 interface Props {
   task: ServerTask;
@@ -76,7 +77,7 @@ export function PriorityCard({ task, clusterName, onPress, now, onHide }: Props)
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   card: {
     backgroundColor: colors.panel,
     borderRadius: 16,
@@ -119,4 +120,4 @@ const styles = StyleSheet.create({
     marginTop: 7,
   },
   meta: { color: colors.inkDim, fontSize: 12.5, marginTop: 3 },
-});
+}));

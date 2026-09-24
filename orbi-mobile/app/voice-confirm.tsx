@@ -38,6 +38,7 @@ import {
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
 import { useUniverseStore } from "@/stores/universeStore";
 import { colors } from "@/theme/colors";
+import { themed } from "@/theme/themed";
 import { cue } from "@/services/feedback";
 
 interface ParsedTask {
@@ -486,7 +487,7 @@ export default function VoiceConfirmScreen() {
             ]}
           >
             {submitting ? (
-              <ActivityIndicator color="white" />
+              <ActivityIndicator color={colors.canvas} />
             ) : (
               <Text style={styles.primaryText}>
                 {isQueue && index + 1 < queue.length
@@ -501,7 +502,7 @@ export default function VoiceConfirmScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   flex: { flex: 1 },
   header: {
@@ -648,5 +649,5 @@ const styles = StyleSheet.create({
   },
   primaryInRow: { flex: 1 },
   primaryDisabled: { opacity: 0.5 },
-  primaryText: { color: "white", fontSize: 15, fontWeight: "700" },
-});
+  primaryText: { color: colors.canvas, fontSize: 15, fontWeight: "700" },
+}));

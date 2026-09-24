@@ -40,6 +40,7 @@ import {
 } from "@/services/api";
 import { formatCategory, isUncategorized } from "@/services/categories";
 import { colors } from "@/theme/colors";
+import { themed } from "@/theme/themed";
 
 const SEVERITY_ICON: Record<
   SpendingInsight["severity"],
@@ -194,7 +195,7 @@ export default function InsightsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   body: { padding: 16, paddingBottom: 48, gap: 10 },
   loader: { marginTop: 40 },
@@ -237,4 +238,4 @@ const styles = StyleSheet.create({
   },
   upsellTitle: { color: colors.accent, fontSize: 13, fontWeight: "700" },
   upsellBody: { color: colors.inkDim, fontSize: 12, lineHeight: 18, marginTop: 4 },
-});
+}));

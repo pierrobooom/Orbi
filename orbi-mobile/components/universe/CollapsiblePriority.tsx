@@ -29,6 +29,7 @@ import { useT } from "@/i18n";
 import type { ServerTask } from "@/services/api";
 import { cue } from "@/services/feedback";
 import { colors } from "@/theme/colors";
+import { themed } from "@/theme/themed";
 import { STANDARD, timing } from "@/theme/motion";
 import { PriorityCard } from "./PriorityCard";
 
@@ -158,7 +159,7 @@ export function CollapsiblePriority({ task, clusterName, now, onOpen }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   cardWrap: { paddingHorizontal: 20, paddingTop: 4, paddingBottom: 12 },
   // A row the width of the screen so the tab can sit flush on the right edge.
   tabRow: { alignItems: "flex-end", paddingBottom: 6 },
@@ -192,4 +193,4 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: colors.panel,
   },
-});
+}));

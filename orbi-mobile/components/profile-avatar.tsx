@@ -37,6 +37,7 @@ import {
 import { translate, useT } from "@/i18n";
 import { ApiError, removeAvatar, uploadAvatar } from "@/services/api";
 import { colors } from "@/theme/colors";
+import { themed } from "@/theme/themed";
 
 interface Props {
   /** Current picture, or null for the initials fallback. */
@@ -216,7 +217,7 @@ export function ProfileAvatar({ url, name, onChanged }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", gap: 14, paddingVertical: 4 },
   frame: { width: SIZE, height: SIZE },
   image: { width: SIZE, height: SIZE, borderRadius: SIZE / 2 },
@@ -250,4 +251,4 @@ const styles = StyleSheet.create({
   copy: { flex: 1, gap: 3 },
   name: { color: colors.ink, fontSize: 16, fontWeight: "700" },
   action: { color: colors.accent, fontSize: 13, fontWeight: "600" },
-});
+}));

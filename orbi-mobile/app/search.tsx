@@ -27,6 +27,7 @@ import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
 import { ApiError, searchTasks, transcribeAudio } from "@/services/api";
 import { useUniverseStore } from "@/stores/universeStore";
 import { colors } from "@/theme/colors";
+import { themed } from "@/theme/themed";
 
 export default function SearchScreen() {
   const t = useT();
@@ -155,10 +156,10 @@ export default function SearchScreen() {
               ]}
             >
               {busy === "search" ? (
-                <ActivityIndicator color="white" />
+                <ActivityIndicator color={colors.canvas} />
               ) : (
                 <>
-                  <MaterialIcons name="search" size={18} color="white" />
+                  <MaterialIcons name="search" size={18} color={colors.canvas} />
                   <Text style={styles.searchBtnText}>{t("Search")}</Text>
                 </>
               )}
@@ -170,7 +171,7 @@ export default function SearchScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   flex: { flex: 1 },
   body: { padding: 20 },
@@ -226,5 +227,5 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accent,
   },
   searchBtnDisabled: { opacity: 0.5 },
-  searchBtnText: { color: "white", fontSize: 15, fontWeight: "700" },
-});
+  searchBtnText: { color: colors.canvas, fontSize: 15, fontWeight: "700" },
+}));

@@ -7,6 +7,7 @@ import { StyleSheet, Text, View } from "react-native";
 
 import { useT } from "@/i18n";
 import { colors } from "@/theme/colors";
+import { themed } from "@/theme/themed";
 
 export default function EmptyState() {
   const t = useT();
@@ -21,7 +22,7 @@ export default function EmptyState() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   root: {
     flex: 1,
     justifyContent: "center",
@@ -41,4 +42,4 @@ const styles = StyleSheet.create({
     textAlign: "center",
     lineHeight: 19,
   },
-});
+}));

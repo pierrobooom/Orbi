@@ -30,33 +30,37 @@ import { usePushRegistration } from "@/hooks/usePushRegistration";
 import { useAuthStore } from "@/stores/authStore";
 import { useHandednessStore } from "@/stores/handednessStore";
 import { useSoundStore } from "@/stores/soundStore";
+import { useThemeStore } from "@/stores/themeStore";
+import { useUniverseStore } from "@/stores/universeStore";
 import { initFeedback, setQuietHours } from "@/services/feedback";
 import { useLocaleStore, type UiLanguage } from "@/i18n";
 import { getMyPreferences } from "@/services/api";
 import { colors } from "@/theme/colors";
 import { FONT_ASSETS } from "@/theme/fonts";
 
-// Custom React Navigation theme so headers / modals match the palette.
-// dark: false now that the ground is paper — navigation uses this flag for
-// its own defaults (modal backdrops, press highlights), and leaving it true
-// tints them for a dark app that no longer exists.
-const OrbiTheme = {
-  dark: false,
-  colors: {
-    primary: colors.accent,
-    background: colors.canvas,
-    card: colors.panel,
-    text: colors.ink,
-    border: colors.line,
-    notification: colors.overdue,
-  },
-  fonts: {
-    regular: { fontFamily: "System", fontWeight: "400" as const },
-    medium: { fontFamily: "System", fontWeight: "500" as const },
-    bold: { fontFamily: "System", fontWeight: "700" as const },
-    heavy: { fontFamily: "System", fontWeight: "800" as const },
-  },
-};
+// Navigation's own theme, built at render rather than at import: a module
+// constant would hold whichever palette was live when the file loaded and
+// never follow night mode. `dark` drives navigation's defaults — modal
+// backdrops, press highlights — so it has to track the palette too.
+function navigationTheme(isNight: boolean) {
+  return {
+    dark: isNight,
+    colors: {
+      primary: colors.accent,
+      background: colors.canvas,
+      card: colors.panel,
+      text: colors.ink,
+      border: colors.line,
+      notification: colors.overdue,
+    },
+    fonts: {
+      regular: { fontFamily: "System", fontWeight: "400" as const },
+      medium: { fontFamily: "System", fontWeight: "500" as const },
+      bold: { fontFamily: "System", fontWeight: "700" as const },
+      heavy: { fontFamily: "System", fontWeight: "800" as const },
+    },
+  };
+}
 
 export const unstable_settings = {
   anchor: "(tabs)",
@@ -68,16 +72,47 @@ export default function RootLayout() {
   // into a serif a moment after the screen appears reads as the number
   // changing. Bundled with the app, so this resolves in milliseconds.
   const [fontsLoaded, fontError] = useFonts(FONT_ASSETS);
-  if (!fontsLoaded && !fontError) {
+
+  // The theme is read before the first frame, like the font. Rendering first
+  // would paint the light palette and then swap — a white flash at night for
+  // exactly the people who asked for it not to be white.
+  const themeReady = useThemeStore((s) => s.ready);
+  const themeVersion = useThemeStore((s) => s.version);
+  const isNight = useThemeStore((s) => s.resolved === "night");
+  useEffect(() => {
+    void useThemeStore.getState().hydrate();
+  }, []);
+  // The universe layout bakes each cluster's fallback colour in when it is
+  // built, so a palette change has to rebuild it — from memory, no request.
+  useEffect(() => {
+    if (themeVersion > 1) useUniverseStore.getState().relayout();
+  }, [themeVersion]);
+
+  if ((!fontsLoaded && !fontError) || !themeReady) {
     return <View style={{ flex: 1, backgroundColor: colors.canvas }} />;
   }
 
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.canvas }}>
       <SafeAreaProvider>
-        <ThemeProvider value={OrbiTheme}>
+        <ThemeProvider value={navigationTheme(isNight)}>
           <AuthGate>
-            <Stack screenOptions={{ contentStyle: { backgroundColor: colors.canvas } }}>
+            {/* On a theme change every screen's CONTENT remounts, so it
+                re-reads colours and styles — keyed on the palette version.
+                The navigator is not remounted, so the stack of open screens
+                survives and you stay exactly where you were. (tabs) is left
+                alone here: remounting it would reset which tab is open, so
+                the tabs navigator does the same thing for its own screens. */}
+            <Stack
+              screenOptions={{ contentStyle: { backgroundColor: colors.canvas } }}
+              screenLayout={({ route, children }) =>
+                route.name === "(tabs)" ? (
+                  children
+                ) : (
+                  <React.Fragment key={themeVersion}>{children}</React.Fragment>
+                )
+              }
+            >
               <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
               <Stack.Screen name="(auth)" options={{ headerShown: false }} />
               <Stack.Screen
@@ -195,9 +230,9 @@ export default function RootLayout() {
 
             </Stack>
           </AuthGate>
-          {/* Dark glyphs, because the ground is now paper. Left as "light"
-              the clock and battery are white on near-white and vanish. */}
-          <StatusBar style="dark" />
+          {/* Dark glyphs on paper, light ones at night — the wrong way round
+              and the clock and battery vanish into the background. */}
+          <StatusBar style={isNight ? "light" : "dark"} />
         </ThemeProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

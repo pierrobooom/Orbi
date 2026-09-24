@@ -20,6 +20,7 @@ import { Pressable, StyleSheet } from "react-native";
 
 import { useT } from "@/i18n";
 import { colors } from "@/theme/colors";
+import { themed } from "@/theme/themed";
 
 /** Visible size. hitSlop lifts the touch target to 48, which is what a
  * thumb needs; the circle stays 40 so it sits quietly in a header. */
@@ -41,7 +42,7 @@ export function SettingsButton({ tint = colors.ink }: { tint?: string }) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   button: {
     width: HEADER_BUTTON,
     height: HEADER_BUTTON,
@@ -53,4 +54,4 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   pressed: { opacity: 0.6 },
-});
+}));

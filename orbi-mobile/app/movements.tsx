@@ -36,6 +36,7 @@ import { listAccounts, type AccountBalance, type ServerFinanceEntry } from "@/se
 import { formatCategory, isUncategorized } from "@/services/categories";
 import { useFinanceStore } from "@/stores/financeStore";
 import { colors } from "@/theme/colors";
+import { themed } from "@/theme/themed";
 
 interface Section {
   title: string;
@@ -351,7 +352,7 @@ function EntryRow({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   total: { paddingHorizontal: 22, paddingTop: 16, paddingBottom: 12 },
   totalLabel: { color: colors.inkDim, fontSize: 11 },
@@ -490,5 +491,5 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     elevation: 6,
   },
-  fabPlus: { color: "white", fontSize: 28, fontWeight: "300", marginTop: -2 },
-});
+  fabPlus: { color: colors.canvas, fontSize: 28, fontWeight: "300", marginTop: -2 },
+}));

@@ -24,6 +24,7 @@ import { registerPushDevice } from "@/hooks/usePushRegistration";
 import { ApiError, sendTestPush } from "@/services/api";
 import { useAuthStore, type SubscriptionTier } from "@/stores/authStore";
 import { colors } from "@/theme/colors";
+import { themed } from "@/theme/themed";
 
 interface PlanCard {
   tier: SubscriptionTier;
@@ -199,7 +200,7 @@ export default function UpgradeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   scroll: { padding: 20, paddingBottom: 60 },
   intro: { color: colors.inkDim, fontSize: 14, marginBottom: 18 },
@@ -229,7 +230,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   ctaCurrent: { backgroundColor: "transparent", borderColor: colors.line, borderWidth: 1 },
-  ctaText: { color: "white", fontSize: 14, fontWeight: "700" },
+  ctaText: { color: colors.canvas, fontSize: 14, fontWeight: "700" },
   ctaTextCurrent: { color: colors.inkDim, fontWeight: "600" },
   footnote: { color: colors.inkDim, fontSize: 11, marginTop: 16, lineHeight: 16 },
   devSection: {
@@ -258,4 +259,4 @@ const styles = StyleSheet.create({
   devButtonStacked: { marginTop: 14 },
   devButtonText: { color: colors.ink, fontSize: 14, fontWeight: "600" },
   devHint: { color: colors.inkDim, fontSize: 11, marginTop: 8, lineHeight: 15 },
-});
+}));

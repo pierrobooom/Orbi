@@ -37,6 +37,7 @@ import {
 
 import { useMirrored } from "@/stores/handednessStore";
 import { colors } from "@/theme/colors";
+import { themed } from "@/theme/themed";
 
 interface Props {
   title: string;
@@ -138,7 +139,7 @@ export function ScreenHeader({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -169,4 +170,4 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-});
+}));

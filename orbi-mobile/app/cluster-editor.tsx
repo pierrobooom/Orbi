@@ -42,6 +42,7 @@ import { ScreenHeader } from "@/components/screen-header";
 import { translate, useT } from "@/i18n";
 import { useUniverseStore } from "@/stores/universeStore";
 import { colors } from "@/theme/colors";
+import { themed } from "@/theme/themed";
 
 // Cluster palette. First six are the canonical kind colors so manual
 // clusters can match LLM-created ones visually; the rest give the user
@@ -311,7 +312,7 @@ export default function ClusterEditorScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   flex: { flex: 1 },
   body: { padding: 20, paddingBottom: 40 },
@@ -402,4 +403,4 @@ const styles = StyleSheet.create({
   },
   driftTitle: { color: colors.ink, fontSize: 15, fontWeight: "700" },
   driftBody: { color: colors.inkDim, fontSize: 13, lineHeight: 18, marginTop: 6 },
-});
+}));

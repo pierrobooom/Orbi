@@ -19,6 +19,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useT } from "@/i18n";
 import { supabase } from "@/services/supabase";
 import { colors } from "@/theme/colors";
+import { themed } from "@/theme/themed";
 
 export default function SignInScreen() {
   const t = useT();
@@ -98,7 +99,7 @@ export default function SignInScreen() {
             style={[styles.primary, !canSubmit && styles.primaryDisabled]}
           >
             {submitting ? (
-              <ActivityIndicator color="white" />
+              <ActivityIndicator color={colors.canvas} />
             ) : (
               <Text style={styles.primaryText}>{t("Sign in")}</Text>
             )}
@@ -116,7 +117,7 @@ export default function SignInScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   flex: { flex: 1 },
   body: { flex: 1, paddingHorizontal: 24, paddingTop: 60, justifyContent: "flex-start" },
@@ -143,8 +144,8 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   primaryDisabled: { opacity: 0.5 },
-  primaryText: { color: "white", fontSize: 15, fontWeight: "700" },
+  primaryText: { color: colors.canvas, fontSize: 15, fontWeight: "700" },
   footer: { flexDirection: "row", justifyContent: "center", marginTop: 24, gap: 6 },
   footerText: { color: colors.inkDim, fontSize: 13 },
   footerLink: { color: colors.accent, fontSize: 13, fontWeight: "600" },
-});
+}));

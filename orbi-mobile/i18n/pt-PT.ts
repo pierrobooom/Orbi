@@ -249,6 +249,15 @@ export const ptPT: Record<string, string> = {
   "New": "Nova",
   "Message Orbi": "Escreve ao Orbi",
   "Hide keyboard": "Fechar teclado",
+  "Day": "Dia",
+  "System follows your phone, including switching at sunset if it does.":
+    "Sistema segue o teu telemóvel, incluindo mudar ao pôr do sol se ele o fizer.",
+  "Night":
+    "Noite",
+  "System":
+    "Sistema",
+  "Appearance":
+    "Aspeto",
   "Show what needs you first": "Mostrar o que precisa de ti primeiro",
   "Hide": "Esconder",
   "A username needs at least 3 characters.":

@@ -31,6 +31,7 @@ import { ActionBar } from "@/components/action-bar";
 import { translate, useT } from "@/i18n";
 import { ApiError, shareTask, type SharingState } from "@/services/api";
 import { colors } from "@/theme/colors";
+import { themed } from "@/theme/themed";
 
 interface Props {
   visible: boolean;
@@ -181,7 +182,7 @@ export function ShareTaskSheet({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   flex: { flex: 1 },
   backdrop: {
     flex: 1,
@@ -221,4 +222,4 @@ const styles = StyleSheet.create({
   personText: { flex: 1, color: colors.ink, fontSize: 13 },
   personState: { color: colors.inkDim, fontSize: 11 },
   actions: { borderTopWidth: 0, backgroundColor: "transparent", paddingHorizontal: 0 },
-});
+}));

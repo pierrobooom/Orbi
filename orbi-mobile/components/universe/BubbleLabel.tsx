@@ -15,6 +15,7 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { colors } from "@/theme/colors";
+import { themed } from "@/theme/themed";
 import type { PhysicsState } from "./types";
 
 interface Props {
@@ -107,7 +108,7 @@ const OUTLINE = {
   textShadowRadius: 3.5,
 } as const;
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   // Same size and weight as a cluster's name. Tasks were 11pt, which made
   // the thing you actually have to do the hardest text on the screen to read.
   label: {
@@ -143,4 +144,4 @@ const styles = StyleSheet.create({
     textShadowColor: "transparent",
     opacity: 1,
   },
-});
+}));

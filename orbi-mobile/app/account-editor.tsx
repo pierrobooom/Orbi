@@ -44,6 +44,7 @@ import {
   type FinanceAccount,
 } from "@/services/api";
 import { colors } from "@/theme/colors";
+import { themed } from "@/theme/themed";
 
 const CURRENCIES = ["EUR", "GBP", "USD"] as const;
 
@@ -303,7 +304,7 @@ export default function AccountEditorScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   flex: { flex: 1 },
   loader: { marginTop: 40 },
@@ -348,4 +349,4 @@ const styles = StyleSheet.create({
   rowLabel: { color: colors.ink, fontSize: 14, fontWeight: "500" },
   rowHint: { color: colors.inkDim, fontSize: 11, marginTop: 6, lineHeight: 16 },
   error: { color: colors.overdue, fontSize: 12, marginTop: 20 },
-});
+}));

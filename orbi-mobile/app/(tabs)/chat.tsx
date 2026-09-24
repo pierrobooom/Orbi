@@ -41,6 +41,7 @@ import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
 import { ApiError, isQuotaError, transcribeAudio } from "@/services/api";
 import { useChatStore, type ChatMessage } from "@/stores/chatStore";
 import { colors } from "@/theme/colors";
+import { themed } from "@/theme/themed";
 import { cue } from "@/services/feedback";
 
 interface ParsedTask {
@@ -409,9 +410,9 @@ export default function ChatScreen() {
               style={[styles.sendBtn, sending && styles.btnDisabled]}
             >
               {sending ? (
-                <ActivityIndicator size="small" color="white" />
+                <ActivityIndicator size="small" color={colors.canvas} />
               ) : (
-                <MaterialIcons name="arrow-upward" size={20} color="white" />
+                <MaterialIcons name="arrow-upward" size={20} color={colors.canvas} />
               )}
             </Pressable>
           ) : (
@@ -442,7 +443,7 @@ export default function ChatScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   flex: { flex: 1 },
   header: {
@@ -486,7 +487,7 @@ const styles = StyleSheet.create({
   bubblePending: { opacity: 0.6 },
   bubbleFailed: { borderColor: colors.overdue, borderWidth: 1 },
   bubbleText: { color: colors.ink, fontSize: 15, lineHeight: 21 },
-  bubbleTextMine: { color: "white" },
+  bubbleTextMine: { color: colors.canvas },
   sourceNote: {
     flexDirection: "row",
     alignItems: "center",
@@ -599,4 +600,4 @@ const styles = StyleSheet.create({
   },
   micBtnActive: { backgroundColor: colors.accent, borderColor: colors.accent },
   btnDisabled: { opacity: 0.5 },
-});
+}));

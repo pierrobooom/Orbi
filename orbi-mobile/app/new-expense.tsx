@@ -30,6 +30,7 @@ import { useT } from "@/i18n";
 import { ApiError, createFinanceEntry } from "@/services/api";
 import { useFinanceStore } from "@/stores/financeStore";
 import { colors } from "@/theme/colors";
+import { themed } from "@/theme/themed";
 
 function isoDate(d: Date): string {
   // YYYY-MM-DD in local time — entries are dated by calendar day from
@@ -180,7 +181,7 @@ export default function NewExpenseScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   flex: { flex: 1 },
   scrollContent: { paddingHorizontal: 24, paddingTop: 20, paddingBottom: 40 },
@@ -228,4 +229,4 @@ const styles = StyleSheet.create({
   doneRow: { alignSelf: "flex-end", paddingVertical: 8, paddingHorizontal: 12 },
   doneText: { color: colors.accent, fontSize: 14, fontWeight: "600" },
   error: { color: colors.overdue, fontSize: 13, marginTop: 14 },
-});
+}));

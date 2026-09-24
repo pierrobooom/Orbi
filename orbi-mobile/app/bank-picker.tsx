@@ -39,6 +39,7 @@ import { ScreenHeader } from "@/components/screen-header";
 import { useT } from "@/i18n";
 import { ApiError, listInstitutions, type Institution } from "@/services/api";
 import { colors } from "@/theme/colors";
+import { themed } from "@/theme/themed";
 
 // The countries Orbi's users are actually likely to bank in, most likely
 // first. Not the full EEA list: a picker of 31 countries to reach a picker
@@ -256,7 +257,7 @@ export default function BankPickerScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   searchRow: {
     flexDirection: "row",
@@ -357,4 +358,4 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   retryText: { color: colors.ink, fontSize: 13, fontWeight: "600" },
-});
+}));

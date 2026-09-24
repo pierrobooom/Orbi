@@ -9,6 +9,7 @@ import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { HapticTab } from "@/components/haptic-tab";
 import { useT } from "@/i18n";
 import { colors } from "@/theme/colors";
+import { useThemeStore } from "@/stores/themeStore";
 
 // How wide each tab's touch target is, and therefore how tightly the four sit
 // together. Tabs default to sharing the full width equally, which on a modern
@@ -37,8 +38,18 @@ export default function TabLayout() {
   // inward, so the group ends up genuinely centred.
   const sidePadding = Math.max(0, (width - TAB_WIDTH * TAB_COUNT) / 2);
 
+  // Subscribing is what re-renders the tab bar with the new palette; the
+  // colours below are read from the live palette at render.
+  const themeVersion = useThemeStore((s) => s.version);
+
   return (
     <Tabs
+      // Each tab's content remounts on a theme change so it re-reads its
+      // styles. Keyed per screen, below the navigator, so the tab you are on
+      // stays selected — the root Stack deliberately leaves this to us.
+      screenLayout={({ children }) => (
+        <React.Fragment key={themeVersion}>{children}</React.Fragment>
+      )}
       screenOptions={{
         headerShown: false,
         tabBarButton: HapticTab,

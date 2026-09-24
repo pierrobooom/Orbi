@@ -52,6 +52,7 @@ import {
 import { useUniverseStore } from "@/stores/universeStore";
 import { dismissDeliveredFor } from "@/hooks/useNotificationActions";
 import { colors } from "@/theme/colors";
+import { themed } from "@/theme/themed";
 import { cue } from "@/services/feedback";
 
 // Mark-complete hold duration. Keeps the user from accidentally
@@ -655,7 +656,7 @@ export default function TaskDetailScreen() {
                   style={[styles.holdBtn, busy && styles.btnDisabled]}
                 >
                   {busy === "complete" ? (
-                    <ActivityIndicator color="white" />
+                    <ActivityIndicator color={colors.canvas} />
                   ) : (
                     <Text style={styles.holdBtnText}>{t("Reopen task")}</Text>
                   )}
@@ -673,7 +674,7 @@ export default function TaskDetailScreen() {
                       stays readable throughout. */}
                   <Animated.View style={[styles.holdBtnFill, holdFillStyle]} />
                   {busy === "complete" ? (
-                    <ActivityIndicator color="white" />
+                    <ActivityIndicator color={colors.canvas} />
                   ) : (
                     <Text style={styles.holdBtnText}>{t("Hold to mark complete")}</Text>
                   )}
@@ -695,7 +696,7 @@ export default function TaskDetailScreen() {
                 style={[styles.primaryBtn, busy && styles.btnDisabled]}
               >
                 {busy === "save" ? (
-                  <ActivityIndicator color="white" />
+                  <ActivityIndicator color={colors.canvas} />
                 ) : (
                   <Text style={styles.primaryBtnText}>{t("Save changes")}</Text>
                 )}
@@ -740,7 +741,7 @@ function ClusterChip({ label, selected, color, onPress }: ChipProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   flex: { flex: 1 },
   micButton: { justifyContent: "center", alignItems: "center", minHeight: 28 },
@@ -896,7 +897,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     alignItems: "center",
   },
-  primaryBtnText: { color: "white", fontSize: 15, fontWeight: "700" },
+  primaryBtnText: { color: colors.canvas, fontSize: 15, fontWeight: "700" },
   // Hold-to-complete button. Fill bar animates as the user holds.
   holdBtn: {
     flex: 1,
@@ -972,4 +973,4 @@ const styles = StyleSheet.create({
   },
   cancelBtnText: { color: colors.ink, fontSize: 15, fontWeight: "600" },
   btnDisabled: { opacity: 0.5 },
-});
+}));

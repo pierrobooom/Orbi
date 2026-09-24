@@ -23,6 +23,7 @@ import { useT } from "@/i18n";
 import { formatCategory } from "@/services/categories";
 import type { FinanceDashboard } from "@/services/api";
 import { colors } from "@/theme/colors";
+import { themed } from "@/theme/themed";
 import { DISPLAY } from "@/theme/fonts";
 
 // Category colours reuse the cluster palette so the whole app stays visually
@@ -224,7 +225,7 @@ export function Dashboard({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   root: { padding: 16, gap: 12 },
   loader: { marginTop: 48 },
   empty: { alignItems: "center", paddingVertical: 56, paddingHorizontal: 28, gap: 10 },
@@ -338,4 +339,4 @@ const styles = StyleSheet.create({
   axisLabel: { color: colors.inkDim, fontSize: 10 },
   nudge: { flexDirection: "row", gap: 10, alignItems: "flex-start" },
   nudgeText: { color: colors.inkDim, fontSize: 12, lineHeight: 18, flex: 1 },
-});
+}));

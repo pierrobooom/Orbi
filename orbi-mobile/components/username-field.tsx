@@ -25,6 +25,7 @@ import { ApiError, formatHandle, setUsername } from "@/services/api";
 import { cue } from "@/services/feedback";
 import { useProfileStore } from "@/stores/profileStore";
 import { colors } from "@/theme/colors";
+import { themed } from "@/theme/themed";
 
 export function UsernameField() {
   const t = useT();
@@ -151,7 +152,7 @@ export function UsernameField() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   row: {
     flexDirection: "row",
     alignItems: "center",
@@ -208,4 +209,4 @@ const styles = StyleSheet.create({
   },
   saveText: { color: colors.canvas, fontSize: 15, fontWeight: "700" },
   dim: { opacity: 0.45 },
-});
+}));

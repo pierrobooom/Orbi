@@ -44,6 +44,7 @@ import { TIER_DISPLAY } from "@/services/tierGate";
 import { useAuthStore } from "@/stores/authStore";
 import { cue } from "@/services/feedback";
 import { useSoundStore } from "@/stores/soundStore";
+import { useThemeStore } from "@/stores/themeStore";
 import { useProfileStore } from "@/stores/profileStore";
 import { ProfileAvatar } from "@/components/profile-avatar";
 import { UsernameField } from "@/components/username-field";
@@ -54,6 +55,7 @@ import {
   type Handedness,
 } from "@/stores/handednessStore";
 import { colors } from "@/theme/colors";
+import { themed } from "@/theme/themed";
 
 // Backend reachability is shown in a dedicated Status section. Lives
 // here (and not on the canvas header) because it's debug-y context
@@ -104,6 +106,8 @@ export default function SettingsScreen() {
   const email = session?.user?.email ?? "—";
 
   const handedness = useHandednessStore((s) => s.handedness);
+  const themeMode = useThemeStore((s) => s.mode);
+  const setThemeMode = useThemeStore((s) => s.setMode);
   const setHandedness = useHandednessStore((s) => s.setHandedness);
 
   // The profile picture and display name, read from the server rather than
@@ -700,6 +704,42 @@ export default function SettingsScreen() {
           })}
         </Section>
 
+        {/* Same row pattern as Handedness and Language, so a choice between
+            a few options looks the same everywhere in Settings. System first
+            because it is the default and, for most people, the right one. */}
+        <Section title={t("Appearance")}>
+          <Text style={styles.languageHint}>
+            {t("System follows your phone, including switching at sunset if it does.")}
+          </Text>
+          {(["system", "light", "night"] as const).map((mode) => {
+            const active = themeMode === mode;
+            return (
+              <Pressable
+                key={mode}
+                onPress={() => {
+                  if (active) return;
+                  cue("tap");
+                  setThemeMode(mode);
+                }}
+                style={[styles.languageRow, active && styles.languageRowActive]}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: active }}
+              >
+                <Text
+                  style={[styles.languageLabel, active && styles.languageLabelActive]}
+                >
+                  {mode === "system"
+                    ? t("System")
+                    : mode === "light"
+                      ? t("Day") /* not "Light": that key is the reminder density, "Leve" */
+                      : t("Night")}
+                </Text>
+                {active ? <Text style={styles.languageCheck}>✓</Text> : null}
+              </Pressable>
+            );
+          })}
+        </Section>
+
         <Section title={t("Status")}>
           <View style={styles.statusRow}>
             <View style={styles.statusDotWrap}>
@@ -814,7 +854,7 @@ function Row({ label, value }: { label: string; value: string }) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   body: { padding: 20, paddingBottom: 60 },
   section: { marginBottom: 22 },
@@ -952,4 +992,4 @@ const styles = StyleSheet.create({
   signOutText: { color: colors.overdue, fontSize: 15, fontWeight: "700" },
   deleteAccountBtn: { alignItems: "center", paddingVertical: 16 },
   deleteAccountText: { color: colors.inkDim, fontSize: 13, fontWeight: "600" },
-});
+}));

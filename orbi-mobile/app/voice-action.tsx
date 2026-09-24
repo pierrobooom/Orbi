@@ -28,6 +28,7 @@ import { ApiError, deleteTask, updateTask } from "@/services/api";
 import { useUniverseStore } from "@/stores/universeStore";
 import { dismissDeliveredFor } from "@/hooks/useNotificationActions";
 import { colors } from "@/theme/colors";
+import { themed } from "@/theme/themed";
 
 type VoiceAction = "complete" | "delete" | "update";
 
@@ -206,7 +207,7 @@ export default function VoiceActionScreen() {
           ]}
         >
           {busy ? (
-            <ActivityIndicator color="white" />
+            <ActivityIndicator color={colors.canvas} />
           ) : (
             <Text style={styles.primaryText}>{t(ACTION_VERB[parsed.action])}</Text>
           )}
@@ -223,7 +224,7 @@ function formatPatchValue(value: unknown): string {
   return String(value);
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   header: {
     flexDirection: "row",
@@ -293,5 +294,5 @@ const styles = StyleSheet.create({
   },
   primaryDestructive: { backgroundColor: colors.overdue },
   primaryDisabled: { opacity: 0.5 },
-  primaryText: { color: "white", fontSize: 15, fontWeight: "700" },
-});
+  primaryText: { color: colors.canvas, fontSize: 15, fontWeight: "700" },
+}));

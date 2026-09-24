@@ -44,6 +44,7 @@ import Feather from "@expo/vector-icons/Feather";
 import { useUniverseStore } from "@/stores/universeStore";
 import { useUsageStore } from "@/stores/usageStore";
 import { colors } from "@/theme/colors";
+import { themed } from "@/theme/themed";
 
 /** One task as returned by the coordinator inside `data.tasks`. */
 interface ParsedVoiceTask {
@@ -624,7 +625,7 @@ export default function UniverseScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   header: {
     paddingHorizontal: 20,
@@ -731,7 +732,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     elevation: 6,
   },
-  fabPlus: { color: "white", fontSize: 28, fontWeight: "300", marginTop: -2 },
+  fabPlus: { color: colors.canvas, fontSize: 28, fontWeight: "300", marginTop: -2 },
   // Arc menu — buttons fan up + up-left from the + FAB. Positioned
   // absolutely relative to fabRow so they sit above the canvas. Each
   // wrapper holds the circular button + a small label below.
@@ -830,4 +831,4 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   errorToastText: { color: colors.overdue, fontSize: 12 },
-});
+}));

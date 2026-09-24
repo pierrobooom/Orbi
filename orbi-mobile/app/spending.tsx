@@ -32,6 +32,7 @@ import {
   type FinanceDashboard,
 } from "@/services/api";
 import { colors } from "@/theme/colors";
+import { themed } from "@/theme/themed";
 
 function formatAmount(amount: number, currency: string): string {
   const symbol =
@@ -136,7 +137,7 @@ export default function SpendingScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   filterRow: { paddingHorizontal: 18, paddingVertical: 12, gap: 8 },
   filterPip: {
@@ -174,4 +175,4 @@ const styles = StyleSheet.create({
   },
   filterTextActive: { color: colors.canvas },
   body: { paddingBottom: 48 },
-});
+}));

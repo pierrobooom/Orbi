@@ -37,6 +37,7 @@ import { MICRO, PRESS_SCALE, timing } from "@/theme/motion";
 
 import { useMirrored } from "@/stores/handednessStore";
 import { colors } from "@/theme/colors";
+import { themed } from "@/theme/themed";
 
 interface Action {
   label: string;
@@ -146,7 +147,7 @@ export function ActionBar({ primary, secondary, style }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   bar: {
     flexDirection: "row",
     alignItems: "center",
@@ -196,4 +197,4 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   disabled: { opacity: 0.5 },
-});
+}));

@@ -39,15 +39,9 @@ const KIND_POSITIONS: Record<ClusterKind, { x: number; y: number }> = {
   drift: { x: 0.5, y: 0.46 },
 };
 
-const KIND_COLORS: Record<ClusterKind, string> = {
-  work: colors.work,
-  health: colors.health,
-  personal: colors.personal,
-  finance: colors.finance,
-  home: colors.home,
-  learning: colors.learning,
-  drift: colors.drift,
-};
+// No KIND_COLORS table: a module-level copy of colors would be frozen in
+// whichever palette was live at import and never follow night mode. The
+// kind names ARE palette keys, so colors[kind] is read at layout time.
 
 // Substring match on the lowercased cluster name. First hit wins.
 const KIND_KEYWORDS: ReadonlyArray<[ClusterKind, ReadonlyArray<string>]> = [
@@ -213,7 +207,7 @@ export function layoutUniverse(
       // fall back to the canonical kind color only when the server
       // returned no color (legacy rows). Previously we always used
       // KIND_COLORS which silently ignored the user's choice.
-      color: (c.color && c.color.trim().length > 0) ? c.color : KIND_COLORS[kind],
+      color: (c.color && c.color.trim().length > 0) ? c.color : colors[kind],
       // A cluster the user dragged sits where they left it. The kind-based
       // spread below still decides where an untouched one goes, so a new
       // cluster still lands somewhere sensible rather than at 0,0.
@@ -241,7 +235,7 @@ export function layoutUniverse(
       id: DRIFT_ID,
       name: "Adrift",
       kind: "drift",
-      color: KIND_COLORS.drift,
+      color: colors.drift,
       centerX: driftPos.x,
       centerY: driftPos.y,
     });

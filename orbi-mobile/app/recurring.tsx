@@ -45,6 +45,7 @@ import {
   type RecurringTransaction,
 } from "@/services/api";
 import { colors } from "@/theme/colors";
+import { themed } from "@/theme/themed";
 
 const CADENCES: { value: Cadence; label: string }[] = [
   { value: "weekly", label: "Weekly" },
@@ -621,7 +622,7 @@ export default function RecurringScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   flex: { flex: 1 },
   body: { padding: 16, paddingBottom: 48, gap: 12 },
@@ -755,4 +756,4 @@ const styles = StyleSheet.create({
   cardNext: { color: colors.ink, fontSize: 13, fontWeight: "600", flex: 1 },
   error: { color: colors.overdue, fontSize: 12 },
   footHint: { color: colors.inkDim, fontSize: 11, textAlign: "center", marginTop: 4 },
-});
+}));

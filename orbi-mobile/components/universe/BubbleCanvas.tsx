@@ -62,7 +62,8 @@ import Animated, {
 
 import { useT } from "@/i18n";
 import { useReduceMotion } from "@/hooks/useReduceMotion";
-import { colors } from "@/theme/colors";
+import { colors, currentTheme } from "@/theme/colors";
+import { themed } from "@/theme/themed";
 import { BREATHE_MS, BREATHE_SCALE, PULSE_MS } from "@/theme/motion";
 import { useUniverseStore } from "@/stores/universeStore";
 import { DRIFT_ID } from "@/services/universeLayout";
@@ -116,14 +117,8 @@ function clusterSubtitle(
 // it costs nothing per frame.
 const SHADOW_SHIFT = [{ translateY: 3 }];
 
-// The dashed outline of Adrift. Warmer and darker than colors.line so the
-// dashes still read at 1.5px on the paper ground.
-const DRIFT_RING = "#C9C3B9";
-
-// Whether the star field is drawn behind the bubbles. Off while the ground
-// is paper — the stars are white and would be invisible. Flips back on with
-// night mode; see the note at the render site.
-const SHOW_STARS = false;
+// (The dashed Adrift ring reads colors.faint at render, so it follows the
+// theme — a hex constant here would stay light-grey on a dark ground.)
 
 // Bubbles stay full size up to this many, then shrink.
 //
@@ -908,14 +903,10 @@ function BubbleField({
           height: canvasHeight,
         }}
       >
-        {/* No stars on a daylight ground.
-            The field is white and pale lilac points, which were the whole
-            atmosphere against #07080F and are simply invisible on paper —
-            75 circles of cost for nothing anyone can see. The component is
-            kept, not deleted: it is exactly right again the moment night
-            mode lands, and it renders here once the ground is dark.
-            See theme/colors.ts for why that is its own piece of work. */}
-        {SHOW_STARS ? (
+        {/* Stars at night only. The field is white and pale lilac points:
+            the whole atmosphere on a dark ground, and on paper 75 circles
+            of cost for nothing anyone can see. */}
+        {currentTheme() === "night" ? (
           <StarField width={starFieldWidth} height={canvasHeight} tickMs={tickMs} />
         ) : null}
         {bubbles.map((b, i) => {
@@ -993,7 +984,7 @@ function BubbleField({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas, position: "relative" },
   backOverlay: {
     position: "absolute",
@@ -1063,7 +1054,7 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingVertical: 6,
     paddingHorizontal: 12,
-    backgroundColor: "rgba(255, 255, 255, 0.94)",
+    backgroundColor: colors.panel,
     borderRadius: 16,
     borderColor: colors.line,
     borderWidth: 1,
@@ -1091,7 +1082,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingLeft: 12,
     paddingRight: 6,
-    backgroundColor: "rgba(255, 255, 255, 0.94)",
+    backgroundColor: colors.panel,
     borderRadius: 16,
     borderColor: colors.line,
     borderWidth: 1,
@@ -1106,7 +1097,7 @@ const styles = StyleSheet.create({
     borderLeftColor: colors.line,
     borderLeftWidth: 1,
   },
-});
+}));
 
 interface BubbleProps {
   bubble: Bubble;
@@ -1227,7 +1218,7 @@ const BubbleNode: React.FC<BubbleProps> = ({
           cx={cx}
           cy={cy}
           r={radius}
-          color={DRIFT_RING}
+          color={colors.faint}
           style="stroke"
           strokeWidth={1.5}
         >

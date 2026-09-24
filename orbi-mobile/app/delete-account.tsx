@@ -30,6 +30,7 @@ import { useT } from "@/i18n";
 import { ApiError, deleteMyAccount } from "@/services/api";
 import { useAuthStore } from "@/stores/authStore";
 import { colors } from "@/theme/colors";
+import { themed } from "@/theme/themed";
 
 export default function DeleteAccountScreen() {
   const t = useT();
@@ -138,7 +139,7 @@ export default function DeleteAccountScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   body: { padding: 24 },
   warnCard: {
@@ -184,4 +185,4 @@ const styles = StyleSheet.create({
   },
   disabled: { opacity: 0.4 },
   destructiveText: { color: "white", fontSize: 15, fontWeight: "700" },
-});
+}));

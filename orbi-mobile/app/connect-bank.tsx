@@ -40,6 +40,7 @@ import { ScreenHeader } from "@/components/screen-header";
 import { translate, useT } from "@/i18n";
 import { ApiError, connectAccount } from "@/services/api";
 import { colors } from "@/theme/colors";
+import { themed } from "@/theme/themed";
 
 interface Step {
   icon: keyof typeof MaterialIcons.glyphMap;
@@ -219,7 +220,7 @@ export default function ConnectBankScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   body: { padding: 20, paddingBottom: 48 },
   lede: {
@@ -290,4 +291,4 @@ const styles = StyleSheet.create({
     textAlign: "center",
     paddingHorizontal: 8,
   },
-});
+}));

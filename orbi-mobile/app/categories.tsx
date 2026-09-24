@@ -52,6 +52,7 @@ import {
   type FinanceCategory,
 } from "@/services/api";
 import { colors } from "@/theme/colors";
+import { themed } from "@/theme/themed";
 
 export default function CategoriesScreen() {
   const t = useT();
@@ -302,7 +303,7 @@ export default function CategoriesScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   flex: { flex: 1 },
   body: { padding: 16, paddingBottom: 48, gap: 8 },
@@ -344,4 +345,4 @@ const styles = StyleSheet.create({
     marginTop: 14,
     textAlign: "center",
   },
-});
+}));
