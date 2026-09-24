@@ -32,9 +32,12 @@ import {
   updateCluster,
   updateTask,
 } from "@/services/api";
-import { canCreateBubble, formatTurnsChip, isAtAiCap } from "@/services/tierGate";
-import { useAuthStore, type SubscriptionTier } from "@/stores/authStore";
-import { startHum, stopHum } from "@/services/feedback";
+import { canCreateBubble, formatTurnsChip, isAtAiCap, isNearAiCap } from "@/services/tierGate";
+import { firstPriority, needsYouToday } from "@/services/attention";
+import { PriorityCard } from "@/components/universe/PriorityCard";
+import { useLocaleStore } from "@/i18n";
+import { useAuthStore } from "@/stores/authStore";
+import { cue, startHum, stopHum } from "@/services/feedback";
 import { useSoundStore } from "@/stores/soundStore";
 import Feather from "@expo/vector-icons/Feather";
 import { Avatar } from "@/components/avatar";
@@ -42,13 +45,6 @@ import { useProfileStore } from "@/stores/profileStore";
 import { useUniverseStore } from "@/stores/universeStore";
 import { useUsageStore } from "@/stores/usageStore";
 import { colors } from "@/theme/colors";
-
-// Internal DB values stay 'free'|'pro'|'premium'; marketing names appear here.
-const TIER_LABEL: Record<SubscriptionTier, string> = {
-  free: "SPARK",
-  pro: "PRO",
-  premium: "GENIUS",
-};
 
 /** One task as returned by the coordinator inside `data.tasks`. */
 interface ParsedVoiceTask {
@@ -105,6 +101,29 @@ export default function UniverseScreen() {
   }, [loadProfile]);
 
   const lockTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // What today asks of the user. Derived from the tasks already in the
+  // store — the header count and the card come from the same function
+  // call, so they can never disagree about what counts.
+  const serverTasks = useUniverseStore((s) => s.serverTasks);
+  const serverClusters = useUniverseStore((s) => s.serverClusters);
+  const canvasClusters = useUniverseStore((s) => s.clusters);
+  const language = useLocaleStore((s) => s.language);
+  const now = new Date();
+  const dueToday = needsYouToday(serverTasks, now);
+  const priority = firstPriority(serverTasks, now);
+  const priorityCluster = priority?.parent_cluster_id
+    ? serverClusters.find((c) => c.id === priority.parent_cluster_id)
+    : undefined;
+  // Capitalised by hand: Portuguese weekday names are lower case
+  // ("terça-feira"), which is correct in a sentence and wrong as a title.
+  const rawWeekday = now.toLocaleDateString(language, { weekday: "long" });
+  const weekday = rawWeekday.charAt(0).toUpperCase() + rawWeekday.slice(1);
+  const auraColor =
+    (activeClusterId
+      ? canvasClusters.find((c) => c.id === activeClusterId)?.color
+      : undefined) ?? colors.work;
+  const showTurns = aiCapHit || isNearAiCap(usage);
 
   // The universe hum runs only while this screen is the one you are looking
   // at. Tied to focus rather than to app lifetime because it is scenery for
@@ -266,13 +285,20 @@ export default function UniverseScreen() {
         params: { payload: JSON.stringify(payload) },
       });
     } catch (e) {
-      // Quota errors get the upgrade prompt; everything else falls
-      // through to the raw API error message.
+      // A quota message is shown verbatim: it names the limit and when it
+      // resets, which is information the user can act on. It used to end
+      // "Tap the tier badge to upgrade" — the badge is gone, so it now
+      // points at the place plans actually live.
       if (isQuotaError(e)) {
-        setVoiceError(`${e.message} Tap the tier badge to upgrade.`);
+        cue("refuse");
+        setVoiceError(`${e.message} ${t("Plans are in Settings.")}`);
       } else {
-        const msg = e instanceof ApiError ? e.message : String(e);
-        setVoiceError(msg);
+        // Everything else is infrastructure. String(e) put things like
+        // "TypeError: Network request failed" in front of someone who only
+        // wanted to talk to their phone — the same leak already fixed on
+        // the chat mic. The detail goes to the console instead.
+        console.warn("Voice capture failed:", e);
+        setVoiceError(t("Couldn't use the mic just now. Try again."));
       }
     } finally {
       setVoiceStage("idle");
@@ -315,6 +341,10 @@ export default function UniverseScreen() {
     closeArc();
     router.push("/cluster-editor?id=new" as Href);
   };
+  const goOrganise = () => {
+    closeArc();
+    router.push("/cluster-proposal" as Href);
+  };
 
   // Long-press → skip the menu, go straight to new cluster (the less
   // common action — long-press feels right for the shortcut).
@@ -342,6 +372,14 @@ export default function UniverseScreen() {
     transform: [
       { translateX: (1 - arcProgress.value) * 60 },
       { translateY: (1 - arcProgress.value) * 60 },
+      { scale: 0.6 + arcProgress.value * 0.4 },
+    ],
+  }));
+  // Third point of the arc: level with the +, out to its left.
+  const organiseArcStyle = useAnimatedStyle(() => ({
+    opacity: arcProgress.value,
+    transform: [
+      { translateX: (1 - arcProgress.value) * 72 },
       { scale: 0.6 + arcProgress.value * 0.4 },
     ],
   }));
@@ -378,50 +416,71 @@ export default function UniverseScreen() {
     [],
   );
 
-  const onTierPress = () => {
+  const openSettings = () => {
     router.push("/settings" as Href);
+  };
+
+  // One way to open a task, shared by bubble taps and the priority card.
+  //
+  // Two guards:
+  //   1. navLocked — set whenever a detail modal is up or mid-close. Stops
+  //      "push while the previous modal hasn't finished closing" from
+  //      corrupting the navigation stack.
+  //   2. a 500ms debounce — a safety net for rapid taps on overlapping
+  //      bubbles.
+  const openTask = (taskId: string) => {
+    if (navLocked) return;
+    const stamp = Date.now();
+    if (stamp - lastBubbleTapAt.current < 500) return;
+    lastBubbleTapAt.current = stamp;
+    setNavLocked(true);
+    router.push({ pathname: "/task-detail", params: { id: taskId } });
   };
 
   return (
     <SafeAreaView style={styles.root} edges={["top"]}>
+      {/* What day it is and how much of it is spoken for — the two things
+          you want before deciding where to look. Controls sit on the right
+          as outlined circles so they read as tools rather than as content. */}
       <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <Pressable
-            onPress={onTierPress}
-            hitSlop={12}
-            style={styles.profileBtn}
-            accessibilityLabel="Open Settings"
-          >
-            <Avatar url={avatarUrl} name={profileName} size={30} />
-          </Pressable>
-          {/* Tier still shows as a label next to the profile icon so
-              the user can see which plan they're on at a glance.
-              Backend health moved into Settings → Status to free up
-              the canvas header. */}
-          <Pressable
-            onPress={onTierPress}
-            hitSlop={12}
-            style={styles.tierPill}
-            accessibilityLabel="Subscription tier"
-          >
-            <Text style={styles.tierPillText}>{TIER_LABEL[tier]}</Text>
-          </Pressable>
-          {turnsChip ? (
-            <Text style={[styles.turnsChip, aiCapHit && styles.turnsChipFull]}>
-              {turnsChip}
-            </Text>
-          ) : null}
+        <View style={styles.headerText}>
+          <Text style={styles.weekday}>{weekday}</Text>
+          <Text style={styles.todayLine}>
+            {dueToday === 0
+              ? t("Nothing due today")
+              : dueToday === 1
+                ? t("1 needs you today")
+                : t("{n} need you today", { n: String(dueToday) })}
+            {/* The AI allowance only earns header space when it is about to
+                run out. Shown always, it was a running meter competing with
+                the date for a decision the user could not make. */}
+            {showTurns ? (
+              <Text style={[styles.turnsChip, aiCapHit && styles.turnsChipFull]}>
+                {"  ·  "}
+                {turnsChip}
+              </Text>
+            ) : null}
+          </Text>
         </View>
-        {/* Search icon top-right, mirror of the profile icon on the
-            left. Single tap opens the search modal which embeds the
-            query server-side and tags matching task IDs in the store. */}
         <Pressable
           onPress={() => router.push("/search" as Href)}
-          hitSlop={12}
-          style={styles.searchBtn}
-          accessibilityLabel="Search"
+          style={styles.circleBtn}
+          accessibilityRole="button"
+          accessibilityLabel={t("Search")}
         >
-          <MaterialIcons name="search" size={26} color={colors.ink} />
+          <Feather name="search" size={17} color={colors.ink} />
+        </Pressable>
+        <Pressable
+          onPress={openSettings}
+          style={[styles.circleBtn, avatarUrl ? styles.circleBtnPhoto : null]}
+          accessibilityRole="button"
+          accessibilityLabel={t("Settings")}
+        >
+          {avatarUrl ? (
+            <Avatar url={avatarUrl} name={profileName} size={36} />
+          ) : (
+            <Feather name="settings" size={17} color={colors.ink} />
+          )}
         </Pressable>
       </View>
 
@@ -454,24 +513,7 @@ export default function UniverseScreen() {
             onEditFocusedCluster={(clusterId) =>
               router.push({ pathname: "/cluster-editor", params: { id: clusterId } })
             }
-            onBubbleTap={(taskId) => {
-              // Two guards:
-              //   1. navLocked — set whenever a detail modal is up or
-              //      mid-close-animation. Stops "push while previous
-              //      modal hasn't finished closing" from corrupting
-              //      the navigation stack.
-              //   2. 500ms tap-debounce — secondary safety net for
-              //      truly rapid taps on overlapping bubbles.
-              if (navLocked) return;
-              const now = Date.now();
-              if (now - lastBubbleTapAt.current < 500) return;
-              lastBubbleTapAt.current = now;
-              setNavLocked(true);
-              router.push({
-                pathname: "/task-detail",
-                params: { id: taskId },
-              });
-            }}
+            onBubbleTap={openTask}
           />
         )}
 
@@ -513,71 +555,91 @@ export default function UniverseScreen() {
           />
         ) : null}
 
-        <View style={styles.fabRow} pointerEvents="box-none">
-          {/* Arc menu — absolutely positioned above + when open. We
-              mount the buttons unconditionally so their animations
-              run on the same shared value, but pointerEvents="none"
-              while closed makes them ignore taps. */}
-          <Animated.View
-            style={[styles.arcButtonTask, taskArcStyle]}
-            pointerEvents={arcOpen ? "auto" : "none"}
-          >
-            <Pressable onPress={goNewTask} style={styles.arcInner}>
-              <MaterialIcons name="add-task" size={22} color={colors.ink} />
-            </Pressable>
-            <Text style={styles.arcLabel}>{t("Task")}</Text>
-          </Animated.View>
-          <Animated.View
-            style={[styles.arcButtonCluster, clusterArcStyle]}
-            pointerEvents={arcOpen ? "auto" : "none"}
-          >
-            <Pressable onPress={goNewCluster} style={styles.arcInner}>
-              <MaterialIcons name="bubble-chart" size={22} color={colors.ink} />
-            </Pressable>
-            <Text style={styles.arcLabel}>{t("Cluster")}</Text>
-          </Animated.View>
+      </View>
 
-          <Pressable
-            onPress={() => router.push("/cluster-proposal" as Href)}
-            style={styles.fabOrganise}
-            hitSlop={6}
-            accessibilityLabel="Organise clusters"
-          >
-            <MaterialIcons name="auto-awesome" size={20} color={colors.inkDim} />
-          </Pressable>
-          <Pressable
-            onPressIn={onMicPressIn}
-            onPressOut={onMicPressOut}
-            disabled={voiceStage === "processing" || micDisabled}
-            style={[
-              styles.fabMic,
-              voice.isRecording && styles.fabMicActive,
-              micDisabled && styles.fabDisabled,
-            ]}
-            hitSlop={6}
-            accessibilityLabel="Hold to record voice task"
-          >
-            {/* Feather, not the 🎙 emoji that was here. An emoji is drawn
-                by the system font: it is full-colour, it cannot take the
-                button's tint, and it looks like a different decade on every
-                OS version. This is a stroke glyph that matches the rest of
-                the app and inverts cleanly while recording. */}
-            <Feather
-              name="mic"
-              size={22}
-              color={voice.isRecording ? colors.canvas : colors.ink}
+      {/* The dock: what needs you, then the two ways to add something.
+          In flow below the canvas rather than floating over it, so the
+          universe lays its bubbles out in the space that is actually free
+          instead of parking one underneath the card. */}
+      <View style={styles.dock} pointerEvents="box-none">
+        {priority && !activeClusterId && !arcOpen ? (
+          <View style={styles.cardWrap}>
+            <PriorityCard
+              task={priority}
+              clusterName={priorityCluster?.name ?? null}
+              onPress={() => openTask(priority.id)}
             />
-          </Pressable>
+          </View>
+        ) : null}
 
-          <Pressable
-            onPress={togglePlus}
-            onLongPress={onPlusLongPress}
-            style={[styles.fabAdd, plusDisabled && styles.fabDisabled]}
-            hitSlop={8}
-            accessibilityLabel={arcOpen ? "Close create menu" : "Create"}
-          >
-            <Animated.Text style={[styles.fabPlus, plusIconStyle]}>+</Animated.Text>
-          </Pressable>
+        <View style={styles.micRow} pointerEvents="box-none">
+          {/* The mic is the centre of the app, so it sits in the centre.
+              Ink, with an aura that takes the colour of the cluster you
+              are inside — the universe tints the tool, not the reverse. */}
+          <View style={styles.micWrap}>
+            <View
+              pointerEvents="none"
+              style={[styles.micAura, { backgroundColor: auraColor }]}
+            />
+            <Pressable
+              onPressIn={onMicPressIn}
+              onPressOut={onMicPressOut}
+              disabled={voiceStage === "processing" || micDisabled}
+              style={[
+                styles.fabMic,
+                voice.isRecording && styles.fabMicActive,
+                micDisabled && styles.fabDisabled,
+              ]}
+              hitSlop={6}
+              accessibilityLabel="Hold to record voice task"
+            >
+              <Feather name="mic" size={27} color={colors.canvas} />
+            </Pressable>
+          </View>
+
+          {/* + and the three things it can make. Organise lives here now
+              rather than as a separate button beside the mic: it is one
+              more way of shaping the universe, and a third floating control
+              made the bottom of the screen read as a toolbar. */}
+          <View style={styles.plusWrap} pointerEvents="box-none">
+            <Animated.View
+              style={[styles.arcButtonTask, taskArcStyle]}
+              pointerEvents={arcOpen ? "auto" : "none"}
+            >
+              <Pressable onPress={goNewTask} style={styles.arcInner}>
+                <MaterialIcons name="add-task" size={22} color={colors.ink} />
+              </Pressable>
+              <Text style={styles.arcLabel}>{t("Task")}</Text>
+            </Animated.View>
+            <Animated.View
+              style={[styles.arcButtonCluster, clusterArcStyle]}
+              pointerEvents={arcOpen ? "auto" : "none"}
+            >
+              <Pressable onPress={goNewCluster} style={styles.arcInner}>
+                <MaterialIcons name="bubble-chart" size={22} color={colors.ink} />
+              </Pressable>
+              <Text style={styles.arcLabel}>{t("Cluster")}</Text>
+            </Animated.View>
+            <Animated.View
+              style={[styles.arcButtonOrganise, organiseArcStyle]}
+              pointerEvents={arcOpen ? "auto" : "none"}
+            >
+              <Pressable onPress={goOrganise} style={styles.arcInner}>
+                <MaterialIcons name="auto-awesome" size={21} color={colors.ink} />
+              </Pressable>
+              <Text style={styles.arcLabel}>{t("Organise")}</Text>
+            </Animated.View>
+
+            <Pressable
+              onPress={togglePlus}
+              onLongPress={onPlusLongPress}
+              style={[styles.fabAdd, plusDisabled && styles.fabDisabled]}
+              hitSlop={8}
+              accessibilityLabel={arcOpen ? "Close create menu" : "Create"}
+            >
+              <Animated.Text style={[styles.fabPlus, plusIconStyle]}>+</Animated.Text>
+            </Pressable>
+          </View>
         </View>
       </View>
     </SafeAreaView>
@@ -587,23 +649,38 @@ export default function UniverseScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   header: {
-    paddingHorizontal: 18,
-    paddingVertical: 10,
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 6,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    gap: 10,
   },
-  headerLeft: { flexDirection: "row", alignItems: "center", gap: 8 },
-  profileBtn: { padding: 2 },
-  searchBtn: { padding: 4 },
-  tierPill: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 999,
-    backgroundColor: colors.accent,
+  headerText: { flex: 1 },
+  weekday: {
+    color: colors.ink,
+    fontSize: 20,
+    fontWeight: "700",
+    letterSpacing: -0.3,
   },
-  tierPillText: { color: "white", fontSize: 9, fontWeight: "700", letterSpacing: 1 },
-  turnsChip: { color: colors.inkDim, fontSize: 11, fontWeight: "500", marginLeft: 4 },
+  todayLine: { color: colors.inkDim, fontSize: 13, marginTop: 1 },
+  // 40pt circles with a hairline. Outlined rather than filled so they read
+  // as tools sitting on the page, not as buttons competing with the mic.
+  circleBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.panel,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+  // A photo fills its circle edge to edge; the outline would only draw a
+  // second ring around the avatar's own.
+  circleBtnPhoto: { borderWidth: 0 },
+  turnsChip: { color: colors.inkDim, fontSize: 12, fontWeight: "500" },
   turnsChipFull: { color: colors.overdue, fontWeight: "700" },
   canvasWrap: { flex: 1, position: "relative" },
   centered: { flex: 1, justifyContent: "center", alignItems: "center", padding: 24 },
@@ -618,49 +695,55 @@ const styles = StyleSheet.create({
   },
   retryText: { color: colors.ink, fontSize: 13, fontWeight: "600" },
   // FAB row sits the mic and + side-by-side bottom-right
-  fabRow: {
+  // In flow under the canvas. See the note in the JSX for why it no longer
+  // floats over the bubbles.
+  dock: { paddingBottom: 10 },
+  cardWrap: { paddingHorizontal: 20, paddingTop: 4, paddingBottom: 12 },
+  micRow: {
+    height: 92,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  micWrap: {
+    width: 74,
+    height: 74,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  // A soft ring outside the mic, in the colour of wherever you are.
+  micAura: {
+    position: "absolute",
+    width: 92,
+    height: 92,
+    borderRadius: 46,
+    opacity: 0.16,
+  },
+  plusWrap: {
     position: "absolute",
     right: 22,
-    bottom: 22,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
+    top: 18,
+    width: 56,
+    height: 56,
   },
   // Tertiary action — smaller and quieter than the primary FAB pair
   // so it doesn't compete visually with the + and mic.
-  fabOrganise: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: colors.panel,
-    borderColor: colors.line,
-    borderWidth: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 1 },
-    elevation: 4,
-  },
+  // (Organise used to float here as its own button. It is in the + menu
+  // now — see arcButtonOrganise.)
   fabMic: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: colors.panel,
-    borderColor: colors.line,
-    borderWidth: 1,
+    width: 74,
+    height: 74,
+    borderRadius: 37,
+    backgroundColor: colors.ink,
     justifyContent: "center",
     alignItems: "center",
-    shadowColor: "#000",
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
+    shadowColor: "#14161C",
+    shadowOpacity: 0.22,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 5 },
     elevation: 6,
   },
   fabMicActive: { backgroundColor: colors.overdue, borderColor: colors.overdue },
   fabDisabled: { opacity: 0.4 },
-  fabIcon: { fontSize: 22 },
   fabAdd: {
     width: 56,
     height: 56,
@@ -678,19 +761,28 @@ const styles = StyleSheet.create({
   // Arc menu — buttons fan up + up-left from the + FAB. Positioned
   // absolutely relative to fabRow so they sit above the canvas. Each
   // wrapper holds the circular button + a small label below.
+  // The arc fans out around the + as a quarter circle: straight up,
+  // up-left, and level to the left. Offsets are from plusWrap.
   arcButtonTask: {
     position: "absolute",
-    bottom: 80,
-    right: 6,
+    bottom: 74,
+    right: 0,
     alignItems: "center",
     width: 56,
   },
   arcButtonCluster: {
     position: "absolute",
-    bottom: 64,
-    right: 70,
+    bottom: 52,
+    right: 62,
     alignItems: "center",
     width: 56,
+  },
+  arcButtonOrganise: {
+    position: "absolute",
+    bottom: -6,
+    right: 76,
+    alignItems: "center",
+    width: 64,
   },
   arcInner: {
     width: 46,
@@ -709,18 +801,15 @@ const styles = StyleSheet.create({
   },
   arcLabel: {
     color: colors.ink,
-    fontSize: 10,
+    fontSize: 10.5,
     fontWeight: "600",
     marginTop: 4,
     textAlign: "center",
-    textShadowColor: "rgba(0,0,0,0.7)",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
   },
   // Recording state pill — bottom-center, above the FAB row
   recordingPill: {
     position: "absolute",
-    bottom: 92,
+    bottom: 16,
     alignSelf: "center",
     flexDirection: "row",
     alignItems: "center",
@@ -741,7 +830,7 @@ const styles = StyleSheet.create({
   recordingText: { color: colors.ink, fontSize: 13, fontWeight: "600" },
   processingOverlay: {
     position: "absolute",
-    bottom: 92,
+    bottom: 16,
     alignSelf: "center",
     flexDirection: "row",
     alignItems: "center",
@@ -756,7 +845,7 @@ const styles = StyleSheet.create({
   processingText: { color: colors.ink, fontSize: 13, fontWeight: "600" },
   errorToast: {
     position: "absolute",
-    bottom: 92,
+    bottom: 16,
     left: 22,
     right: 22,
     backgroundColor: colors.panel,

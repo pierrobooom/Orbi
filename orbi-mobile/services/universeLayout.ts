@@ -383,8 +383,9 @@ export function layoutUniverse(
     // urgency without needing to drill in. Drift is excluded so the
     // catch-all bucket doesn't pulse just because it caught one
     // overdue task.
-    const hasOverdue =
-      cluster.id !== DRIFT_ID && tasks.some((t) => isOverdue(t, now));
+    const overdueCount =
+      cluster.id === DRIFT_ID ? 0 : tasks.filter((t) => isOverdue(t, now)).length;
+    const hasOverdue = overdueCount > 0;
     return {
       // Use the cluster's id as the bubble id so taps map directly to
       // enterCluster without a lookup.
@@ -404,6 +405,7 @@ export function layoutUniverse(
       kind: "cluster",
       radius: clusterRadius(count),
       taskCount: count,
+      overdueCount,
     };
   });
 

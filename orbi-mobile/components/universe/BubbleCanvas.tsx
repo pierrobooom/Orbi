@@ -34,6 +34,7 @@ import {
 import {
   Canvas,
   Circle,
+  DashPathEffect,
   Group,
 } from "@shopify/react-native-skia";
 import Animated, {
@@ -74,9 +75,41 @@ function pressureToRadius(p: number): number {
   return 26 + (Math.max(0, Math.min(10, p)) / 10) * 14;
 }
 
+/** What a cluster bubble says under its name.
+ *
+ * Three states, in priority order, because the question a glance is asking
+ * is "does anything here need me", not "how big is this":
+ *
+ *   overdue work   -> "1 overdue"  (the number that needs acting on)
+ *   open work      -> "7 open"
+ *   nothing        -> no subtitle at all
+ *
+ * The empty case says nothing rather than "0 tasks". A zero is a line of
+ * text whose only content is that there is no content, and it makes an
+ * empty cluster look exactly as busy as a full one.
+ */
+function clusterSubtitle(
+  b: Bubble,
+  t: (key: string, vars?: Record<string, string>) => string,
+): string | undefined {
+  // One is its own key: Portuguese agrees in number ("1 aberta",
+  // "7 abertas"), and a single plural string reads as a typo at one.
+  const overdue = b.overdueCount ?? 0;
+  if (overdue === 1) return t("1 overdue");
+  if (overdue > 1) return t("{n} overdue", { n: String(overdue) });
+  const open = b.taskCount ?? 0;
+  if (open === 1) return t("1 open");
+  if (open > 1) return t("{n} open", { n: String(open) });
+  return undefined;
+}
+
 // How far the drop shadow sits below its bubble. A constant transform, so
 // it costs nothing per frame.
 const SHADOW_SHIFT = [{ translateY: 3 }];
+
+// The dashed outline of Adrift. Warmer and darker than colors.line so the
+// dashes still read at 1.5px on the paper ground.
+const DRIFT_RING = "#C9C3B9";
 
 // Whether the star field is drawn behind the bubbles. Off while the ground
 // is paper — the stars are white and would be invisible. Flips back on with
@@ -662,6 +695,7 @@ function BubbleField({
   // halo; nothing is lost, because overdue is red and carries a red dot
   // whether or not it moves.
   const reduceMotion = useReduceMotion();
+  const t = useT();
   // The Skia Canvas is sized to the FULL STAR FIELD (which is wider
   // than the universe) and shifted left so the universe is centered
   // on screen when pan = 0. Stars draw across the entire canvas in
@@ -881,12 +915,9 @@ function BubbleField({
               fallback={initial[i]}
               physics={physics}
               label={cluster.name}
-              subtitle={
-                b.taskCount !== undefined
-                  ? `${b.taskCount} task${b.taskCount === 1 ? "" : "s"}`
-                  : undefined
-              }
+              subtitle={clusterSubtitle(b, t)}
               size="dominant"
+              tone={cluster.kind === "drift" ? "muted" : "light"}
             />
           );
         }
@@ -1139,6 +1170,30 @@ const BubbleNode: React.FC<BubbleProps> = ({
   // task rather than as a thicker edge on it — a thicker edge would just
   // look like a rendering difference.
   const sharedRingRadius = useDerivedValue(() => radius.value + 4);
+
+  // Adrift is drawn as an empty dashed ring. It is the catch-all for
+  // things that belong nowhere yet — a place, not a subject — and a solid
+  // grey ball gave it the same visual weight as Work or Health, as though
+  // "unfiled" were one of the areas of your life. Dashed and hollow says
+  // "a slot waiting to be sorted". Only the top-level cluster bubble: the
+  // task bubbles inside it are ordinary tasks.
+  if (bubble.kind === "cluster" && cluster.kind === "drift") {
+    return (
+      <Group>
+        <Circle cx={cx} cy={cy} r={radius} color={colors.panel} />
+        <Circle
+          cx={cx}
+          cy={cy}
+          r={radius}
+          color={DRIFT_RING}
+          style="stroke"
+          strokeWidth={1.5}
+        >
+          <DashPathEffect intervals={[5, 4]} />
+        </Circle>
+      </Group>
+    );
+  }
 
   return (
     <Group>

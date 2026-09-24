@@ -73,6 +73,10 @@ export interface Bubble {
   // Number of active tasks in this cluster — only set on cluster
   // bubbles, used to size the bubble and decorate the label.
   taskCount?: number;
+  // How many of those are past due. Carried separately from `overdue`,
+  // which is only a flag: the subtitle says "1 overdue", and a flag cannot
+  // say how many.
+  overdueCount?: number;
   // Explicit color override. Used in search view so each matched
   // bubble keeps its ORIGINAL cluster color even though it's
   // positioned inside the synthetic search-results cluster — the user

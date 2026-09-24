@@ -30,6 +30,10 @@ interface Props {
   // per-bubble task title.
   size?: "dominant" | "normal";
   subtitle?: string;
+  // "light" is white text on a coloured fill — every bubble but one.
+  // "muted" is for Adrift, which is drawn as an empty dashed ring on the
+  // paper ground: white text there would be invisible.
+  tone?: "light" | "muted";
 }
 
 const LABEL_WIDTH = 120; // wide enough for our truncated label; centered
@@ -42,7 +46,9 @@ export default function BubbleLabel({
   physics,
   size = "normal",
   subtitle,
+  tone = "light",
 }: Props) {
+  const muted = tone === "muted";
   const containerStyle = useAnimatedStyle(() => {
     // Index first as a fast path, but only trust it when the entry is
     // actually this bubble's. Otherwise scan, and fall back to the
@@ -66,13 +72,15 @@ export default function BubbleLabel({
     <Animated.View pointerEvents="none" style={containerStyle}>
       <Text
         numberOfLines={1}
-        style={size === "dominant" ? styles.dominantLabel : styles.label}
-        // text shadow handles contrast against bright cluster colors
+        style={[
+          size === "dominant" ? styles.dominantLabel : styles.label,
+          muted && styles.muted,
+        ]}
       >
         {label}
       </Text>
       {subtitle ? (
-        <Text numberOfLines={1} style={styles.subtitle}>
+        <Text numberOfLines={1} style={[styles.subtitle, muted && styles.muted]}>
           {subtitle}
         </Text>
       ) : null}
@@ -81,35 +89,51 @@ export default function BubbleLabel({
 }
 
 const styles = StyleSheet.create({
+  // A light shadow, not the heavy 70% one this used to carry. That was
+  // there to lift white text off pale fills against a black universe; the
+  // retuned cluster colours are all deep enough to hold white on their
+  // own, and a thick dark halo round every letter reads as smudged on
+  // paper. What is left is just enough to separate small text from the
+  // brightest fills.
   label: {
     color: "white",
     fontSize: 11,
     fontWeight: "600",
     textAlign: "center",
-    // Cheap 1px black outline via textShadow — readable on every
-    // cluster color including the bright ones.
-    textShadowColor: "rgba(0,0,0,0.7)",
+    textShadowColor: "rgba(0,0,0,0.22)",
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 2,
   },
   dominantLabel: {
     color: "white",
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "700",
     textAlign: "center",
-    textShadowColor: "rgba(0,0,0,0.7)",
+    textShadowColor: "rgba(0,0,0,0.22)",
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 2,
   },
+  // Same colour and family as the title, a step smaller and lighter.
+  //
+  // It used to be colors.ink at 85% — a light grey chosen for a dark ground.
+  // Once the palette flipped, ink became near-black, so the count under
+  // every cluster name turned into dark text on a coloured fill. One voice
+  // for both lines also reads as a single label rather than as a name with
+  // a caption stuck to it.
   subtitle: {
-    color: colors.ink,
-    fontSize: 10,
-    fontWeight: "400",
+    color: "white",
+    fontSize: 11,
+    fontWeight: "500",
     textAlign: "center",
-    opacity: 0.85,
+    opacity: 0.9,
     marginTop: 1,
-    textShadowColor: "rgba(0,0,0,0.7)",
+    textShadowColor: "rgba(0,0,0,0.22)",
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 2,
+  },
+  muted: {
+    color: colors.inkDim,
+    textShadowColor: "transparent",
+    opacity: 1,
   },
 });

@@ -249,6 +249,30 @@ export const ptPT: Record<string, string> = {
   "New": "Nova",
   "Message Orbi": "Escreve ao Orbi",
   "Hide keyboard": "Fechar teclado",
+  "1 overdue": "1 atrasada",
+  "1 open": "1 aberta",
+  "{n} open":
+    "{n} abertas",
+  "Nothing due today":
+    "Nada para hoje",
+  "1 needs you today":
+    "1 precisa de ti hoje",
+  "{n} need you today":
+    "{n} precisam de ti hoje",
+  "Needs you first":
+    "Precisa de ti primeiro",
+  "Late today":
+    "Atrasada hoje",
+  "1 day late":
+    "1 dia de atraso",
+  "{n} days late":
+    "{n} dias de atraso",
+  "Due at {time}":
+    "Prazo às {time}",
+  "Organise":
+    "Organizar",
+  "Plans are in Settings.":
+    "Os planos estão nas Definições.",
   "Sound":
     "Som",
   "Sound effects":
