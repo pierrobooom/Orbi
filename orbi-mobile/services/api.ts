@@ -10,7 +10,7 @@
 // Production will replace all three with a fixed cloud URL.
 
 import Constants from "expo-constants";
-import { File } from "expo-file-system";
+import { File, UploadType } from "expo-file-system";
 
 import { supabase } from "@/services/supabase";
 
@@ -140,14 +140,22 @@ export async function getMyProfile(): Promise<UserProfile> {
 
 /** Upload a profile picture and return the updated profile.
  *
- * Deliberately NOT routed through authFetch. That helper sets
- * Content-Type: application/json on every request, and a multipart body
- * needs the header left alone so the runtime can add its own boundary —
- * setting it by hand produces a body the server cannot split.
+ * WHY NOT fetch + FormData
+ * That is the obvious way and it does not work here. React Native's
+ * FormData takes a {uri, name, type} object and is supposed to stream the
+ * file, but in Expo Go the request never leaves the device — the server
+ * logs no request at all, and JS sees only a bare "Network request failed"
+ * with nothing to act on. Expo's own uploader does the read and the
+ * multipart framing in native code, which is the path that works.
  *
- * The file is sent by uri. React Native's FormData understands that shape
- * and streams from disk, so a photo never has to be base64'd into a string
- * in JS memory first.
+ * It is also NOT routed through authFetch: that helper sets
+ * Content-Type: application/json on everything, and a multipart body needs
+ * that header left alone so the boundary can be attached to it.
+ *
+ * The uploader resolves any non-2xx itself rather than throwing, so the
+ * status has to be checked by hand — a rejection here means the file could
+ * not be read or the request never completed, which is a different failure
+ * from the server saying no.
  */
 export async function uploadAvatar(
   uri: string,
@@ -156,24 +164,38 @@ export async function uploadAvatar(
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token;
 
-  // The server decides what this really is by sniffing the bytes, so the
-  // name and type here are hints for the multipart envelope, not a claim
-  // anyone relies on.
+  // A hint for the multipart envelope, not a claim anyone relies on: the
+  // server decides what the file really is by reading its first bytes.
   const guessed = mimeType || guessImageType(uri);
-  const form = new FormData();
-  form.append("file", {
-    uri,
-    name: `avatar.${guessed.split("/")[1] ?? "jpg"}`,
-    type: guessed,
-  } as unknown as Blob);
 
-  const res = await fetch(`${API_BASE_URL}${V1}/users/me/avatar`, {
-    method: "PUT",
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-    body: form,
-  });
-  if (!res.ok) throw await parseError(res);
-  return (await res.json()) as UserProfile;
+  const result = await new File(uri).upload(
+    `${API_BASE_URL}${V1}/users/me/avatar`,
+    {
+      httpMethod: "PUT",
+      uploadType: UploadType.MULTIPART,
+      fieldName: "file",
+      mimeType: guessed,
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    },
+  );
+
+  if (result.status < 200 || result.status >= 300) {
+    // Same shape parseError produces, so callers can treat an upload
+    // failure exactly like any other ApiError.
+    let message = "Could not save that picture.";
+    let code = "AVATAR_UPLOAD_FAILED";
+    try {
+      const detail = JSON.parse(result.body)?.detail;
+      if (detail?.message) message = detail.message;
+      if (detail?.error_code) code = detail.error_code;
+    } catch {
+      // A non-JSON body means something in front of the API answered —
+      // a proxy or a tunnel. Its text is not for the user.
+    }
+    throw new ApiError(result.status, message, code);
+  }
+
+  return JSON.parse(result.body) as UserProfile;
 }
 
 export async function removeAvatar(): Promise<UserProfile> {

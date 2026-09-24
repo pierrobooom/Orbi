@@ -70,6 +70,11 @@ export function ProfileAvatar({ url, name, onChanged }: Props) {
       const profile = await uploadAvatar(uri, mimeType);
       onChanged(profile.avatar_url);
     } catch (e) {
+      // Logged as well as shown. The first version of this failed with a
+      // bare "Network request failed" and no server-side trace, and there
+      // was nothing on screen or in the logs to say which half was at
+      // fault. The uri is the part that identifies the case.
+      console.warn("Avatar upload failed:", uri, e);
       // The server's message is written for a person ("That image is larger
       // than 5 MB"), so it is worth showing. Anything else is infrastructure
       // and gets a plain sentence instead.
