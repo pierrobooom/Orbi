@@ -18,7 +18,13 @@ from app.db import (
     tasks as tasks_db,
     users as users_db,
 )
-from app.models.task import TaskBubble, TaskBubbleCreate, TaskBubbleUpdate, TaskStatus
+from app.models.task import (
+    persistable,
+    TaskBubble,
+    TaskBubbleCreate,
+    TaskBubbleUpdate,
+    TaskStatus,
+)
 from app.services.ai_router import AIRateLimited
 from app.services.usage_tracker import ObjectCapExceeded, check_bubble_cap
 from app.services.auth import get_current_user, get_current_user_with_tier
@@ -384,7 +390,10 @@ async def create_task(
 
     pressure = calculate_pressure_score(task)
 
-    payload = task.model_dump(mode="json")
+    # persistable(), not model_dump(): the model carries four sharing fields
+    # that are assembled per request from task_shares and are not columns.
+    # Sending them made PostgREST reject the whole INSERT.
+    payload = persistable(task)
     payload["pressure_score"] = pressure
 
     row = await tasks_db.insert_task(payload)

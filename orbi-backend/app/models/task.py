@@ -62,6 +62,31 @@ class TaskBubble(BaseModel):
     updated_at: datetime
 
 
+# Fields on TaskBubble that are NOT columns on task_bubbles.
+#
+# They are assembled per request from task_shares so the client can tell a
+# shared bubble from an owned one. Dumping the model straight into an INSERT
+# or UPDATE therefore sends PostgREST column names that do not exist, and it
+# rejects the whole statement — which is exactly how creating a task started
+# returning 500 the moment sharing shipped.
+#
+# Kept next to the fields rather than inline at the call site so that adding
+# another derived field has one obvious place to be registered.
+TASK_DERIVED_FIELDS = frozenset(
+    {
+        "shared_with_me",
+        "shared_by_user_id",
+        "i_completed_at",
+        "owner_completed_at",
+    }
+)
+
+
+def persistable(task: "TaskBubble") -> dict:
+    """The task as a row: every real column, and nothing derived."""
+    return task.model_dump(mode="json", exclude=set(TASK_DERIVED_FIELDS))
+
+
 class TaskBubbleCreate(BaseModel):
     owner_id: UUID
     title: str
