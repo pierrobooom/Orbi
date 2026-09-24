@@ -52,7 +52,9 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { useT } from "@/i18n";
+import { useReduceMotion } from "@/hooks/useReduceMotion";
 import { colors } from "@/theme/colors";
+import { BREATHE_MS, BREATHE_SCALE, PULSE_MS } from "@/theme/motion";
 import { useUniverseStore } from "@/stores/universeStore";
 import BubbleHitArea from "./BubbleHitArea";
 import BubbleLabel from "./BubbleLabel";
@@ -651,6 +653,11 @@ function BubbleField({
   onBubbleMoved,
   canvasPan,
 }: BubbleFieldProps) {
+  // Read once for the whole field and handed to every bubble, rather than
+  // subscribed to fifty times over. Switches off breathing and the overdue
+  // halo; nothing is lost, because overdue is red and carries a red dot
+  // whether or not it moves.
+  const reduceMotion = useReduceMotion();
   // The Skia Canvas is sized to the FULL STAR FIELD (which is wider
   // than the universe) and shifted left so the universe is centered
   // on screen when pan = 0. Stars draw across the entire canvas in
@@ -848,6 +855,7 @@ function BubbleField({
               tickMs={tickMs}
               drawOffsetX={bubbleDrawOffsetX}
               crowding={crowding}
+              still={reduceMotion}
             />
           );
         })}
@@ -1038,6 +1046,10 @@ interface BubbleProps {
   // computes positions in screen coords; we add the Canvas's left
   // shift when drawing so they line up with their RN-side label.
   drawOffsetX?: number;
+  // Whether the system has asked for reduced motion. Passed in rather than
+  // read here: this renders once per bubble, and 50 subscriptions to the
+  // same accessibility flag is 49 too many.
+  still?: boolean;
   // The same factor the physics used. Not recomputed here — two derivations
   // of one number drift, and this one decides both what is drawn and what
   // can be tapped.
@@ -1052,6 +1064,7 @@ const BubbleNode: React.FC<BubbleProps> = ({
   tickMs,
   drawOffsetX = 0,
   crowding = 1,
+  still = false,
 }) => {
   // Cluster bubbles carry an explicit radius set by the layout pass
   // (sqrt of task count). Task bubbles fall back to pressure-based
@@ -1076,22 +1089,50 @@ const BubbleNode: React.FC<BubbleProps> = ({
   const cx = useDerivedValue(() => (physics.value[index]?.x ?? 0) + drawOffsetX);
   const cy = useDerivedValue(() => physics.value[index]?.y ?? 0);
 
-  // Overdue bubbles breathe: radius and opacity oscillate.
+  // Every bubble breathes, not just the overdue ones.
+  //
+  // Two per cent over seven seconds. The point is that the universe looks
+  // alive, not that anything appears to be happening — at five per cent the
+  // eye starts tracking it and the screen becomes restless. The phase is
+  // offset per bubble so the field never pulses in unison, which reads as a
+  // rendering fault rather than as breath.
   const radius = useDerivedValue(() => {
-    if (!bubble.overdue) return baseRadius;
-    const phase = (tickMs.value / 1000) * Math.PI; // ~2s period
-    return baseRadius + Math.sin(phase) * 2;
-  });
-  const opacity = useDerivedValue(() => {
-    if (!bubble.overdue) return 0.9;
-    const phase = (tickMs.value / 1000) * Math.PI;
-    return 0.85 + Math.sin(phase) * 0.12;
+    if (still) return baseRadius;
+    const phase =
+      (tickMs.value / BREATHE_MS) * Math.PI * 2 + index * 0.7;
+    return baseRadius * (1 + Math.sin(phase) * BREATHE_SCALE);
   });
 
-  // Outline radius slightly larger than the fill — Skia doesn't have a
-  // "stroke on the outside" mode, so we draw a second circle with the
-  // outline color/width and the fill on top.
-  const outlineRadius = useDerivedValue(() => radius.value + 1);
+  // Solid. The old 0.9 was letting a dark ground show through to soften the
+  // fill; on paper it only makes the colour look uncertain, and these
+  // colours are the one place the app is allowed to be confident.
+  const opacity = 1;
+
+  // The overdue halo: a ring outside the bubble, fading in and out.
+  //
+  // Replaces oscillating the bubble's own radius and opacity, which made
+  // overdue tasks both wobble and dim — dimming the one thing that most
+  // needs attention. The halo pulses; the bubble underneath stays solid.
+  const haloRadius = useDerivedValue(() => {
+    if (still) return baseRadius + 7;
+    const phase = (tickMs.value / PULSE_MS) * Math.PI * 2;
+    return baseRadius + 7 + Math.sin(phase) * 3;
+  });
+  const haloOpacity = useDerivedValue(() => {
+    if (still) return 0.28;
+    const phase = (tickMs.value / PULSE_MS) * Math.PI * 2;
+    return 0.3 + Math.sin(phase) * 0.18;
+  });
+
+  // A soft drop shadow, as one offset circle rather than a blur filter.
+  //
+  // Skia's real shadow is an image filter, and this renders once per bubble
+  // on every frame — at fifty bubbles that is fifty filtered layers, which
+  // is the one change here that could genuinely cost frames. An offset
+  // translucent circle is a second draw call and reads the same at this
+  // size. It replaces a white ring that was a glow against #07080F and is
+  // invisible on paper.
+  const shadowY = useDerivedValue(() => cy.value + 3);
   // Sits outside the bubble with a gap, so it reads as a ring around the
   // task rather than as a thicker edge on it — a thicker edge would just
   // look like a rendering difference.
@@ -1099,7 +1140,18 @@ const BubbleNode: React.FC<BubbleProps> = ({
 
   return (
     <Group>
-      {/* Shared-task ring. Drawn first, so the bubble sits inside it. */}
+      {/* Overdue halo, outermost so it reads as light coming off the
+          bubble rather than as a border on it. */}
+      {bubble.overdue ? (
+        <Circle
+          cx={cx}
+          cy={cy}
+          r={haloRadius}
+          color={colors.overdue}
+          opacity={haloOpacity}
+        />
+      ) : null}
+      {/* Shared-task ring. Inside the halo, outside the bubble. */}
       {shared ? (
         <Circle
           cx={cx}
@@ -1111,14 +1163,8 @@ const BubbleNode: React.FC<BubbleProps> = ({
           strokeWidth={2}
         />
       ) : null}
-      {/* Soft outline ring */}
-      <Circle
-        cx={cx}
-        cy={cy}
-        r={outlineRadius}
-        color="white"
-        opacity={0.35}
-      />
+      {/* Drop shadow: same circle, nudged down, barely there. */}
+      <Circle cx={cx} cy={shadowY} r={radius} color="#1B1D26" opacity={0.16} />
       {/* Bubble fill */}
       <Circle cx={cx} cy={cy} r={radius} color={baseColor} opacity={opacity} />
     </Group>
