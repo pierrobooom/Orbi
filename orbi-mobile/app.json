@@ -10,7 +10,10 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.orbi.app"
+      "bundleIdentifier": "com.orbi.app",
+      "infoPlist": {
+        "CADisableMinimumFrameDuration": true
+      }
     },
     "android": {
       "package": "com.orbi.app",

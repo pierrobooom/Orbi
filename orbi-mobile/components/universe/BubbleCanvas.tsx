@@ -74,6 +74,10 @@ function pressureToRadius(p: number): number {
   return 26 + (Math.max(0, Math.min(10, p)) / 10) * 14;
 }
 
+// How far the drop shadow sits below its bubble. A constant transform, so
+// it costs nothing per frame.
+const SHADOW_SHIFT = [{ translateY: 3 }];
+
 // Whether the star field is drawn behind the bubbles. Off while the ground
 // is paper — the stars are white and would be invisible. Flips back on with
 // night mode; see the note at the render site.
@@ -1113,26 +1117,24 @@ const BubbleNode: React.FC<BubbleProps> = ({
   // Replaces oscillating the bubble's own radius and opacity, which made
   // overdue tasks both wobble and dim — dimming the one thing that most
   // needs attention. The halo pulses; the bubble underneath stays solid.
+  //
+  // The early return is a PERFORMANCE guard, not a tidiness one. Reanimated
+  // works out a derived value's dependencies by watching which shared
+  // values the worklet actually reads, so a body that returns before
+  // touching tickMs never subscribes to it and never re-runs. Reading it
+  // unconditionally put every bubble on the frame clock for a ring that is
+  // not drawn, which is what turned the universe choppy.
+  const pulses = Boolean(bubble.overdue) && !still;
   const haloRadius = useDerivedValue(() => {
-    if (still) return baseRadius + 7;
+    if (!pulses) return baseRadius + 7;
     const phase = (tickMs.value / PULSE_MS) * Math.PI * 2;
     return baseRadius + 7 + Math.sin(phase) * 3;
   });
   const haloOpacity = useDerivedValue(() => {
-    if (still) return 0.28;
+    if (!pulses) return 0.28;
     const phase = (tickMs.value / PULSE_MS) * Math.PI * 2;
     return 0.3 + Math.sin(phase) * 0.18;
   });
-
-  // A soft drop shadow, as one offset circle rather than a blur filter.
-  //
-  // Skia's real shadow is an image filter, and this renders once per bubble
-  // on every frame — at fifty bubbles that is fifty filtered layers, which
-  // is the one change here that could genuinely cost frames. An offset
-  // translucent circle is a second draw call and reads the same at this
-  // size. It replaces a white ring that was a glow against #07080F and is
-  // invisible on paper.
-  const shadowY = useDerivedValue(() => cy.value + 3);
   // Sits outside the bubble with a gap, so it reads as a ring around the
   // task rather than as a thicker edge on it — a thicker edge would just
   // look like a rendering difference.
@@ -1163,8 +1165,13 @@ const BubbleNode: React.FC<BubbleProps> = ({
           strokeWidth={2}
         />
       ) : null}
-      {/* Drop shadow: same circle, nudged down, barely there. */}
-      <Circle cx={cx} cy={shadowY} r={radius} color="#1B1D26" opacity={0.16} />
+      {/* Drop shadow: the same circle, three pixels down, barely there.
+          Offset with a static Group transform rather than a derived cy —
+          the offset is constant, and a derived value would have put a
+          second per-frame subscription on every bubble to add 3. */}
+      <Group transform={SHADOW_SHIFT}>
+        <Circle cx={cx} cy={cy} r={radius} color="#1B1D26" opacity={0.16} />
+      </Group>
       {/* Bubble fill */}
       <Circle cx={cx} cy={cy} r={radius} color={baseColor} opacity={opacity} />
     </Group>

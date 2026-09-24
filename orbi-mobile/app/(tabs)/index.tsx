@@ -36,6 +36,9 @@ import { canCreateBubble, formatTurnsChip, isAtAiCap } from "@/services/tierGate
 import { useAuthStore, type SubscriptionTier } from "@/stores/authStore";
 import { startHum, stopHum } from "@/services/feedback";
 import { useSoundStore } from "@/stores/soundStore";
+import Feather from "@expo/vector-icons/Feather";
+import { Avatar } from "@/components/avatar";
+import { useProfileStore } from "@/stores/profileStore";
 import { useUniverseStore } from "@/stores/universeStore";
 import { useUsageStore } from "@/stores/usageStore";
 import { colors } from "@/theme/colors";
@@ -91,6 +94,16 @@ export default function UniverseScreen() {
   // before the closing modal finished its animation produced a
   // glitch loop where modals opened/closed themselves.
   const [navLocked, setNavLocked] = useState(false);
+  // The face in the corner. Loaded through the store so the header, the
+  // settings button and the Settings screen all show the same thing without
+  // three separate requests.
+  const avatarUrl = useProfileStore((s) => s.avatarUrl);
+  const profileName = useProfileStore((s) => s.name);
+  const loadProfile = useProfileStore((s) => s.load);
+  useEffect(() => {
+    void loadProfile();
+  }, [loadProfile]);
+
   const lockTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // The universe hum runs only while this screen is the one you are looking
@@ -379,11 +392,7 @@ export default function UniverseScreen() {
             style={styles.profileBtn}
             accessibilityLabel="Open Settings"
           >
-            <MaterialIcons
-              name="account-circle"
-              size={28}
-              color={colors.ink}
-            />
+            <Avatar url={avatarUrl} name={profileName} size={30} />
           </Pressable>
           {/* Tier still shows as a label next to the profile icon so
               the user can see which plan they're on at a glance.
@@ -548,7 +557,16 @@ export default function UniverseScreen() {
             hitSlop={6}
             accessibilityLabel="Hold to record voice task"
           >
-            <Text style={styles.fabIcon}>🎙</Text>
+            {/* Feather, not the 🎙 emoji that was here. An emoji is drawn
+                by the system font: it is full-colour, it cannot take the
+                button's tint, and it looks like a different decade on every
+                OS version. This is a stroke glyph that matches the rest of
+                the app and inverts cleanly while recording. */}
+            <Feather
+              name="mic"
+              size={22}
+              color={voice.isRecording ? colors.canvas : colors.ink}
+            />
           </Pressable>
 
           <Pressable

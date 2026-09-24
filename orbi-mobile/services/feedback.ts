@@ -146,15 +146,21 @@ export function cue(name: Cue): void {
 
   const player = players[name];
   if (!player) return;
-  try {
-    // Rewound every time: a player left at the end of its buffer plays
-    // nothing at all on the second press, which reads as the sound
-    // randomly failing.
-    void player.seekTo(0);
-    player.play();
-  } catch {
-    // Never let a sound effect break the interaction it was decorating.
-  }
+  // Rewind, THEN play — and wait for the rewind.
+  //
+  // seekTo returns a promise. Firing play() straight after it meant every
+  // other press started from the end of the buffer and made no sound at
+  // all: press, sound, press, silence, press, sound. The rewind costs a
+  // few milliseconds against a cue that is already 70ms long, which is far
+  // cheaper than a cue that works half the time.
+  void (async () => {
+    try {
+      await player.seekTo(0);
+      player.play();
+    } catch {
+      // Never let a sound effect break the interaction it decorated.
+    }
+  })();
 }
 
 // The ambient bed. Separate from the cue players because it is the one

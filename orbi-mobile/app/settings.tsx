@@ -44,6 +44,7 @@ import { TIER_DISPLAY } from "@/services/tierGate";
 import { useAuthStore } from "@/stores/authStore";
 import { cue } from "@/services/feedback";
 import { useSoundStore } from "@/stores/soundStore";
+import { useProfileStore } from "@/stores/profileStore";
 import { ProfileAvatar } from "@/components/profile-avatar";
 import { ScreenHeader } from "@/components/screen-header";
 import { useLocaleStore, useT, type UiLanguage, translate } from "@/i18n";
@@ -378,7 +379,13 @@ export default function SettingsScreen() {
           <ProfileAvatar
             url={avatarUrl}
             name={displayName || email}
-            onChanged={setAvatarUrl}
+            onChanged={(url) => {
+              setAvatarUrl(url);
+              // The header and every settings button read from the store,
+              // so they have to hear about this too — otherwise the new
+              // picture appears here and nowhere else until a restart.
+              useProfileStore.getState().setAvatar(url);
+            }}
           />
           <Row label={t("Email")} value={email} />
           <Row label={t("Plan")} value={TIER_DISPLAY[tier]} />

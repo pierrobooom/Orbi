@@ -13,13 +13,34 @@
 
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { useRouter } from "expo-router";
-import React from "react";
+import React, { useEffect } from "react";
 import { Pressable, StyleSheet } from "react-native";
 
+import { Avatar } from "@/components/avatar";
+import { useProfileStore } from "@/stores/profileStore";
 import { colors } from "@/theme/colors";
 
+/** Opens Settings. Shows the user's face once there is one to show.
+ *
+ * A gear says "options"; a face says "you", and everything behind this
+ * button is about the person rather than about the app — their plan, their
+ * language, their quiet hours, their picture. It is also the pattern people
+ * already have muscle memory for from every mail and browser app.
+ *
+ * The gear remains the fallback rather than a blank circle: before the
+ * profile loads, and for anyone who has not set a picture, a familiar icon
+ * is better than an empty ring that looks like a loading failure.
+ */
 export function SettingsButton({ tint = colors.inkDim }: { tint?: string }) {
   const router = useRouter();
+  const avatarUrl = useProfileStore((s) => s.avatarUrl);
+  const name = useProfileStore((s) => s.name);
+  const load = useProfileStore((s) => s.load);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
   return (
     <Pressable
       onPress={() => router.push("/settings")}
@@ -27,7 +48,11 @@ export function SettingsButton({ tint = colors.inkDim }: { tint?: string }) {
       accessibilityLabel="Settings"
       accessibilityRole="button"
     >
-      <MaterialIcons name="settings" size={24} color={tint} />
+      {avatarUrl ? (
+        <Avatar url={avatarUrl} name={name} size={28} />
+      ) : (
+        <MaterialIcons name="settings" size={24} color={tint} />
+      )}
     </Pressable>
   );
 }
