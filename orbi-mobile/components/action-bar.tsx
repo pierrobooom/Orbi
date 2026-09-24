@@ -28,6 +28,12 @@ import {
   View,
   type ViewStyle,
 } from "react-native";
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+} from "react-native-reanimated";
+
+import { MICRO, PRESS_SCALE, timing } from "@/theme/motion";
 
 import { useMirrored } from "@/stores/handednessStore";
 import { colors } from "@/theme/colors";
@@ -51,21 +57,67 @@ interface Props {
 // to offer, and it should be impossible to miss.
 const HEIGHT = 52;
 
+/** A button that dips under the thumb.
+ *
+ * 120ms and six per cent. The dip is the only confirmation a press has
+ * registered before whatever it triggers finishes, and on a slow network
+ * that gap is the whole of the user's experience of the tap. Animated
+ * rather than a pressed-state style, because an instant snap to 0.94 reads
+ * as a glitch while a curve reads as the button yielding.
+ *
+ * timing() carries ReduceMotion.System, so with that flag on the press
+ * jumps straight to its end state instead of animating.
+ */
+function DipPressable({
+  action,
+  style: pressStyle,
+  grow,
+  children,
+}: {
+  action: Action;
+  style: ViewStyle[];
+  /** Share of the row. The primary takes two to the secondary's one when
+   * both are present, because it is the likelier press — the ratio lives
+   * on this wrapper because the wrapper, not the button, is the flex child. */
+  grow: number;
+  children: React.ReactNode;
+}) {
+  const scale = useSharedValue(1);
+  const animated = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+  const disabled = action.disabled || action.busy;
+
+  return (
+    <Animated.View style={[animated, { flex: grow }]}>
+      <Pressable
+        onPress={action.onPress}
+        onPressIn={() => {
+          scale.value = timing(PRESS_SCALE, MICRO);
+        }}
+        onPressOut={() => {
+          scale.value = timing(1, MICRO);
+        }}
+        disabled={disabled}
+        style={[...pressStyle, disabled && styles.disabled]}
+        accessibilityRole="button"
+      >
+        {children}
+      </Pressable>
+    </Animated.View>
+  );
+}
+
 export function ActionBar({ primary, secondary, style }: Props) {
   const mirrored = useMirrored();
 
   return (
     <View style={[styles.bar, mirrored && styles.mirrored, style]}>
       {secondary ? (
-        <Pressable
-          onPress={secondary.onPress}
-          disabled={secondary.disabled || secondary.busy}
-          style={[
-            styles.button,
-            styles.secondary,
-            (secondary.disabled || secondary.busy) && styles.disabled,
-          ]}
-          accessibilityRole="button"
+        <DipPressable
+          action={secondary}
+          grow={1}
+          style={[styles.button, styles.secondary]}
         >
           {secondary.busy ? (
             <ActivityIndicator color={colors.ink} size="small" />
@@ -74,21 +126,13 @@ export function ActionBar({ primary, secondary, style }: Props) {
               {secondary.label}
             </Text>
           )}
-        </Pressable>
+        </DipPressable>
       ) : null}
 
-      <Pressable
-        onPress={primary.onPress}
-        disabled={primary.disabled || primary.busy}
-        style={[
-          styles.button,
-          styles.primary,
-          // With no secondary the primary takes the whole width; with one it
-          // takes the larger share, because it is the likelier press.
-          secondary ? styles.primaryWithSecondary : styles.primaryAlone,
-          (primary.disabled || primary.busy) && styles.disabled,
-        ]}
-        accessibilityRole="button"
+      <DipPressable
+        action={primary}
+        grow={secondary ? 2 : 1}
+        style={[styles.button, styles.primary, styles.fill]}
       >
         {primary.busy ? (
           <ActivityIndicator color={colors.canvas} size="small" />
@@ -97,7 +141,7 @@ export function ActionBar({ primary, secondary, style }: Props) {
             {primary.label}
           </Text>
         )}
-      </Pressable>
+      </DipPressable>
     </View>
   );
 }
@@ -123,8 +167,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   primary: { backgroundColor: colors.accent },
-  primaryAlone: { flex: 1 },
-  primaryWithSecondary: { flex: 2 },
+  // The animated wrapper is the flex child now, so the share of the row is
+  // set there (see DipPressable's `grow`) and the button fills what it gets.
+  fill: { width: "100%" },
   // Centred and capped to one line.
   //
   // Without textAlign a wrapped label renders left-aligned inside a centred
@@ -139,7 +184,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   secondary: {
-    flex: 1,
+    width: "100%",
     borderWidth: 1,
     borderColor: colors.line,
     backgroundColor: colors.panel,
