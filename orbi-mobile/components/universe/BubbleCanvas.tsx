@@ -23,6 +23,7 @@
 // The spring follows the moving target with a slight lag, which is what
 // makes the drift feel like it has weight rather than being a rigid path.
 
+import Feather from "@expo/vector-icons/Feather";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
@@ -621,7 +622,11 @@ export default function BubbleCanvas({
             hitSlop={8}
             accessibilityLabel="Back to clusters"
           >
-            <MaterialIcons name="chevron-left" size={22} color={colors.ink} />
+            {/* The same outlined circle as every other back button, so
+                "leave this place" looks identical wherever you are. */}
+            <View style={styles.backCircle}>
+              <Feather name="chevron-left" size={19} color={colors.ink} />
+            </View>
             <Text style={styles.backOverlayText} numberOfLines={1}>
               {focusedCluster.name}
             </Text>
@@ -961,36 +966,38 @@ const styles = StyleSheet.create({
   backOverlay: {
     position: "absolute",
     top: 10,
-    left: 12,
+    left: 14,
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 6,
-    paddingLeft: 4,
-    paddingRight: 8,
-    backgroundColor: "rgba(255, 255, 255, 0.92)",
-    borderRadius: 18,
-    borderColor: colors.line,
-    borderWidth: 1,
-    maxWidth: "75%",
-    gap: 2,
+    maxWidth: "80%",
+    gap: 4,
   },
   backOverlayBack: {
     flexDirection: "row",
     alignItems: "center",
-    paddingRight: 8,
-    gap: 2,
+    gap: 10,
+    flexShrink: 1,
+  },
+  backCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.panel,
+    alignItems: "center",
+    justifyContent: "center",
   },
   backOverlayText: {
     color: colors.ink,
-    fontSize: 13,
-    fontWeight: "600",
+    fontSize: 16,
+    fontWeight: "700",
+    letterSpacing: -0.2,
+    flexShrink: 1,
   },
   backOverlayPencil: {
-    paddingHorizontal: 6,
-    paddingVertical: 4,
-    borderLeftColor: colors.line,
-    borderLeftWidth: 1,
-    marginLeft: 2,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
   },
   emptyClusterHint: {
     position: "absolute",

@@ -22,6 +22,7 @@
 // ActionBar at the bottom, where they are reachable — a header is for
 // leaving the screen and for saying where you are.
 
+import Feather from "@expo/vector-icons/Feather";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { useRouter } from "expo-router";
 import React from "react";
@@ -92,11 +93,17 @@ export function ScreenHeader({
         accessibilityRole="button"
         accessibilityLabel={backIcon === "close" ? "Close" : "Back"}
       >
-        <MaterialIcons
-          name={backIcon === "close" ? "close" : "chevron-left"}
-          size={ICON}
-          color={colors.inkDim}
-        />
+        {/* A visible 38pt circle inside the 48pt target. The outline is
+            what makes a lone chevron read as a button rather than as a
+            stray glyph in the corner; the target stays 48 because that is
+            what a thumb actually needs, and the two are different jobs. */}
+        <View style={styles.backCircle}>
+          <Feather
+            name={backIcon === "close" ? "x" : "chevron-left"}
+            size={19}
+            color={colors.ink}
+          />
+        </View>
       </Pressable>
     );
 
@@ -152,4 +159,14 @@ const styles = StyleSheet.create({
   },
   title: { flex: 1, color: colors.ink, fontSize: 15, fontWeight: "600", textAlign: "center" },
   dim: { opacity: 0.5 },
+  backCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.panel,
+    alignItems: "center",
+    justifyContent: "center",
+  },
 });

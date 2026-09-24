@@ -93,7 +93,11 @@ export default function SpendingScreen() {
             <Text
               style={[styles.filterText, accountFilter === null && styles.filterTextActive]}
             >
-              {t("All accounts")}
+              {/* Short, because a pill is a filter and not a sentence — and
+                  the pills beside it already say what the choice is between.
+                  The full "All accounts" stays in the Movements dropdown,
+                  where it is the only label in view. */}
+              {t("All")}
             </Text>
           </Pressable>
           {accounts.map((row) => {

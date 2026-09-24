@@ -249,6 +249,7 @@ export const ptPT: Record<string, string> = {
   "New": "Nova",
   "Message Orbi": "Escreve ao Orbi",
   "Hide keyboard": "Fechar teclado",
+  "All": "Todas",
   "1 overdue": "1 atrasada",
   "1 open": "1 aberta",
   "{n} open":

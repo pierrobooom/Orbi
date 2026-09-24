@@ -23,6 +23,7 @@ import { useT } from "@/i18n";
 import { formatCategory } from "@/services/categories";
 import type { FinanceDashboard } from "@/services/api";
 import { colors } from "@/theme/colors";
+import { DISPLAY } from "@/theme/fonts";
 
 // Category colours reuse the cluster palette so the whole app stays visually
 // consistent. Assigned by rank, not by name: the biggest slice is always the
@@ -91,6 +92,11 @@ export function Dashboard({
 
   return (
     <View style={styles.root}>
+      {/* One card for the three numbers that answer one question — "how is
+          this month going". They were three boxes, and a screen built of
+          boxes makes every figure look equally important: the eye has to
+          visit each border before it can compare anything. One card with
+          hairline separators reads as a single statement — spent, in, left. */}
       <View style={styles.card}>
         <Text style={styles.cardLabel}>{t("Spent this month")}</Text>
         <Text style={styles.headline}>{money(data.total_spend, currency)}</Text>
@@ -102,18 +108,21 @@ export function Dashboard({
             })}
           </Text>
         ) : null}
-      </View>
 
-      <View style={styles.pairRow}>
-        <View style={[styles.card, styles.half]}>
-          <Text style={styles.cardLabel}>{t("Came in")}</Text>
-          <Text style={styles.pairValue}>{money(data.total_income, currency)}</Text>
-        </View>
-        <View style={[styles.card, styles.half]}>
-          <Text style={styles.cardLabel}>{t("Left over")}</Text>
-          <Text style={[styles.pairValue, data.net < 0 && styles.negative]}>
-            {money(data.net, currency)}
-          </Text>
+        <View style={styles.rule} />
+
+        <View style={styles.pairRow}>
+          <View style={styles.half}>
+            <Text style={styles.cardLabel}>{t("Came in")}</Text>
+            <Text style={styles.pairValue}>{money(data.total_income, currency)}</Text>
+          </View>
+          <View style={styles.pairDivider} />
+          <View style={styles.half}>
+            <Text style={styles.cardLabel}>{t("Left over")}</Text>
+            <Text style={[styles.pairValue, data.net < 0 && styles.negative]}>
+              {money(data.net, currency)}
+            </Text>
+          </View>
         </View>
       </View>
 
@@ -241,10 +250,17 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     marginBottom: 8,
   },
+  // The one serif on the screen. It is the answer the page exists to give,
+  // so it gets the typeface with character; everything around it stays in
+  // the system font and gets out of the way. No fontWeight: the family name
+  // already names the weight, and setting one as well makes iOS go looking
+  // for a bold variant of a font that has only this one.
   headline: {
     color: colors.ink,
-    fontSize: 32,
-    fontWeight: "800",
+    fontFamily: DISPLAY,
+    fontSize: 44,
+    letterSpacing: -1,
+    lineHeight: 50,
     fontVariant: ["tabular-nums"],
   },
   sub: { color: colors.inkDim, fontSize: 12, marginTop: 6 },
@@ -252,8 +268,12 @@ const styles = StyleSheet.create({
   deltaUp: { color: colors.overdue },
   deltaDown: { color: colors.health },
   deltaNeutral: { color: colors.inkDim, fontSize: 12, marginTop: 6 },
-  pairRow: { flexDirection: "row", gap: 12 },
+  pairRow: { flexDirection: "row", alignItems: "flex-start" },
   half: { flex: 1 },
+  // Hairlines, not borders. They separate without enclosing, which is the
+  // whole difference between one card with parts and three cards.
+  rule: { height: 1, backgroundColor: colors.line, marginVertical: 16 },
+  pairDivider: { width: 1, alignSelf: "stretch", backgroundColor: colors.line, marginHorizontal: 18 },
   pairValue: {
     color: colors.ink,
     fontSize: 19,

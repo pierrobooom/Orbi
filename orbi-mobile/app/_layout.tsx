@@ -14,6 +14,7 @@ import {
   type Href,
 } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import { useFonts } from "expo-font";
 import React, { useEffect } from "react";
 import { ActivityIndicator, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -32,6 +33,7 @@ import { initFeedback, setQuietHours } from "@/services/feedback";
 import { useLocaleStore, type UiLanguage } from "@/i18n";
 import { getMyPreferences } from "@/services/api";
 import { colors } from "@/theme/colors";
+import { FONT_ASSETS } from "@/theme/fonts";
 
 // Custom React Navigation theme so headers / modals match the palette.
 // dark: false now that the ground is paper — navigation uses this flag for
@@ -60,6 +62,15 @@ export const unstable_settings = {
 };
 
 export default function RootLayout() {
+  // Waited for rather than swapped in. The display face is only used for a
+  // few large numbers, and a figure that re-renders from the system font
+  // into a serif a moment after the screen appears reads as the number
+  // changing. Bundled with the app, so this resolves in milliseconds.
+  const [fontsLoaded, fontError] = useFonts(FONT_ASSETS);
+  if (!fontsLoaded && !fontError) {
+    return <View style={{ flex: 1, backgroundColor: colors.canvas }} />;
+  }
+
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.canvas }}>
       <SafeAreaProvider>
