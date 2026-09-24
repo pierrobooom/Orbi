@@ -249,6 +249,8 @@ export const ptPT: Record<string, string> = {
   "New": "Nova",
   "Message Orbi": "Escreve ao Orbi",
   "Hide keyboard": "Fechar teclado",
+  "Show what needs you first": "Mostrar o que precisa de ti primeiro",
+  "Hide": "Esconder",
   "A username needs at least 3 characters.":
     "Um nome de utilizador precisa de pelo menos 3 caracteres.",
   "A username can be at most 20 characters.":

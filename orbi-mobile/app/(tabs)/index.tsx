@@ -34,7 +34,7 @@ import {
 } from "@/services/api";
 import { canCreateBubble, formatTurnsChip, isAtAiCap, isNearAiCap } from "@/services/tierGate";
 import { firstPriority, needsYouToday } from "@/services/attention";
-import { PriorityCard } from "@/components/universe/PriorityCard";
+import { CollapsiblePriority } from "@/components/universe/CollapsiblePriority";
 import { SettingsButton } from "@/components/settings-button";
 import { useLocaleStore } from "@/i18n";
 import { useAuthStore } from "@/stores/authStore";
@@ -98,7 +98,12 @@ export default function UniverseScreen() {
   const serverClusters = useUniverseStore((s) => s.serverClusters);
   const canvasClusters = useUniverseStore((s) => s.clusters);
   const language = useLocaleStore((s) => s.language);
-  const now = new Date();
+  // "Now" derived from the store's clock, not a bare new Date(). The React
+  // Compiler memoises anything without reactive inputs, so new Date() on its
+  // own may be computed once and reused forever; tying it to `clock` makes
+  // it recompute every time useDueClock moves time forward.
+  const clock = useUniverseStore((s) => s.clock);
+  const now = new Date(Math.max(clock, Date.now()));
   const dueToday = needsYouToday(serverTasks, now);
   const priority = firstPriority(serverTasks, now);
   const priorityCluster = priority?.parent_cluster_id
@@ -537,13 +542,12 @@ export default function UniverseScreen() {
           instead of parking one underneath the card. */}
       <View style={styles.dock} pointerEvents="box-none">
         {priority && !activeClusterId && !arcOpen ? (
-          <View style={styles.cardWrap}>
-            <PriorityCard
-              task={priority}
-              clusterName={priorityCluster?.name ?? null}
-              onPress={() => openTask(priority.id)}
-            />
-          </View>
+          <CollapsiblePriority
+            task={priority}
+            clusterName={priorityCluster?.name ?? null}
+            onOpen={() => openTask(priority.id)}
+            now={now}
+          />
         ) : null}
 
         <View style={styles.micRow} pointerEvents="box-none">
@@ -669,7 +673,6 @@ const styles = StyleSheet.create({
   // In flow under the canvas. See the note in the JSX for why it no longer
   // floats over the bubbles.
   dock: { paddingBottom: 10 },
-  cardWrap: { paddingHorizontal: 20, paddingTop: 4, paddingBottom: 12 },
   micRow: {
     height: 92,
     alignItems: "center",

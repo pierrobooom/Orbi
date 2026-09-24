@@ -108,6 +108,10 @@ export default function TasksScreen() {
   const router = useRouter();
   const status = useUniverseStore((s) => s.status);
   const serverTasks = useUniverseStore((s) => s.serverTasks);
+  // Moves forward whenever a task crosses its due time (see useDueClock), so
+  // rows turn red on the second rather than on the next interaction.
+  const clock = useUniverseStore((s) => s.clock);
+  const nowMs = Math.max(clock, Date.now());
   // serverClusters, not the canvas `clusters` — the latter holds only the
   // synthetic search/drilled cluster while those views are active, which
   // would blank every cluster name on this screen.
@@ -169,11 +173,10 @@ export default function TasksScreen() {
   const pool = useMemo(() => {
     if (showDone) return doneTasks;
     if (!overdueOnly) return activeTasks;
-    const now = Date.now();
     return activeTasks.filter(
-      (task) => task.due_at != null && new Date(task.due_at).getTime() < now,
+      (task) => task.due_at != null && new Date(task.due_at).getTime() < nowMs,
     );
-  }, [showDone, doneTasks, overdueOnly, activeTasks]);
+  }, [showDone, doneTasks, overdueOnly, activeTasks, nowMs]);
 
   // --- semantic layer ----------------------------------------------------
   // Tracks the query each response belongs to so a slow request for an
@@ -295,6 +298,7 @@ export default function TasksScreen() {
   const renderRow = useCallback(
     (item: ServerTask) => (
       <TaskRow
+              now={nowMs}
         task={item}
         cluster={
           item.parent_cluster_id ? clusterLookup.get(item.parent_cluster_id) : undefined
@@ -518,13 +522,17 @@ interface TaskRowProps {
   showCluster: boolean;
   done: boolean;
   onPress: () => void;
+  // Passed in rather than read here: a row memoised by the compiler only
+  // re-renders when its props change, so the time has to BE a prop for a
+  // row to notice it has become overdue.
+  now: number;
 }
 
-function TaskRow({ task, cluster, related, showCluster, done, onPress }: TaskRowProps) {
+function TaskRow({ task, cluster, related, showCluster, done, onPress, now }: TaskRowProps) {
   const t = useT();
   const due = task.due_at ? new Date(task.due_at) : null;
   // A finished task can't be overdue, whatever its due date says.
-  const isOverdue = !done && due !== null && due < new Date();
+  const isOverdue = !done && due !== null && due.getTime() < now;
   const completed = task.completed_at ?? task.updated_at ?? null;
 
   return (

@@ -23,6 +23,7 @@ import "react-native-reanimated";
 
 import { useNotificationActions } from "@/hooks/useNotificationActions";
 import { useRefreshOnForeground } from "@/hooks/useRefreshOnForeground";
+import { useDueClock } from "@/hooks/useDueClock";
 import { usePushRegistration } from "@/hooks/usePushRegistration";
 // Importing the authStore here ensures supabase.auth.onAuthStateChange is
 // subscribed before any screen reads from it.
@@ -222,6 +223,8 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   // fire on background-to-foreground, so a notification action taken while
   // the app was away left the canvas showing a stale snapshot until reload.
   useRefreshOnForeground();
+  // Redraw the moment a task becomes overdue, whichever tab is open.
+  useDueClock();
   // Seed UI language from the server-side preference once signed in.
   // Failure is silent and leaves English — a missing preferences row
   // is the normal state for a new user, not an error worth surfacing.

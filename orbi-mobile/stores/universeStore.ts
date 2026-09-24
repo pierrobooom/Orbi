@@ -39,6 +39,14 @@ interface UniverseState {
   // canvas shows a result pill at the top.
   searchResults: string[] | null;
   searchQuery: string | null;
+  // When the layout was last computed, in ms. Overdue is not stored anywhere
+  // — it is decided by comparing due_at with the time at layout — so anything
+  // that shows time-dependent state subscribes to this to know when "now"
+  // has moved.
+  clock: number;
+  // Recompute from the tasks already in memory, with a fresh "now". No
+  // network: nothing on the server changed, only the time did.
+  relayout: () => void;
   hydrate: () => Promise<void>;
   addTask: (task: ServerTask) => void;
   replaceTask: (task: ServerTask) => void;
@@ -55,6 +63,13 @@ interface UniverseState {
 let hydrateSeq = 0;
 
 export const useUniverseStore = create<UniverseState>((set, get) => ({
+  clock: Date.now(),
+  relayout: () => {
+    const { serverTasks, serverClusters, activeClusterId, searchResults } = get();
+    const now = new Date();
+    const layout = layoutUniverse(serverClusters, serverTasks, now, activeClusterId, searchResults);
+    set({ clusters: layout.clusters, bubbles: layout.bubbles, clock: now.getTime() });
+  },
   status: "idle",
   errorMessage: null,
   clusters: [],

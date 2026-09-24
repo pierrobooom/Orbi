@@ -94,12 +94,17 @@ export default function BubbleLabel({
 // sits equally on all sides, so it hugs the glyph instead of dropping away
 // from it. It is there for the light fills — a lime or cyan cluster is
 // bright enough that white on it all but disappears, and clusters can be
-// any colour their owner chose. 45% is enough to separate a letter from a
-// pale fill and faint enough to vanish on a dark one.
+// any colour their owner chose.
+//
+// 60% with a one-pixel drop. The first pass (45%, no offset) was an even
+// halo that still let white letters dissolve into lime and cyan. The small
+// downward offset adds a shadow on top of the outline — the text now sits
+// slightly above the fill rather than on it, which is what makes it read
+// against a pale colour — while the radius still wraps every side.
 const OUTLINE = {
-  textShadowColor: "rgba(20, 22, 28, 0.45)",
-  textShadowOffset: { width: 0, height: 0 },
-  textShadowRadius: 2.5,
+  textShadowColor: "rgba(20, 22, 28, 0.6)",
+  textShadowOffset: { width: 0, height: 1 },
+  textShadowRadius: 3.5,
 } as const;
 
 const styles = StyleSheet.create({
