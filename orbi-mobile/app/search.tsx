@@ -211,7 +211,7 @@ const styles = StyleSheet.create({
   },
   micCircleActive: {
     borderColor: colors.overdue,
-    backgroundColor: "rgba(255, 77, 109, 0.15)",
+    backgroundColor: "rgba(190, 18, 60, 0.10)",
   },
   micBusy: { opacity: 0.6 },
   micText: { fontSize: 22 },

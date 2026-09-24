@@ -882,7 +882,7 @@ const styles = StyleSheet.create({
   },
   micCircleActive: {
     borderColor: colors.overdue,
-    backgroundColor: "rgba(255, 77, 109, 0.15)",
+    backgroundColor: "rgba(190, 18, 60, 0.10)",
   },
   primaryBtn: {
     flex: 2,

@@ -72,6 +72,11 @@ function pressureToRadius(p: number): number {
   return 26 + (Math.max(0, Math.min(10, p)) / 10) * 14;
 }
 
+// Whether the star field is drawn behind the bubbles. Off while the ground
+// is paper — the stars are white and would be invisible. Flips back on with
+// night mode; see the note at the render site.
+const SHOW_STARS = false;
+
 // Bubbles stay full size up to this many, then shrink.
 //
 // Chosen as "a cluster you can take in at a glance". Below it there is space
@@ -821,11 +826,16 @@ function BubbleField({
           height: canvasHeight,
         }}
       >
-        {/* Stars fill the entire canvas, including the 20% margin
-            that lives beyond the universe boundary. The margins are
-            only visible when the user reaches the elastic edge —
-            then they peek past the universe and see more cosmos. */}
-        <StarField width={starFieldWidth} height={canvasHeight} tickMs={tickMs} />
+        {/* No stars on a daylight ground.
+            The field is white and pale lilac points, which were the whole
+            atmosphere against #07080F and are simply invisible on paper —
+            75 circles of cost for nothing anyone can see. The component is
+            kept, not deleted: it is exactly right again the moment night
+            mode lands, and it renders here once the ground is dark.
+            See theme/colors.ts for why that is its own piece of work. */}
+        {SHOW_STARS ? (
+          <StarField width={starFieldWidth} height={canvasHeight} tickMs={tickMs} />
+        ) : null}
         {bubbles.map((b, i) => {
           const cluster = clusters.find((c) => c.id === b.clusterId)!;
           return (
@@ -914,7 +924,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingLeft: 4,
     paddingRight: 8,
-    backgroundColor: "rgba(17, 20, 42, 0.7)",
+    backgroundColor: "rgba(255, 255, 255, 0.92)",
     borderRadius: 18,
     borderColor: colors.line,
     borderWidth: 1,
@@ -971,7 +981,7 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingVertical: 6,
     paddingHorizontal: 12,
-    backgroundColor: "rgba(17, 20, 42, 0.85)",
+    backgroundColor: "rgba(255, 255, 255, 0.94)",
     borderRadius: 16,
     borderColor: colors.line,
     borderWidth: 1,
@@ -999,7 +1009,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingLeft: 12,
     paddingRight: 6,
-    backgroundColor: "rgba(17, 20, 42, 0.85)",
+    backgroundColor: "rgba(255, 255, 255, 0.94)",
     borderRadius: 16,
     borderColor: colors.line,
     borderWidth: 1,

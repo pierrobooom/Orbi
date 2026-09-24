@@ -31,9 +31,12 @@ import { useLocaleStore, type UiLanguage } from "@/i18n";
 import { getMyPreferences } from "@/services/api";
 import { colors } from "@/theme/colors";
 
-// Custom React Navigation theme so headers / modals match the sketch.
+// Custom React Navigation theme so headers / modals match the palette.
+// dark: false now that the ground is paper — navigation uses this flag for
+// its own defaults (modal backdrops, press highlights), and leaving it true
+// tints them for a dark app that no longer exists.
 const OrbiTheme = {
-  dark: true,
+  dark: false,
   colors: {
     primary: colors.accent,
     background: colors.canvas,
@@ -178,7 +181,9 @@ export default function RootLayout() {
 
             </Stack>
           </AuthGate>
-          <StatusBar style="light" />
+          {/* Dark glyphs, because the ground is now paper. Left as "light"
+              the clock and battery are white on near-white and vanish. */}
+          <StatusBar style="dark" />
         </ThemeProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
