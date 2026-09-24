@@ -108,10 +108,12 @@ const OUTLINE = {
 } as const;
 
 const styles = StyleSheet.create({
+  // Same size and weight as a cluster's name. Tasks were 11pt, which made
+  // the thing you actually have to do the hardest text on the screen to read.
   label: {
     color: "white",
-    fontSize: 11,
-    fontWeight: "600",
+    fontSize: 14,
+    fontWeight: "700",
     textAlign: "center",
     ...OUTLINE,
   },

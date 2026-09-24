@@ -26,7 +26,14 @@
 import Feather from "@expo/vector-icons/Feather";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import {
+  type LayoutChangeEvent,
+  Pressable,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+} from "react-native";
 import {
   Gesture,
   GestureDetector,
@@ -183,7 +190,11 @@ const _LOW_SIGNAL_VERBS = new Set([
 // cluster draws at 33px and a full one at 15, a fixed budget either overflows
 // the small ones or wastes the large ones.
 function labelBudget(crowding: number): number {
-  return Math.max(8, Math.round(18 * crowding));
+  // 11 characters at full size, down from 18 when the text was 11pt. At 14pt
+  // bold a character is about 8px wide and a full-size task bubble is 52 to
+  // 80px across, so the old budget would have run every label out past the
+  // edge of its circle.
+  return Math.max(6, Math.round(11 * crowding));
 }
 
 function shortLabel(title: string, maxChars: number = 14): string {
@@ -315,10 +326,23 @@ export default function BubbleCanvas({
   onBubbleMoved,
 }: BubbleCanvasProps = {}) {
   const t = useT();
-  const { width, height } = useWindowDimensions();
-  // Approximate canvas height — leaves room for the header strip + tab bar.
-  // Actual layout will be tightened once those components ship.
-  const canvasHeight = Math.max(360, height - 180);
+  const { width } = useWindowDimensions();
+  // The height the universe actually has, measured — not the window minus a
+  // guess. The guess (window - 180) predates the dock: with the mic, the +
+  // and the priority card below the canvas, a bubble laid out near the
+  // bottom of the guessed area ended up behind the mic.
+  //
+  // It changes when the priority card is tucked away or brought back. That
+  // is safe: a relayout keeps every bubble's live position and only moves
+  // its anchor, so bubbles glide into the freed space rather than jumping.
+  const [measuredHeight, setMeasuredHeight] = useState<number | null>(null);
+  const canvasHeight = Math.max(240, measuredHeight ?? 0);
+  const onRootLayout = (e: LayoutChangeEvent) => {
+    const next = Math.round(e.nativeEvent.layout.height);
+    // Sub-pixel jitter from the keyboard or a rotating status bar is not a
+    // reason to re-lay the whole universe out.
+    setMeasuredHeight((prev) => (prev !== null && Math.abs(prev - next) < 3 ? prev : next));
+  };
 
   const clusters = useUniverseStore((s) => s.clusters);
   const bubbles = useUniverseStore((s) => s.bubbles);
@@ -487,8 +511,15 @@ export default function BubbleCanvas({
     }, TRANSITION_LOCK_MS);
   };
 
+  // Nothing is drawn until the real height is known. Drawing first with an
+  // estimate would lay the bubbles out, then visibly glide them all a frame
+  // later when the measurement lands.
+  if (measuredHeight === null) {
+    return <View style={styles.root} onLayout={onRootLayout} />;
+  }
+
   return (
-    <View style={styles.root}>
+    <View style={styles.root} onLayout={onRootLayout}>
      {/* Pan wrapper sits OUTSIDE the keyed animated view so the
          pan offset survives the zoom transition (panning while you
          enter a cluster would otherwise reset awkwardly). Drilled
