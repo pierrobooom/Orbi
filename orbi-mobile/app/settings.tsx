@@ -31,6 +31,7 @@ import {
   DEFAULT_PREFERENCES,
   getHealth,
   getMyPreferences,
+  getMyProfile,
   REMINDER_DENSITY,
   sendTestPush,
   setMyPreferences,
@@ -41,6 +42,7 @@ import {
 } from "@/services/api";
 import { TIER_DISPLAY } from "@/services/tierGate";
 import { useAuthStore } from "@/stores/authStore";
+import { ProfileAvatar } from "@/components/profile-avatar";
 import { ScreenHeader } from "@/components/screen-header";
 import { useLocaleStore, useT, type UiLanguage, translate } from "@/i18n";
 import {
@@ -99,6 +101,23 @@ export default function SettingsScreen() {
 
   const handedness = useHandednessStore((s) => s.handedness);
   const setHandedness = useHandednessStore((s) => s.setHandedness);
+
+  // The profile picture and display name, read from the server rather than
+  // from the session: the picture belongs to the account, so it has to come
+  // back on a new phone or after a reinstall, and the session knows nothing
+  // about it. Null until the first fetch lands, which renders as initials.
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [displayName, setDisplayName] = useState<string>("");
+  useEffect(() => {
+    getMyProfile()
+      .then((profile) => {
+        setAvatarUrl(profile.avatar_url);
+        setDisplayName(profile.full_name || "");
+      })
+      // Silent: a profile that will not load is not a reason to block the
+      // rest of Settings, and the initials fallback still renders.
+      .catch(() => {});
+  }, []);
 
   const [notifsGranted, setNotifsGranted] = useState<boolean | null>(null);
   const [busy, setBusy] = useState<"signout" | "test" | "register" | null>(null);
@@ -347,6 +366,11 @@ export default function SettingsScreen() {
           keyboardDismissMode="on-drag"
           keyboardShouldPersistTaps="handled" contentContainerStyle={styles.body}>
         <Section title={t("Profile")}>
+          <ProfileAvatar
+            url={avatarUrl}
+            name={displayName || email}
+            onChanged={setAvatarUrl}
+          />
           <Row label={t("Email")} value={email} />
           <Row label={t("Plan")} value={TIER_DISPLAY[tier]} />
           <Pressable

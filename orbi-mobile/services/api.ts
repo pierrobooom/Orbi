@@ -121,6 +121,9 @@ export interface UserProfile {
   email: string;
   full_name: string;
   subscription_tier: "free" | "pro" | "premium";
+  /** Public URL of the profile picture, or null. Lives on the profile rather
+   * than on the device, so it comes back on a reinstall or a new phone. */
+  avatar_url: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -133,6 +136,68 @@ export async function getMyProfile(): Promise<UserProfile> {
   const res = await authFetch(`${V1}/users/me`);
   if (!res.ok) throw await parseError(res);
   return (await res.json()) as UserProfile;
+}
+
+/** Upload a profile picture and return the updated profile.
+ *
+ * Deliberately NOT routed through authFetch. That helper sets
+ * Content-Type: application/json on every request, and a multipart body
+ * needs the header left alone so the runtime can add its own boundary —
+ * setting it by hand produces a body the server cannot split.
+ *
+ * The file is sent by uri. React Native's FormData understands that shape
+ * and streams from disk, so a photo never has to be base64'd into a string
+ * in JS memory first.
+ */
+export async function uploadAvatar(
+  uri: string,
+  mimeType?: string,
+): Promise<UserProfile> {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+
+  // The server decides what this really is by sniffing the bytes, so the
+  // name and type here are hints for the multipart envelope, not a claim
+  // anyone relies on.
+  const guessed = mimeType || guessImageType(uri);
+  const form = new FormData();
+  form.append("file", {
+    uri,
+    name: `avatar.${guessed.split("/")[1] ?? "jpg"}`,
+    type: guessed,
+  } as unknown as Blob);
+
+  const res = await fetch(`${API_BASE_URL}${V1}/users/me/avatar`, {
+    method: "PUT",
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    body: form,
+  });
+  if (!res.ok) throw await parseError(res);
+  return (await res.json()) as UserProfile;
+}
+
+export async function removeAvatar(): Promise<UserProfile> {
+  const res = await authFetch(`${V1}/users/me/avatar`, { method: "DELETE" });
+  if (!res.ok) throw await parseError(res);
+  return (await res.json()) as UserProfile;
+}
+
+/** A content type from the file extension, for the multipart envelope. */
+function guessImageType(uri: string): string {
+  const extension = uri.split("?")[0].split(".").pop()?.toLowerCase();
+  switch (extension) {
+    case "png":
+      return "image/png";
+    case "webp":
+      return "image/webp";
+    case "heic":
+    case "heif":
+      return "image/heic";
+    case "gif":
+      return "image/gif";
+    default:
+      return "image/jpeg";
+  }
 }
 
 export async function patchMyProfile(fields: { full_name: string }): Promise<UserProfile> {

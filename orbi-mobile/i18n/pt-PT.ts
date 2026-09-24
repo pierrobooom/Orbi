@@ -249,6 +249,28 @@ export const ptPT: Record<string, string> = {
   "New": "Nova",
   "Message Orbi": "Escreve ao Orbi",
   "Hide keyboard": "Fechar teclado",
+  "Profile picture":
+    "Foto de perfil",
+  "Choose a photo":
+    "Escolher uma foto",
+  "Choose a file":
+    "Escolher um ficheiro",
+  "Remove picture":
+    "Remover foto",
+  "Change picture":
+    "Mudar foto",
+  "Add a picture":
+    "Adicionar foto",
+  "Change profile picture":
+    "Mudar a foto de perfil",
+  "Photos access needed":
+    "Acesso às fotos necessário",
+  "Orbi needs access to your photos to set a picture. You can turn it on in Settings.":
+    "O Orbi precisa de acesso às tuas fotos para definir uma imagem. Podes activar nas Definições.",
+  "Could not upload that picture. Try again.":
+    "Não foi possível carregar essa imagem. Tenta de novo.",
+  "Try again.":
+    "Tenta de novo.",
   "Orbi needs microphone access. You can turn it on in Settings.":
     "O Orbi precisa de acesso ao microfone. Podes activar nas Definições.",
   "Couldn't use the mic just now. Try again.":

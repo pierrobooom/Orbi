@@ -16,6 +16,9 @@ class UserProfile(BaseModel):
     email: EmailStr
     full_name: str
     subscription_tier: SubscriptionTier
+    # Public URL of the profile picture, or None. Optional with a default so
+    # a profile row written before migration 0024 still validates.
+    avatar_url: str | None = None
     created_at: datetime
     updated_at: datetime
 

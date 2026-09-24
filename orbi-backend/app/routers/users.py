@@ -9,11 +9,20 @@ from datetime import datetime, time, timezone
 from typing import Literal, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    HTTPException,
+    UploadFile,
+    status,
+)
 from pydantic import BaseModel, Field
 
 from app.db import device_tokens as device_tokens_db, users as users_db
 from app.models.user import UsageSnapshot, UserPreference, UserProfile
+from app.services import avatars
 from app.services.auth import get_current_user, get_current_user_with_tier
 from app.services.locale import get_locale
 from app.services.push import send_push
@@ -43,6 +52,49 @@ async def get_my_profile(user_id: UUID = Depends(get_current_user)):
             status_code=status.HTTP_404_NOT_FOUND,
             detail=_error("User profile not found.", "USER_NOT_FOUND"),
         )
+    return row
+
+
+@router.put("/me/avatar", response_model=UserProfile)
+async def set_my_avatar(
+    file: UploadFile = File(...),
+    user_id: UUID = Depends(get_current_user),
+):
+    """Replace the authenticated user's profile picture.
+
+    Read with an explicit ceiling rather than `await file.read()`, because
+    that reads whatever was sent into memory before anyone gets to object to
+    the size. One byte over the limit is enough to reject on.
+    """
+    data = await file.read(avatars.MAX_BYTES + 1)
+    try:
+        url = await avatars.store(user_id, data)
+    except avatars.InvalidImage as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=_error(str(exc), "INVALID_IMAGE"),
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Avatar upload failed for %s", user_id)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=_error("Could not save that picture.", "AVATAR_UPLOAD_FAILED"),
+        ) from exc
+
+    previous = await users_db.fetch_profile(user_id)
+    row = await users_db.update_profile(user_id, {"avatar_url": url})
+    # Only after the new one is safely recorded. The other order risks
+    # deleting the picture the profile still points at.
+    await avatars.discard((previous or {}).get("avatar_url"))
+    return row
+
+
+@router.delete("/me/avatar", response_model=UserProfile)
+async def clear_my_avatar(user_id: UUID = Depends(get_current_user)):
+    """Remove the profile picture and fall back to initials."""
+    previous = await users_db.fetch_profile(user_id)
+    row = await users_db.update_profile(user_id, {"avatar_url": None})
+    await avatars.discard((previous or {}).get("avatar_url"))
     return row
 
 

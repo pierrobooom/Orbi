@@ -59,6 +59,12 @@
           "color": "#7c6fe0"
         }
       ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Orbi uses your photos so you can set a profile picture."
+        }
+      ],
       "expo-font"
     ],
     "experiments": {
