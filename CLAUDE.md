@@ -845,9 +845,9 @@ shipped). Verify before trusting this list again.
   common case.
 \- No in-app view of the reminder schedule. GET /notifications/plans exists
   and returns the daily budget alongside the plans, so "why didn't I get
-  told?" is answerable — nothing renders it. It also returns the 100
-  EARLIEST plans by trigger_at, which is the wrong end: fix the query
-  (pending ascending plus recent history descending) before rendering it.
+  told?" is answerable — nothing renders it. It returns up to 50
+  pending plans soonest first, then up to 50 sent/answered/skipped newest
+  first (cancelled rows are left out).
   Finished plans are now pruned (cancelled after 7 days, sent/answered/
   skipped after 30 — reminder_dispatcher.RETENTION_DAYS), so the view can
   only ever explain the last month.

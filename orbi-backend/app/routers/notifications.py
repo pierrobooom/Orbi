@@ -47,7 +47,13 @@ async def list_my_plans(user_id: UUID = Depends(get_current_user)):
     shrug. A skipped plan in the list, next to the daily budget it lost to,
     explains itself.
     """
-    rows = await notifications_db.fetch_for_user(user_id, limit=100)
+    # Upcoming first, then what already happened, newest first. This used to
+    # be one query for the 100 earliest plans by trigger_at — the oldest
+    # history, and never the reminders coming up once a user had more than
+    # 100 rows. The two ends of the question are two queries.
+    upcoming = await notifications_db.fetch_upcoming(user_id)
+    history = await notifications_db.fetch_recent_history(user_id)
+    rows = upcoming + history
     prefs = await reminder_dispatcher.preferences_for(user_id)
     return NotificationPlanList(
         plans=rows,

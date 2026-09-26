@@ -168,18 +168,44 @@ async def mark_state(plan_ids: list[str], state: str) -> int:
     return len(response.data or [])
 
 
-async def fetch_for_user(
-    owner_id: UUID, states: list[str] | None = None, limit: int = 100
-) -> list[dict]:
-    """Return this user's plans, soonest first. Powers the preview endpoint."""
-    query = (
+_PLAN_COLUMNS = "id,task_id,kind,trigger_at,state,snooze_count,sent_at"
+
+# The finished states worth showing a user. Cancelled is left out: those
+# rows were replaced by a replan before anyone saw them, they are most of
+# the table, and listing them would bury the "skipped" rows that actually
+# explain a silence.
+_HISTORY_STATES = ["sent", "answered", "skipped"]
+
+
+async def fetch_upcoming(owner_id: UUID, limit: int = 50) -> list[dict]:
+    """This user's reminders still owed, soonest first."""
+    response = (
         get_client().table("notification_plans")
-        .select("id,task_id,kind,trigger_at,state,snooze_count,sent_at")
+        .select(_PLAN_COLUMNS)
         .eq("owner_id", str(owner_id))
+        .eq("state", _LIVE_STATE)
+        .order("trigger_at")
+        .limit(limit)
+        .execute()
     )
-    if states:
-        query = query.in_("state", states)
-    response = query.order("trigger_at").limit(limit).execute()
+    return response.data or []
+
+
+async def fetch_recent_history(owner_id: UUID, limit: int = 50) -> list[dict]:
+    """This user's finished reminders, most recently settled first.
+
+    Ordered by updated_at — when the row reached its final state — so a
+    reminder sent this morning outranks one planned long ago and sent later.
+    """
+    response = (
+        get_client().table("notification_plans")
+        .select(_PLAN_COLUMNS)
+        .eq("owner_id", str(owner_id))
+        .in_("state", _HISTORY_STATES)
+        .order("updated_at", desc=True)
+        .limit(limit)
+        .execute()
+    )
     return response.data or []
 
 

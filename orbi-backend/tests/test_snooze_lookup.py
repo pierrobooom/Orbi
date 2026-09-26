@@ -49,11 +49,6 @@ def wired(monkeypatch):
                     "state": "sent", "snooze_count": 0, "sent_at": None}
         return None
 
-    async def fetch_for_user(*_a, **_k):
-        # What a user with long history looks like: 200 old rows, none of
-        # them the reminder that was just tapped.
-        return [{"id": str(uuid4()), "task_id": TASK_ID} for _ in range(200)]
-
     async def fetch_task_by_id(task_id, owner_id):
         return _task()
 
@@ -71,7 +66,6 @@ def wired(monkeypatch):
         calls["marked"] = (ids, state)
 
     monkeypatch.setattr(router.notifications_db, "fetch_owned", fetch_owned)
-    monkeypatch.setattr(router.notifications_db, "fetch_for_user", fetch_for_user)
     monkeypatch.setattr(router.notifications_db, "fetch_pending_for_task", fetch_pending_for_task)
     monkeypatch.setattr(router.notifications_db, "mark_state", mark_state)
     monkeypatch.setattr(router.tasks_db, "fetch_task_by_id", fetch_task_by_id)
@@ -109,3 +103,39 @@ async def test_answering_finds_the_reminder_past_a_page_of_history(wired, monkey
     result = await router.mark_plan_answered(PLAN_ID, user_id=USER)
     assert result["state"] == "answered"
     assert wired["marked"] == ([str(PLAN_ID)], "answered")
+
+
+# ---------------------------------------------------------------------------
+# The list: what's coming, then what happened
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_the_list_shows_upcoming_first_then_recent_history(monkeypatch):
+    """It used to return the 100 earliest plans by trigger_at — the oldest
+    history, and none of the reminders actually coming up."""
+    upcoming = [{"id": str(uuid4()), "task_id": TASK_ID, "kind": "due",
+                 "trigger_at": "2026-09-27T08:00:00+00:00", "state": "pending",
+                 "snooze_count": 0, "sent_at": None}]
+    history = [{"id": str(uuid4()), "task_id": TASK_ID, "kind": "chase",
+                "trigger_at": "2026-09-26T08:00:00+00:00", "state": "skipped",
+                "snooze_count": 0, "sent_at": None}]
+    calls = {}
+
+    async def fetch_upcoming(owner_id, limit=50):
+        calls["upcoming"] = owner_id
+        return upcoming
+
+    async def fetch_recent_history(owner_id, limit=50):
+        calls["history"] = owner_id
+        return history
+
+    async def preferences_for(owner_id):
+        return {"proactivity_level": 5}
+
+    monkeypatch.setattr(router.notifications_db, "fetch_upcoming", fetch_upcoming)
+    monkeypatch.setattr(router.notifications_db, "fetch_recent_history", fetch_recent_history)
+    monkeypatch.setattr(router.reminder_dispatcher, "preferences_for", preferences_for)
+
+    result = await router.list_my_plans(user_id=USER)
+    assert [p.state for p in result.plans] == ["pending", "skipped"]
+    assert calls == {"upcoming": USER, "history": USER}
