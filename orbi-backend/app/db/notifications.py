@@ -197,6 +197,26 @@ async def fetch_one(plan_id: UUID) -> dict | None:
     return rows[0] if rows else None
 
 
+async def fetch_owned(plan_id: UUID, owner_id: UUID) -> dict | None:
+    """Return one plan if it belongs to this user, else None.
+
+    Looked up by id, not by searching a page of the user's plans. Sent and
+    cancelled rows are kept as history, so a page of the earliest N stops
+    containing the newest reminder once a user has more than N rows — and
+    the newest reminder is exactly the one a button press is about.
+    """
+    response = (
+        get_client().table("notification_plans")
+        .select("id,task_id,kind,trigger_at,state,snooze_count,sent_at")
+        .eq("id", str(plan_id))
+        .eq("owner_id", str(owner_id))
+        .limit(1)
+        .execute()
+    )
+    rows = response.data or []
+    return rows[0] if rows else None
+
+
 async def snooze(plan_id: UUID, trigger_at: datetime, snooze_count: int) -> dict:
     """Re-arm a plan at a later time and record the snooze.
 

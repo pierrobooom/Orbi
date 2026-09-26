@@ -97,8 +97,11 @@ async def snooze_plan(
     pushed back six times" is the honest signal that something is being
     avoided rather than done.
     """
-    rows = await notifications_db.fetch_for_user(user_id, limit=200)
-    plan = next((r for r in rows if str(r["id"]) == str(plan_id)), None)
+    # By id, owner-scoped. This searched the user's 200 earliest plans, and
+    # history rows are never pruned, so past 200 rows the newest reminder —
+    # the one just tapped — was never in the page: "Snooze 1h" on a chase
+    # returned 404 and the task stayed red.
+    plan = await notifications_db.fetch_owned(plan_id, user_id)
     if plan is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -161,8 +164,7 @@ async def mark_plan_answered(
     I've seen it" is information, and it stops the escalation without
     claiming the work is done.
     """
-    rows = await notifications_db.fetch_for_user(user_id, limit=200)
-    if not any(str(r["id"]) == str(plan_id) for r in rows):
+    if await notifications_db.fetch_owned(plan_id, user_id) is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=_error("Reminder not found.", "PLAN_NOT_FOUND"),
