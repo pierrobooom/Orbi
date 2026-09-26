@@ -27,6 +27,7 @@
 // rather than as a bug — the same code is what a dev build will use.
 
 import * as Notifications from "expo-notifications";
+import { Alert } from "react-native";
 import { router, useRootNavigationState, type Href } from "expo-router";
 import { useEffect } from "react";
 
@@ -241,6 +242,32 @@ export async function dismissDeliveredFor(taskId: string): Promise<void> {
   }
 }
 
+/** Say that a button press did not take, and offer the manual route.
+ *
+ * These failures used to go to console.warn and nowhere else. The user
+ * pressed "Snooze 1h", the app opened, and nothing told them the server had
+ * refused — the only evidence was a task that stayed red, which looks like
+ * the app being unreliable rather than one request failing. A snooze that
+ * 404'd on every chase went unnoticed for days because of it.
+ *
+ * A native alert rather than the universe screen's toast: the button opens
+ * the app on whatever screen it was last on, and the alert shows on any of
+ * them. "Open task" lands on the task, where the same change can be made by
+ * hand — the thing the user wanted still gets done.
+ */
+function reportFailure(action: string, taskId: string): void {
+  const title =
+    action === ACTION_DONE
+      ? translate("Couldn't mark this task done")
+      : action === ACTION_REPLY
+        ? translate("Couldn't save your reply")
+        : translate("Couldn't postpone this task");
+  Alert.alert(title, translate("Nothing was changed. You can do it from the task instead."), [
+    { text: translate("OK"), style: "cancel" },
+    { text: translate("Open task"), onPress: () => void openTaskInUniverse(taskId) },
+  ]);
+}
+
 /** Act on a button press. Exported so the background task can reuse it. */
 export async function handleNotificationResponse(
   response: Notifications.NotificationResponse,
@@ -287,7 +314,16 @@ export async function handleNotificationResponse(
       // A dismissal, or an action from a future build we don't know yet.
       return;
     }
+  } catch (e) {
+    console.warn(`Notification action "${action}" failed:`, e);
+    reportFailure(action, taskId);
+    return;
+  }
 
+  // Tidying up after an action that DID succeed. Kept out of the block
+  // above so a failed refresh can never be reported as a failed snooze —
+  // the task has already moved on the server.
+  try {
     // Done, snoozed or replied — whichever it was, the other reminders
     // about this task are now stale.
     await dismissDeliveredFor(taskId);
@@ -296,7 +332,7 @@ export async function handleNotificationResponse(
     // correct if the app is open behind the notification.
     await useUniverseStore.getState().hydrate();
   } catch (e) {
-    console.warn(`Notification action "${action}" failed:`, e);
+    console.warn("Refresh after notification action failed:", e);
   }
 }
 

@@ -753,4 +753,11 @@ export const ptPT: Record<string, string> = {
   "{votes} of {needed} agree it's done.": "{votes} de {needed} concordam que está feita.",
   "You've said it's done — waiting on the others.":
     "Já disseste que está feita — a aguardar os outros.",
+  // Notification button failures (hooks/useNotificationActions.ts)
+  "Couldn't mark this task done": "Não foi possível concluir a tarefa",
+  "Couldn't save your reply": "Não foi possível guardar a resposta",
+  "Couldn't postpone this task": "Não foi possível adiar a tarefa",
+  "Nothing was changed. You can do it from the task instead.":
+    "Nada foi alterado. Podes fazê-lo a partir da tarefa.",
+  "Open task": "Abrir tarefa",
 };

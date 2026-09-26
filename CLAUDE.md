@@ -839,16 +839,18 @@ shipped). Verify before trusting this list again.
   replaced it with arithmetic; nothing imports the agent. Delete it or
   reduce it to copy generation, but do not leave a second, divergent idea
   of when reminders fire lying around.
-\- notification_plans grows without bound — sent and cancelled rows are kept
-  deliberately (they are the record of what the user was told) but nothing
-  ever prunes them. Needs a retention window before real usage.
 \- Tasks with no due date get no reminders at all. A deliberate boundary in
   reminder_schedule.py, and an honest product gap: every event there is
   defined relative to due_at. Revisit if undated tasks turn out to be the
   common case.
 \- No in-app view of the reminder schedule. GET /notifications/plans exists
   and returns the daily budget alongside the plans, so "why didn't I get
-  told?" is answerable — nothing renders it.
+  told?" is answerable — nothing renders it. It also returns the 100
+  EARLIEST plans by trigger_at, which is the wrong end: fix the query
+  (pending ascending plus recent history descending) before rendering it.
+  Finished plans are now pruned (cancelled after 7 days, sent/answered/
+  skipped after 30 — reminder_dispatcher.RETENTION_DAYS), so the view can
+  only ever explain the last month.
 
 
 

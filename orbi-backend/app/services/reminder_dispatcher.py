@@ -566,6 +566,64 @@ async def _schedule_escalations(
             logger.info("Escalation not scheduled: %s", exc)
 
 
+# ---------------------------------------------------------------------------
+# Retention
+# ---------------------------------------------------------------------------
+#
+# Finished plans are kept as the record of what the user was told — but
+# nothing pruned them, and every edit to a task cancels its three plans and
+# writes three new ones. One user reached 348 rows in a few weeks, and a
+# lookup that scanned "the first 200" stopped finding the newest reminder:
+# every Snooze on a chase returned 404. That lookup is fixed; this keeps the
+# table the size the rest of the code assumes it is.
+#
+# Two windows, because the rows are two different things:
+#   cancelled  — superseded by a replan, never shown to anyone. Pure
+#                bookkeeping, and most of the table. A week, for debugging.
+#   sent, answered, skipped — what the user was told, or why they were
+#                not. A month answers "why didn't I get told?" about any day
+#                the user still remembers, and matches Spark's memory
+#                window. Nothing reads further back: the only history the
+#                dispatcher uses is today's sends, for the daily budget.
+# Pending is never pruned — it is a reminder still owed.
+RETENTION_DAYS = {
+    ("cancelled",): 7,
+    ("sent", "answered", "skipped"): 30,
+}
+
+# Pruning is housekeeping, not delivery: a few times a day is plenty, and
+# it keeps the delete off the minute-by-minute path.
+PRUNE_EVERY = timedelta(hours=6)
+_last_prune: datetime | None = None
+
+
+async def prune_history(now: datetime | None = None) -> int:
+    """Delete finished plans past their retention window. Returns rows deleted."""
+    now = now or datetime.now(timezone.utc)
+    deleted = 0
+    for states, days in RETENTION_DAYS.items():
+        deleted += await notifications_db.delete_finished_before(
+            list(states), now - timedelta(days=days)
+        )
+    return deleted
+
+
+async def _prune_if_due(now: datetime) -> None:
+    """Run prune_history at most once per PRUNE_EVERY, never failing the tick."""
+    global _last_prune
+    if _last_prune is not None and now - _last_prune < PRUNE_EVERY:
+        return
+    # Stamped before running, so a failing delete is retried next window
+    # rather than on every tick in between.
+    _last_prune = now
+    try:
+        deleted = await prune_history(now)
+        if deleted:
+            logger.info("Pruned %s finished reminder rows", deleted)
+    except Exception as exc:  # noqa: BLE001 — housekeeping must not stop delivery
+        logger.error("Reminder history prune failed: %s", exc)
+
+
 # How long a claim on this job lasts. Comfortably more than the tick so the
 # holder never loses its own lease between ticks, and short enough that a
 # replica dying costs a few minutes of reminders rather than a morning.
@@ -595,6 +653,8 @@ async def run_forever() -> None:
             result = await dispatch_due()
             if result["sent"] or result["skipped"] or result["postponed"]:
                 logger.info("Reminder tick: %s", result)
+            # Under the same lease, so only one replica ever prunes.
+            await _prune_if_due(datetime.now(timezone.utc))
         except asyncio.CancelledError:
             logger.info("Reminder dispatcher stopping")
             await job_lease.release("reminder_dispatcher")

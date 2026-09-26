@@ -129,6 +129,26 @@ async def count_sent_since(owner_id: UUID, since: datetime) -> int:
     return response.count or 0
 
 
+async def delete_finished_before(states: list[str], before: datetime) -> int:
+    """Delete plans in the given finished states last touched before `before`.
+
+    Never called with "pending": a pending row is a reminder still owed, and
+    the caller's retention rules only ever name terminal states. Keyed on
+    updated_at because that is when a row reached its final state — a plan
+    created a month ago and sent yesterday is yesterday's record.
+    """
+    if not states:
+        return 0
+    response = (
+        get_client().table("notification_plans")
+        .delete()
+        .in_("state", states)
+        .lt("updated_at", before.isoformat())
+        .execute()
+    )
+    return len(response.data or [])
+
+
 async def mark_state(plan_ids: list[str], state: str) -> int:
     """Move a batch of plans to a terminal state. Returns rows updated."""
     if not plan_ids:
