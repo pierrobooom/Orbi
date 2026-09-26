@@ -301,11 +301,29 @@ export async function handleNotificationResponse(
 }
 
 // Responses already acted on, so a cold-start replay can't double-apply.
-// Ids are per-notification and never reused.
 const handled = new Set<string>();
 
+/** One key per press on one delivered notification.
+ *
+ * NOT request.identifier. It used to be, on the belief that identifiers are
+ * never reused, and they are: on iOS a push sent with a collapse id takes
+ * that id as its identifier, and every reminder about a task is sent with
+ * the same one ("task-<id>", so a newer reminder replaces the older one in
+ * the tray). So the second reminder about a task produced the same key as
+ * the first, and pressing "Tomorrow" on it was dropped as a duplicate —
+ * silently, with no request ever reaching the server.
+ *
+ * The plan id is unique per reminder, and the delivery time separates a
+ * plan that is sent again after a snooze. A cold-start replay of the same
+ * press carries both unchanged, so it is still caught.
+ */
 function responseId(response: Notifications.NotificationResponse): string {
-  return `${response.notification.request.identifier}:${response.actionIdentifier}`;
+  const data = (response.notification.request.content.data ?? {}) as ReminderData;
+  return [
+    data.planId ?? response.notification.request.identifier,
+    response.notification.date,
+    response.actionIdentifier,
+  ].join(":");
 }
 
 async function handleOnce(
