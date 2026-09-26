@@ -34,7 +34,8 @@ import { useThemeStore } from "@/stores/themeStore";
 import { useUniverseStore } from "@/stores/universeStore";
 import { initFeedback, setQuietHours } from "@/services/feedback";
 import { useLocaleStore, type UiLanguage } from "@/i18n";
-import { getMyPreferences } from "@/services/api";
+import { getMyPreferences, setMyPreferences } from "@/services/api";
+import { deviceTimezone } from "@/services/deviceTimezone";
 import { colors } from "@/theme/colors";
 import { FONT_ASSETS } from "@/theme/fonts";
 
@@ -65,6 +66,24 @@ function navigationTheme(isNight: boolean) {
 export const unstable_settings = {
   anchor: "(tabs)",
 };
+
+/** Tell the server the phone's zone whenever it differs from the stored one.
+ *
+ * Every reminder decision — quiet hours, "due today", the daily budget's
+ * midnight — is made on the server in this zone. It used to be sent only
+ * from the Settings screen, so a user who never opened Settings stayed on
+ * UTC for good: in Brazil (UTC-3) that is quiet hours from 19:00 to 05:00,
+ * every evening reminder silenced and delivered at dawn. A trip abroad had
+ * the same effect until Settings was next opened. Saving a new zone also
+ * replans every reminder on the server.
+ */
+function syncTimezone(stored: string | null | undefined): void {
+  const zone = deviceTimezone();
+  if (!zone || zone === stored) return;
+  setMyPreferences({ timezone: zone }).catch(() => {
+    /* non-fatal: tried again on the next launch */
+  });
+}
 
 export default function RootLayout() {
   // Waited for rather than swapped in. The display face is only used for a
@@ -290,8 +309,11 @@ function AuthGate({ children }: { children: React.ReactNode }) {
         if (p.handedness === "left" || p.handedness === "right") {
           useHandednessStore.getState().setHandedness(p.handedness);
         }
+        syncTimezone(p.timezone);
       })
-      .catch(() => {});
+      // No preferences row yet — a new user. Still tell the server where the
+      // phone is; saving creates the row.
+      .catch(() => syncTimezone(null));
   }, [session]);
 
   useEffect(() => {

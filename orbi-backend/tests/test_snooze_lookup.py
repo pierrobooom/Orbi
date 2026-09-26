@@ -99,7 +99,11 @@ async def test_answering_finds_the_reminder_past_a_page_of_history(wired, monkey
                 "trigger_at": datetime.now(timezone.utc).isoformat(),
                 "state": "answered", "snooze_count": 0, "sent_at": None}
 
+    async def cancel_kinds(task_id, kinds):
+        return 0
+
     monkeypatch.setattr(router.notifications_db, "fetch_one", fetch_one)
+    monkeypatch.setattr(router.notifications_db, "cancel_pending_kinds_for_task", cancel_kinds)
     result = await router.mark_plan_answered(PLAN_ID, user_id=USER)
     assert result["state"] == "answered"
     assert wired["marked"] == ([str(PLAN_ID)], "answered")

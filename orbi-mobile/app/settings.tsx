@@ -44,6 +44,7 @@ import { TIER_DISPLAY } from "@/services/tierGate";
 import { useAuthStore } from "@/stores/authStore";
 import { cue } from "@/services/feedback";
 import { useSoundStore } from "@/stores/soundStore";
+import { deviceTimezone } from "@/services/deviceTimezone";
 import { useThemeStore } from "@/stores/themeStore";
 import { useProfileStore } from "@/stores/profileStore";
 import { ProfileAvatar } from "@/components/profile-avatar";
@@ -88,14 +89,6 @@ function fromPickerDate(date: Date): string {
  * The server needs this to interpret quiet hours: they are stored as
  * zone-less times, and the background dispatcher has no request to read a
  * zone from the way the chat endpoints do. */
-function deviceTimezone(): string | null {
-  try {
-    return Intl.DateTimeFormat().resolvedOptions().timeZone || null;
-  } catch {
-    return null;
-  }
-}
-
 export default function SettingsScreen() {
   const t = useT();
   const router = useRouter();

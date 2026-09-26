@@ -23,7 +23,7 @@ from app.models.notification import (
 from app.services.auth import get_current_user
 from app.services.reminder_dispatcher import dispatch_due, resync_user_plans
 from app.models.task import TaskBubble
-from app.services.reminder_schedule import daily_budget
+from app.services.reminder_schedule import daily_budget, shift_out_of_quiet_hours
 from app.services.scoring import calculate_pressure_score
 from app.services import reminder_dispatcher
 
@@ -121,7 +121,37 @@ async def snooze_plan(
             detail=_error("Task not found.", "TASK_NOT_FOUND"),
         )
 
-    new_due = datetime.now(timezone.utc) + timedelta(minutes=body.minutes)
+    now = datetime.now(timezone.utc)
+    target = now + timedelta(minutes=body.minutes)
+    previous_snoozes = int(plan.get("snooze_count") or 0) + 1
+
+    # BEFORE THE DEADLINE, A SNOOZE IS ABOUT THE REMINDER, NOT THE TASK.
+    # Moving due_at to "now + minutes" is right once a task is due — that is
+    # a postponement. But on a heads-up that fired a day early it dragged the
+    # deadline EARLIER: "Snooze 1h" on something due tomorrow made it due in
+    # an hour, and it turned red long before it was actually late. So while
+    # the new time is still before the deadline, only this reminder moves.
+    due_at = _parse_optional(task.get("due_at"))
+    if due_at is not None and target < due_at:
+        prefs = await reminder_dispatcher.preferences_for(user_id)
+        zone, quiet_start, quiet_end = reminder_dispatcher.quiet_window(prefs)
+        trigger = shift_out_of_quiet_hours(target, zone, quiet_start, quiet_end)
+        if trigger < due_at:
+            try:
+                return await notifications_db.snooze(
+                    plan_id, trigger_at=trigger, snooze_count=previous_snoozes
+                )
+            except Exception as exc:  # noqa: BLE001
+                # Another pending plan of this kind already exists for the
+                # task (the unique index). The deadline's own reminders still
+                # stand, so the user is still told — record the answer.
+                logger.info("Snoozed reminder not re-armed: %s", exc)
+        # Re-arming would land at or after the deadline, where the task's
+        # own `due` reminder already fires. Nothing more to schedule.
+        await notifications_db.mark_state([str(plan_id)], "answered")
+        return {**plan, "state": "answered", "snooze_count": previous_snoozes}
+
+    new_due = target
     merged = TaskBubble(**{**task, "due_at": new_due})
 
     updated_task = await tasks_db.update_task(
@@ -134,7 +164,6 @@ async def snooze_plan(
         },
     )
 
-    previous_snoozes = int(plan.get("snooze_count") or 0) + 1
     await reminder_dispatcher.sync_task_plans(updated_task or task, user_id)
 
     # Carry the count onto whichever plan now represents this task, so it
@@ -151,6 +180,15 @@ async def snooze_plan(
     # are off. The task still moved, which was the point.
     await notifications_db.mark_state([str(plan_id)], "answered")
     return {**plan, "state": "answered", "snooze_count": previous_snoozes}
+
+
+def _parse_optional(value) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return _parse_trigger(value)
+    except ValueError:
+        return None
 
 
 def _parse_trigger(value) -> datetime:
@@ -170,13 +208,20 @@ async def mark_plan_answered(
     I've seen it" is information, and it stops the escalation without
     claiming the work is done.
     """
-    if await notifications_db.fetch_owned(plan_id, user_id) is None:
+    plan = await notifications_db.fetch_owned(plan_id, user_id)
+    if plan is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=_error("Reminder not found.", "PLAN_NOT_FOUND"),
         )
 
     await notifications_db.mark_state([str(plan_id)], "answered")
+    # The escalation exists to follow up an UNANSWERED chase. It is planned
+    # the moment the chase goes out, so once the user has answered it must
+    # go — otherwise a reply is met a day later with "Still open".
+    await notifications_db.cancel_pending_kinds_for_task(
+        UUID(str(plan["task_id"])), ["escalate"]
+    )
     updated = await notifications_db.fetch_one(plan_id)
     if updated is None:
         raise HTTPException(

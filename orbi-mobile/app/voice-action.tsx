@@ -24,7 +24,7 @@ import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useT } from "@/i18n";
-import { ApiError, deleteTask, updateTask } from "@/services/api";
+import { ApiError, completeTask, deleteTask, updateTask } from "@/services/api";
 import { useUniverseStore } from "@/stores/universeStore";
 import { dismissDeliveredFor } from "@/hooks/useNotificationActions";
 import { colors } from "@/theme/colors";
@@ -95,9 +95,11 @@ export default function VoiceActionScreen() {
         await dismissDeliveredFor(activeId);
         removeTask(activeId);
       } else if (parsed.action === "complete") {
-        const updated = await updateTask(activeId, { status: "completed" });
+        // Through the vote-aware endpoint, like the Done button: on a shared
+        // task this is one participant's vote, not a close for everyone.
+        await completeTask(activeId);
         await dismissDeliveredFor(activeId);
-        replaceTask(updated);
+        await useUniverseStore.getState().hydrate();
       } else {
         const patch = parsed.patch ?? {};
         if (Object.keys(patch).length === 0) {

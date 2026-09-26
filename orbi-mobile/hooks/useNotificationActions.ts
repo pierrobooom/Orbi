@@ -32,6 +32,7 @@ import { router, useRootNavigationState, type Href } from "expo-router";
 import { useEffect } from "react";
 
 import {
+  completeTask,
   markNotificationAnswered,
   snoozeNotification,
   updateTask,
@@ -57,6 +58,8 @@ const SNOOZE_MINUTES = 60;
 // Where "tomorrow" lands. Early enough to be the start of the day, late
 // enough to be outside anyone's default quiet hours.
 const TOMORROW_HOUR = 9;
+// Before this hour a press still belongs to the previous day.
+const SMALL_HOURS_END = 5;
 
 /** Minutes from now until tomorrow morning, in the device's own zone.
  *
@@ -67,7 +70,10 @@ const TOMORROW_HOUR = 9;
 function minutesUntilTomorrowMorning(): number {
   const now = new Date();
   const target = new Date(now);
-  target.setDate(target.getDate() + 1);
+  // Pressed in the small hours, "tomorrow" means the morning that is about
+  // to come, not the one after it: at 00:40 the user has not slept yet, and
+  // adding a day postponed the task by some 32 hours instead of 8.
+  if (now.getHours() >= SMALL_HOURS_END) target.setDate(target.getDate() + 1);
   target.setHours(TOMORROW_HOUR, 0, 0, 0);
   return Math.max(5, Math.round((target.getTime() - now.getTime()) / 60000));
 }
@@ -280,7 +286,10 @@ export async function handleNotificationResponse(
 
   try {
     if (action === ACTION_DONE) {
-      await updateTask(taskId, { status: "completed" });
+      // The same completion the app's own Done button uses. Writing
+      // status: "completed" directly skipped the vote on a shared task and
+      // closed it for everyone from one lock screen.
+      await completeTask(taskId);
       // Completing cancels the remaining reminders server-side (the PATCH
       // replans the task), so the plan only needs marking when we are NOT
       // completing.
@@ -368,6 +377,17 @@ async function handleOnce(
   const id = responseId(response);
   if (handled.has(id)) return;
   handled.add(id);
+  // Clear iOS's copy BEFORE acting. The native side keeps "the last
+  // response" for as long as the app process lives, while `handled` lives
+  // in JavaScript — so reloading the JS (Expo Go's reload, or an
+  // over-the-air update) forgot what had been handled and the cold-start
+  // check below applied the same press again: "Snooze 1h" pushed the task
+  // another hour, "Done" re-completed a task that had since been reopened.
+  try {
+    Notifications.clearLastNotificationResponse();
+  } catch {
+    /* older native module: nothing stored to clear */
+  }
   await handleNotificationResponse(response);
 }
 
@@ -414,16 +434,15 @@ export function useNotificationActions() {
     // nothing mounted to navigate, and a tap that should have opened the
     // task would silently do nothing.
     if (!session || !navigationReady) return;
-    let cancelled = false;
-    Notifications.getLastNotificationResponseAsync()
-      .then((response) => {
-        if (!cancelled && response) void handleOnce(response);
-      })
-      .catch(() => {
-        /* nothing pending, or the platform declined to say */
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [session]);
+    let response: Notifications.NotificationResponse | null = null;
+    try {
+      response = Notifications.getLastNotificationResponse();
+    } catch {
+      /* nothing pending, or the platform declined to say */
+    }
+    if (response) void handleOnce(response);
+    // navigationReady belongs here. With [session] alone, a first run before
+    // the navigator existed returned early and never ran again — and the
+    // button pressed on the lock screen was silently dropped.
+  }, [session, navigationReady]);
 }

@@ -53,6 +53,19 @@ async def cancel_pending_for_task(task_id: UUID) -> int:
     return len(response.data or [])
 
 
+async def cancel_pending_kinds_for_task(task_id: UUID, kinds: list[str]) -> int:
+    """Cancel a task's pending plans of the given kinds only."""
+    response = (
+        get_client().table("notification_plans")
+        .update({"state": "cancelled", "updated_at": _now_iso()})
+        .eq("task_id", str(task_id))
+        .eq("state", _LIVE_STATE)
+        .in_("kind", kinds)
+        .execute()
+    )
+    return len(response.data or [])
+
+
 async def cancel_pending_for_cluster(owner_id: UUID, cluster_id: UUID) -> int:
     """Cancel scheduled plans for every task in a cluster.
 

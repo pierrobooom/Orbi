@@ -16,6 +16,19 @@ async def upsert_token(user_id: UUID, token: str, platform: str) -> dict:
     Upserts on (user_id, token) so a repeat registration just bumps
     last_seen_at instead of erroring on the unique constraint.
     """
+    # A push token identifies a PHONE, and a phone belongs to whoever signed
+    # in on it last. Without this, signing out and letting someone else sign
+    # in left the token registered to both accounts, so the first person's
+    # reminders — task titles and all — kept arriving on the second
+    # person's phone. The newest registration takes the token.
+    (
+        get_client().table("device_tokens")
+        .delete()
+        .eq("token", token)
+        .neq("user_id", str(user_id))
+        .execute()
+    )
+
     payload = {
         "user_id": str(user_id),
         "token": token,
@@ -40,6 +53,16 @@ async def delete_token(user_id: UUID, token: str) -> bool:
         .execute()
     )
     return bool(response.data)
+
+
+async def delete_dead_token(token: str) -> None:
+    """Remove a token Expo says no longer reaches any device, for everyone.
+
+    DeviceNotRegistered means the app was uninstalled or the token rotated.
+    Keeping it means every future reminder is sent to nowhere — and, if it
+    was the user's only token, retried every minute until given up on.
+    """
+    get_client().table("device_tokens").delete().eq("token", token).execute()
 
 
 async def list_tokens_for_user(user_id: UUID) -> list[str]:

@@ -39,6 +39,10 @@ export const useAuthStore = create<AuthState>((set) => ({
   bootstrapping: true,
   tier: "free",
   signOut: async () => {
+    // Before the session goes: detaching the phone is an authenticated call.
+    // Imported lazily because that module imports this store.
+    const { unregisterPushDevice } = await import("@/hooks/usePushRegistration");
+    await unregisterPushDevice();
     await supabase.auth.signOut();
     // onAuthStateChange will fire SIGNED_OUT and clear the session.
   },

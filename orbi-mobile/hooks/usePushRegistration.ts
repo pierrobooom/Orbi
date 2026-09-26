@@ -15,7 +15,12 @@ import * as Notifications from "expo-notifications";
 import { useEffect, useRef } from "react";
 import { Platform } from "react-native";
 
-import { ApiError, registerPushToken, type DevicePlatform } from "@/services/api";
+import {
+  ApiError,
+  registerPushToken,
+  unregisterPushToken,
+  type DevicePlatform,
+} from "@/services/api";
 import { useAuthStore } from "@/stores/authStore";
 
 // Global foreground handler. Default behaviour in iOS Expo Go suppresses
@@ -29,6 +34,27 @@ Notifications.setNotificationHandler({
     shouldSetBadge: false,
   }),
 });
+
+// The token this phone registered for the signed-in user, if any.
+let registeredToken: string | null = null;
+
+/** Detach this phone from the account before signing out.
+ *
+ * Without it the server kept sending the signed-out user's reminders — task
+ * titles included — to this phone, to whoever used it next. Best effort and
+ * time-boxed: it needs the network and the session, and signing out must
+ * work offline. The server also hands a token to whoever registers it last,
+ * so a missed call here is corrected by the next sign-in.
+ */
+export async function unregisterPushDevice(): Promise<void> {
+  const token = registeredToken;
+  if (!token) return;
+  registeredToken = null;
+  await Promise.race([
+    unregisterPushToken(token).catch(() => {}),
+    new Promise((resolve) => setTimeout(resolve, 3000)),
+  ]);
+}
 
 function resolveProjectId(): string | undefined {
   // Both paths can be missing during Expo Go dev — the native module
@@ -53,7 +79,7 @@ export async function registerPushDevice(): Promise<
       granted = next.granted;
     }
     if (!granted) {
-      return { ok: false, reason: "Microphone permission denied. Enable in iOS Settings → Expo Go → Notifications." };
+      return { ok: false, reason: "Notification permission denied. Enable in iOS Settings → Expo Go → Notifications." };
     }
 
     const projectId = resolveProjectId();
@@ -72,6 +98,7 @@ export async function registerPushDevice(): Promise<
       Platform.OS === "ios" || Platform.OS === "android" ? Platform.OS : "web";
 
     await registerPushToken(token, platform);
+    registeredToken = token;
     return { ok: true, token };
   } catch (e) {
     const msg = e instanceof ApiError ? `Backend ${e.status}: ${e.message}` : String(e);

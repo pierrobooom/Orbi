@@ -236,13 +236,21 @@ def plan_for_task(
         if delay is not None:
             chase_at = due_at + delay
         else:
-            # Next morning, local time — computed in the user's zone so a
-            # deadline at 23:00 in Lisbon is chased at 08:00 in Lisbon and
-            # not at whatever 08:00 UTC happens to be there.
-            local_next = (due_at.astimezone(zone) + timedelta(days=1)).replace(
+            # The first morning after the deadline, local time — computed in
+            # the user's zone so a deadline at 23:00 in Lisbon is chased at
+            # 08:00 in Lisbon and not at whatever 08:00 UTC happens to be.
+            #
+            # "First morning after", not "tomorrow's morning": a deadline at
+            # 02:30 has its next morning the SAME day, a few hours later.
+            # Adding a day unconditionally chased those a whole extra day
+            # late, some 30 hours after the deadline.
+            due_local = due_at.astimezone(zone)
+            morning = due_local.replace(
                 hour=quiet_end.hour, minute=quiet_end.minute, second=0, microsecond=0
             )
-            chase_at = local_next.astimezone(timezone.utc)
+            if morning <= due_local:
+                morning += timedelta(days=1)
+            chase_at = morning.astimezone(timezone.utc)
         chase_at = shift_out_of_quiet_hours(chase_at, zone, quiet_start, quiet_end)
         if chase_at > now:
             planned.append(PlannedReminder("chase", chase_at))

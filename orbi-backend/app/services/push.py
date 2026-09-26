@@ -6,9 +6,9 @@ A ticket can be:
    - {"status": "ok", "id": "..."}        — accepted, ID is for receipt lookup
    - {"status": "error", "message": ...}   — rejected (bad token, payload, etc.)
 
-We don't poll receipts in this slice — that's the next slice's job, where
-we'd act on DeviceNotRegistered errors by deleting the token. For now we
-just log failures so the dev can see them.
+Each returned ticket carries the token it was for under "token", so the
+caller can drop tokens Expo reports as DeviceNotRegistered. Receipts (the
+second, delayed delivery report) are not polled.
 """
 
 import logging
@@ -111,6 +111,11 @@ async def send_push(
                 resp.raise_for_status()
                 body_json = resp.json()
                 batch_tickets = body_json.get("data", [])
+                # Expo returns tickets in message order. Tag each with its
+                # token so a dead one can be removed by the caller.
+                for tok, ticket in zip(batch, batch_tickets):
+                    if isinstance(ticket, dict):
+                        ticket["token"] = tok
                 # Log any errors so dev can spot them in the backend output.
                 for ticket in batch_tickets:
                     if ticket.get("status") == "error":

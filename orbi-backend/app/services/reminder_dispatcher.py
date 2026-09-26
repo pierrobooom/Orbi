@@ -58,6 +58,17 @@ DISPATCH_INTERVAL_SECONDS = 60
 # drains over several ticks instead of one enormous fan-out.
 _MAX_PER_TICK = 200
 
+# How long a reminder whose push keeps being rejected is retried before it
+# is given up on. Failed pushes stay pending so a blip is retried on the next
+# tick — but without a limit, a permanently rejected one was retried every
+# minute forever, and because each tick takes the OLDEST due plans first, a
+# pile of them would eventually crowd every other reminder out of the tick.
+FAILED_PUSH_GIVE_UP = timedelta(hours=2)
+
+# Where each kind sits in a task's life. When several of one task's plans
+# come due in the same tick, only the latest stage is worth sending.
+_LIFECYCLE = {"lead": 0, "due": 1, "chase": 2, "escalate": 3}
+
 # How loudly each kind is allowed to arrive. A deadline passing is exactly
 # the case Apple designed timeSensitive for — it breaks through Focus and Do
 # Not Disturb, the way a WhatsApp or Teams message does. A lead is a heads-up
@@ -251,6 +262,16 @@ async def sync_task_plans(
     """
     now = now or datetime.now(timezone.utc)
     prefs = preferences or await preferences_for(owner_id)
+    task_id = UUID(str(task["id"]))
+
+    # Plan from the task as it is NOW, not as the caller last saw it. Every
+    # caller runs this in a background task after its response, and two
+    # quick edits can finish in either order — so planning from the row a
+    # request wrote let the older edit's schedule land last, leaving the
+    # reminders on a deadline the user had already moved.
+    fresh = await tasks_db.fetch_task_by_id(task_id, owner_id)
+    if fresh is not None:
+        task = fresh
 
     cluster_muted = False
     cluster_id = task.get("parent_cluster_id")
@@ -258,7 +279,6 @@ async def sync_task_plans(
         cluster = await clusters_db.fetch_cluster_by_id(UUID(str(cluster_id)), owner_id)
         cluster_muted = bool(cluster and cluster.get("notifications_muted"))
 
-    task_id = UUID(str(task["id"]))
     planned = plan_for_task(task, prefs, now=now, cluster_muted=cluster_muted)
 
     # Nothing to do when the schedule hasn't actually moved. Without this
@@ -273,24 +293,42 @@ async def sync_task_plans(
     if not planned:
         return []
 
-    rows = [
+    try:
+        return await notifications_db.insert_plans(_plan_rows(planned, owner_id, task_id))
+    except Exception as exc:  # noqa: BLE001
+        # Two syncs of the same task interleaved their cancel and insert and
+        # this one lost to the partial unique index. The winner planned from
+        # a fresh read too, so it almost certainly wrote the same schedule —
+        # but "almost" is not good enough for reminders, so check once more
+        # against the database and rewrite it if it differs.
+        logger.info("Plans not inserted for task %s, rechecking: %s", task_id, exc)
+        latest = await tasks_db.fetch_task_by_id(task_id, owner_id)
+        if latest is None:
+            return []
+        replanned = plan_for_task(latest, prefs, now=now, cluster_muted=cluster_muted)
+        existing = await notifications_db.fetch_pending_for_task(task_id)
+        if _same_schedule(existing, replanned):
+            return []
+        await notifications_db.cancel_pending_for_task(task_id)
+        try:
+            return await notifications_db.insert_plans(
+                _plan_rows(replanned, owner_id, task_id)
+            )
+        except Exception as retry_exc:  # noqa: BLE001
+            logger.warning("Plans for task %s not rewritten: %s", task_id, retry_exc)
+            return []
+
+
+def _plan_rows(planned: list, owner_id: UUID, task_id: UUID) -> list[dict]:
+    return [
         {
             "owner_id": str(owner_id),
-            "task_id": str(task["id"]),
+            "task_id": str(task_id),
             "kind": p.kind,
             "trigger_at": p.trigger_at.isoformat(),
         }
         for p in planned
     ]
-    try:
-        return await notifications_db.insert_plans(rows)
-    except Exception as exc:  # noqa: BLE001
-        # Two rapid edits to the same task can interleave their cancel and
-        # insert, and the loser hits the partial unique index. That is the
-        # index doing its job — the winner already wrote the same schedule,
-        # so there is nothing to retry and nothing to report.
-        logger.info("Plans not inserted for task %s: %s", task.get("id"), exc)
-        return []
 
 
 async def resync_user_plans(owner_id: UUID) -> tuple[int, int]:
@@ -431,6 +469,16 @@ async def _dispatch_for_owner(
             ready.append(plan)
     if stale:
         await notifications_db.mark_state(stale, "cancelled")
+
+    # One push per task per tick. Quiet hours move every deferred plan to
+    # the same morning minute, so a task's `due` and `chase` used to fire
+    # together: two pushes, the second replacing the first in the tray, and
+    # two of the day's budget spent on one task. Only the latest stage is
+    # still true — a task past its chase time is not "due now" — so that one
+    # is sent and the earlier ones are cancelled as superseded.
+    ready, superseded = _latest_stage_per_task(ready)
+    if superseded:
+        await notifications_db.mark_state(superseded, "cancelled")
     if not ready:
         return {"sent": 0, "skipped": 0, "postponed": 0}
 
@@ -476,7 +524,13 @@ async def _dispatch_for_owner(
     # pending so the next tick tries again, rather than a rejected reminder
     # being recorded as delivered and never mentioned again.
     failed_ids: list[str] = []
+    # ...until they are too old to be worth retrying.
+    given_up: list[str] = []
     for plan in winners:
+        if not tokens:
+            # Every token turned out to be dead part-way through this tick.
+            given_up.append(plan["id"])
+            continue
         task = plan.get("task_bubbles") or {}
         kind = plan["kind"]
 
@@ -513,8 +567,24 @@ async def _dispatch_for_owner(
         # had been told about something they never heard about, which is the
         # one thing a reminder system must not get wrong: it also means the
         # plan is never retried, and the budget is spent on nothing.
+        dead = {
+            t["token"]
+            for t in tickets
+            if t.get("token")
+            and (t.get("details") or {}).get("error") == "DeviceNotRegistered"
+        }
+        if dead:
+            await _forget_tokens(dead)
+            tokens = [tok for tok in tokens if tok not in dead]
+
         if any(t.get("status") == "ok" for t in tickets):
             sent_ids.append(plan["id"])
+        elif now - (_parse_dt(plan.get("trigger_at")) or now) > FAILED_PUSH_GIVE_UP:
+            logger.error(
+                "Giving up on plan %s (%s) after %s of rejected pushes",
+                plan["id"], kind, FAILED_PUSH_GIVE_UP,
+            )
+            given_up.append(plan["id"])
         else:
             reasons = {str(t.get("message"))[:120] for t in tickets if t.get("message")}
             logger.error(
@@ -526,6 +596,8 @@ async def _dispatch_for_owner(
             failed_ids.append(plan["id"])
 
     await notifications_db.mark_state(sent_ids, "sent")
+    if given_up:
+        await notifications_db.mark_state(given_up, "skipped")
 
     # A chase that goes unanswered earns exactly one follow-up. Scheduled
     # only now, once we know the chase actually went out — planning it in
@@ -538,7 +610,38 @@ async def _dispatch_for_owner(
             "%s reminder(s) left pending after a rejected push", len(failed_ids)
         )
 
-    return {"sent": len(sent_ids), "skipped": len(losers), "postponed": 0}
+    return {"sent": len(sent_ids), "skipped": len(losers) + len(given_up), "postponed": 0}
+
+
+def _latest_stage_per_task(plans: list[dict]) -> tuple[list[dict], list[str]]:
+    """Keep each task's latest-stage plan; return (kept, ids of the rest)."""
+    best: dict[str, dict] = {}
+    for plan in plans:
+        key = str(plan["task_id"])
+        current = best.get(key)
+        if current is None or _LIFECYCLE.get(plan["kind"], 0) > _LIFECYCLE.get(current["kind"], 0):
+            best[key] = plan
+    kept_ids = {p["id"] for p in best.values()}
+    return list(best.values()), [p["id"] for p in plans if p["id"] not in kept_ids]
+
+
+async def _forget_tokens(tokens: set[str]) -> None:
+    """Delete tokens Expo says reach no device. Never fails a dispatch."""
+    for token in tokens:
+        try:
+            await device_tokens_db.delete_dead_token(token)
+            logger.info("Removed a push token Expo reports as unregistered")
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Could not remove a dead push token: %s", exc)
+
+
+def quiet_window(prefs: dict) -> tuple:
+    """(zone, quiet start, quiet end) from preferences, defaults filled in."""
+    return (
+        resolve_zone(prefs.get("timezone")),
+        _parse_time(prefs.get("quiet_hours_start"), time(22, 0)),
+        _parse_time(prefs.get("quiet_hours_end"), time(8, 0)),
+    )
 
 
 async def _schedule_escalations(
