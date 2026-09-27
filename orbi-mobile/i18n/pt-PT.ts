@@ -760,4 +760,10 @@ export const ptPT: Record<string, string> = {
   "Nothing was changed. You can do it from the task instead.":
     "Nada foi alterado. Podes fazê-lo a partir da tarefa.",
   "Open task": "Abrir tarefa",
+  // Checklists in the description (components/description-checklist.tsx)
+  "Add checklist item": "Adicionar item à lista",
+  "Couldn't save the checklist. Try again.":
+    "Não foi possível guardar a lista. Tenta de novo.",
+  "Tap Edit to add notes about this task.":
+    "Toca em Editar para adicionar notas a esta tarefa.",
 };

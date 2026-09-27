@@ -36,6 +36,7 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 
+import { DescriptionChecklist } from "@/components/description-checklist";
 import { ScreenHeader } from "@/components/screen-header";
 import { ShareTaskSheet } from "@/components/share-task-sheet";
 import { translate, useT } from "@/i18n";
@@ -55,6 +56,7 @@ import { dismissDeliveredFor } from "@/hooks/useNotificationActions";
 import { colors } from "@/theme/colors";
 import { themed } from "@/theme/themed";
 import { cue } from "@/services/feedback";
+import { appendItem, checklistProgress, toggleItem } from "@/services/checklist";
 
 // Mark-complete hold duration. Keeps the user from accidentally
 // completing a task with a stray tap.
@@ -134,6 +136,12 @@ export default function TaskDetailScreen() {
   const voiceStartedAt = useRef<number | null>(null);
   const [voiceBusy, setVoiceBusy] = useState(false);
   const [voiceError, setVoiceError] = useState<string | null>(null);
+
+  // Checklist ticks save one after another, never side by side. Two quick
+  // taps sent as parallel PATCHes can land in either order, and the older
+  // description arriving last would silently un-tick the newer box.
+  const checklistSaves = useRef<Promise<unknown>>(Promise.resolve());
+  const descriptionInput = useRef<TextInput>(null);
 
   if (!task) {
     return (
@@ -376,6 +384,42 @@ export default function TaskDetailScreen() {
     );
   };
 
+  /** Tick or untick one checklist line, straight from the view.
+   *
+   * Optimistic: the box flips at once and the save follows. The new text is
+   * built from the STORE's copy, not this render's, so a second tap before
+   * the first save returns builds on the first tap instead of undoing it.
+   */
+  const onToggleItem = (line: number) => {
+    const latest = useUniverseStore.getState().getServerTask(task.id);
+    if (!latest?.description) return;
+    const previous = latest.description;
+    const next = toggleItem(previous, line);
+    if (next === previous) return;
+    cue("tap");
+    setError(null);
+    replaceTask({ ...latest, description: next });
+    checklistSaves.current = checklistSaves.current.then(() =>
+      updateTask(task.id, { description: next }).catch(() => {
+        // Put the box back the way the server still has it, and say so —
+        // a tick that silently did not save is worse than no tick.
+        const current = useUniverseStore.getState().getServerTask(task.id);
+        if (current?.description === next) {
+          replaceTask({ ...current, description: previous });
+        }
+        setError(t("Couldn't save the checklist. Try again."));
+      }),
+    );
+  };
+
+  const onAddItem = () => {
+    setEditDescription((d) => appendItem(d));
+    // Straight into typing the item. Deferred a frame so the input has the
+    // new text before it takes focus and places the cursor at the end.
+    requestAnimationFrame(() => descriptionInput.current?.focus());
+  };
+
+  const progress = checklistProgress(task.description);
   const importanceLabel = IMPORTANCE_LABELS[task.importance] ?? "Normal";
   const dueText = task.due_at ? new Date(task.due_at).toLocaleString() : "No due date";
   const realClusters = clusters.filter((c) => c.id !== SYNTHETIC_DRIFT_ID);
@@ -460,10 +504,29 @@ export default function TaskDetailScreen() {
               ) : null}
 
               <View style={styles.metaCell}>
-                <Text style={styles.metaLabel}>{t("Description")}</Text>
-                <Text style={[styles.metaValue, !task.description && styles.metaPlaceholder]}>
-                  {task.description ?? "Tap Edit to add notes about this task."}
-                </Text>
+                <View style={styles.descriptionHead}>
+                  <Text style={styles.metaLabel}>{t("Description")}</Text>
+                  {progress.total > 0 ? (
+                    <Text
+                      style={[
+                        styles.checklistCount,
+                        progress.done === progress.total && styles.checklistCountDone,
+                      ]}
+                    >
+                      {progress.done}/{progress.total}
+                    </Text>
+                  ) : null}
+                </View>
+                {progress.total > 0 && task.description ? (
+                  <DescriptionChecklist
+                    description={task.description}
+                    onToggle={onToggleItem}
+                  />
+                ) : (
+                  <Text style={[styles.metaValue, !task.description && styles.metaPlaceholder]}>
+                    {task.description ?? t("Tap Edit to add notes about this task.")}
+                  </Text>
+                )}
               </View>
 
               <View style={styles.metaRow}>
@@ -518,6 +581,7 @@ export default function TaskDetailScreen() {
 
               <Text style={styles.metaLabel}>{t("Description")}</Text>
               <TextInput
+                ref={descriptionInput}
                 value={editDescription}
                 onChangeText={setEditDescription}
                 multiline
@@ -525,6 +589,17 @@ export default function TaskDetailScreen() {
                 placeholderTextColor={colors.inkDim}
                 style={styles.editDescriptionInput}
               />
+              {/* A checklist line is "- [ ] item". Nobody should have to
+                  know that to make one, so this writes the prefix for them. */}
+              <Pressable
+                onPress={onAddItem}
+                style={styles.addItem}
+                hitSlop={6}
+                accessibilityRole="button"
+              >
+                <Feather name="check-square" size={16} color={colors.ink} />
+                <Text style={styles.addItemText}>{t("Add checklist item")}</Text>
+              </Pressable>
 
               <Text style={styles.metaLabel}>{t("Cluster")}</Text>
               <ScrollView
@@ -808,6 +883,25 @@ const styles = themed(() => StyleSheet.create({
     paddingVertical: 10,
     marginBottom: 14,
   },
+  descriptionHead: { flexDirection: "row", alignItems: "center", gap: 8 },
+  checklistCount: {
+    color: colors.inkDim,
+    fontSize: 12,
+    fontWeight: "600",
+    fontVariant: ["tabular-nums"],
+    marginBottom: 6,
+  },
+  checklistCountDone: { color: colors.health },
+  addItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    gap: 8,
+    marginTop: -6,
+    marginBottom: 16,
+    paddingVertical: 6,
+  },
+  addItemText: { color: colors.ink, fontSize: 14, fontWeight: "600" },
   editDescriptionInput: {
     color: colors.ink,
     fontSize: 14,

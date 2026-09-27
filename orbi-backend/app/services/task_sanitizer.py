@@ -72,7 +72,9 @@ _VERBOSE_TITLE_PREFIXES = (
 
 _TITLE_MAX_LEN = 80
 _LABEL_MAX_LEN = 28
-_DESCRIPTION_MAX_LEN = 240
+# Room for a checklist: every item carries a "- [ ] " prefix and a line
+# break, so a dozen short items would not fit the old 240.
+_DESCRIPTION_MAX_LEN = 500
 
 # Words to drop when deriving a short label from a verbose title. Mirrors
 # the JS shortLabel in components/universe/BubbleCanvas.tsx so the
@@ -250,7 +252,12 @@ def sanitize_parsed_task(
     if isinstance(raw_description, str) and raw_description.strip():
         description = raw_description.strip()
         if len(description) > _DESCRIPTION_MAX_LEN:
-            description = description[:_DESCRIPTION_MAX_LEN].rstrip()
+            cut = description[:_DESCRIPTION_MAX_LEN]
+            # Cut at a line break when there is one, so a checklist loses
+            # whole items rather than ending on half of one ("- [ ] Bre").
+            if "\n" in cut:
+                cut = cut[: cut.rindex("\n")]
+            description = cut.rstrip()
         cleaned["description"] = description
     else:
         cleaned["description"] = None
