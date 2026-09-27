@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 # v4 keeps every rule v3 had and cuts only repeated examples: ~3,308 ->
 # ~2,733 tokens. Verified 13/13 on the routing suite — create-vs-act,
 # multi-task splitting, and both languages — before being switched on.
-_SYSTEM_PROMPT = load_prompt("coordinator", version=5)
+_SYSTEM_PROMPT = load_prompt("coordinator", version=6)
 
 # Conversation history is the only unbounded input to this prompt.
 # ~700 tokens is about three long voice transcripts, which is as much

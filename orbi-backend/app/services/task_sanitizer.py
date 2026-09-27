@@ -84,6 +84,11 @@ _LABEL_STOP_WORDS = frozenset({
     "and", "or", "in", "on", "at", "by", "as", "is", "was", "are",
     "be", "been", "this", "that", "these", "those", "my", "your",
     "i", "im", "i'm", "ive", "i've",
+    # Portuguese: articles, contractions, possessives, prepositions.
+    "o", "os", "as", "um", "uma", "uns", "umas", "de", "do", "da", "dos",
+    "das", "em", "no", "na", "nos", "nas", "ao", "aos", "à", "às", "para",
+    "com", "por", "pelo", "pela", "meu", "minha", "meus", "minhas", "seu",
+    "sua", "e",
 })
 _LABEL_LOW_SIGNAL_VERBS = frozenset({
     "call", "buy", "go", "send", "email", "remind", "make", "do",
@@ -167,10 +172,16 @@ def _parse_due_at(value: Any, user_timezone: str | None = None) -> datetime | No
     return dt
 
 
-def derive_label_from_title(title: str, max_chars: int = 14) -> str:
-    """Best-effort short label from a task title — server-side mirror of
-    the JS shortLabel. Used when the LLM didn't produce a label or when
-    the client didn't include one in a typed-create body.
+def derive_label_from_title(title: str, max_chars: int = 20) -> str:
+    """Best-effort short bubble label from a task title: the ACTION + OBJECT.
+
+    Server-side mirror of the client's deriveLabel. Used when the model gave
+    no label, or a typed create sent none.
+
+    It used to DROP the verb and keep the noun, so "Visitar um imóvel em São
+    Domingos" became "Imóvel" — a bubble that says what, but not what to do
+    about it. Now the first word (the action, since titles are imperative)
+    is kept, followed by its object — the next content word: "Visitar imóvel".
     """
     import re
 
@@ -183,26 +194,17 @@ def derive_label_from_title(title: str, max_chars: int = 14) -> str:
     words = re.split(r"\s+", trimmed)
 
     def is_content(word: str) -> bool:
-        lower = re.sub(r"[^a-z0-9']", "", word.lower())
-        if not lower:
-            return False
-        if lower in _LABEL_STOP_WORDS:
-            return False
-        if lower in _LABEL_LOW_SIGNAL_VERBS:
-            return False
-        return True
+        lower = re.sub(r"[^\w']", "", word.lower())
+        return bool(lower) and lower not in _LABEL_STOP_WORDS
 
-    content = [w for w in words if is_content(w)]
-    pick_from = content if content else words
-    out = ""
-    for word in pick_from:
-        candidate = f"{out} {word}".strip() if out else word
-        if len(candidate) > max_chars:
-            break
-        out = candidate
-    if not out:
-        out = trimmed[:max_chars]
-    return out
+    first, rest = words[0], [w for w in words[1:] if is_content(w)]
+    if len(first) > max_chars:
+        return trimmed[:max_chars]
+    # The action and ONE object. A third word ("Visitar imóvel São") is
+    # usually the start of a place or a detail, and reads as a cut-off.
+    if rest and len(f"{first} {rest[0]}") <= max_chars:
+        return f"{first} {rest[0]}"
+    return first
 
 
 def sanitize_parsed_task(

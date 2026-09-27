@@ -26,7 +26,7 @@ from app.services.time_extractor import (
 
 logger = logging.getLogger(__name__)
 
-_SYSTEM_PROMPT = load_prompt("task_updater", version=2)
+_SYSTEM_PROMPT = load_prompt("task_updater", version=3)
 
 # Fields we permit the LLM to change via voice. parent_cluster_id is
 # intentionally excluded — that's the auto-clustering agent's job.
