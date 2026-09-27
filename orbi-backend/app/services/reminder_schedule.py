@@ -218,8 +218,19 @@ def plan_for_task(
 
     planned: list[PlannedReminder] = []
 
-    if preferences.get("lead_reminders_enabled", True):
-        lead_at = due_at - _lead_offset(importance)
+    # A task may choose its own reminders — a routine's "3 days before, on
+    # the day, 1 day after". None keeps the default for its importance; 0
+    # switches that reminder off for this task.
+    lead_override = task.get("reminder_lead_minutes")
+    chase_override = task.get("reminder_chase_minutes")
+
+    if preferences.get("lead_reminders_enabled", True) and lead_override != 0:
+        offset = (
+            timedelta(minutes=int(lead_override))
+            if lead_override is not None
+            else _lead_offset(importance)
+        )
+        lead_at = due_at - offset
         lead_at = shift_out_of_quiet_hours(lead_at, zone, quiet_start, quiet_end)
         # Quiet hours can push a lead past the deadline it was warning
         # about. At that point it is not a lead, it is a confusing echo of
@@ -228,11 +239,15 @@ def plan_for_task(
             planned.append(PlannedReminder("lead", lead_at))
 
     due_trigger = shift_out_of_quiet_hours(due_at, zone, quiet_start, quiet_end)
-    if due_trigger > now:
+    if due_trigger > now and task.get("reminder_on_due", True) is not False:
         planned.append(PlannedReminder("due", due_trigger))
 
-    if preferences.get("chase_reminders_enabled", True):
-        delay = _chase_delay(importance)
+    if preferences.get("chase_reminders_enabled", True) and chase_override != 0:
+        delay = (
+            timedelta(minutes=int(chase_override))
+            if chase_override is not None
+            else _chase_delay(importance)
+        )
         if delay is not None:
             chase_at = due_at + delay
         else:

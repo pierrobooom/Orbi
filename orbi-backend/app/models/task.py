@@ -58,6 +58,17 @@ class TaskBubble(BaseModel):
     shared_by_user_id: Optional[UUID] = None
     i_completed_at: Optional[datetime] = None
     owner_completed_at: Optional[datetime] = None
+    # Set when this task is one period of a collection routine ("October's
+    # rent for Quarto 3"). See services/collections.py.
+    routine_occurrence_id: Optional[UUID] = None
+    # Per-task reminder choices. None means the default for the importance;
+    # 0 means none. Collection routines set them ("3 days before").
+    reminder_lead_minutes: Optional[int] = None
+    reminder_on_due: bool = True
+    reminder_chase_minutes: Optional[int] = None
+    # Derived, for the bubble: who the period is about and how far it is
+    # paid. Assembled per request, never stored — see TASK_DERIVED_FIELDS.
+    routine: Optional[dict] = None
     created_at: datetime
     updated_at: datetime
 
@@ -78,6 +89,7 @@ TASK_DERIVED_FIELDS = frozenset(
         "shared_by_user_id",
         "i_completed_at",
         "owner_completed_at",
+        "routine",
     }
 )
 
@@ -140,4 +152,8 @@ class Cluster(BaseModel):
     # Same as TaskBubble: None means the weight-based layout still owns it.
     canvas_x: Optional[float] = None
     canvas_y: Optional[float] = None
+    # A collection holds resources ("Casa 1") with recurring routines. The
+    # noun names one of them: "+ Adicionar imóvel". See migration 0026.
+    is_collection: bool = False
+    collection_noun: Optional[str] = None
     created_at: datetime

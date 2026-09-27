@@ -666,6 +666,50 @@ Home:           IKEA, B\&Q, Screwfix, Dyson, Currys
 
 
 
+\## Collections (recurring things that belong to something)
+
+Built 2026-09-27 from docs/orbi-collections.pdf — keep the screens identical
+to those mockups. Migration 0026.
+
+Layers: cluster (is_collection) → resource ("Casa 1") → optional unit
+("Quarto 3 · Marta", one level only) → routine (max 5 per resource/unit,
+"Renda €600 monthly on the 15th") → occurrence (one row per period) →
+payments, plus ONE task bubble per occurrence.
+
+Rules that keep it bug-free — do not work around them:
+\- A period IS an ordinary task. Reminders, snooze, Done and quiet hours come
+  from the task pipeline; there is no second reminder system.
+\- The task's status is the truth about "finished". A trigger
+  (task_bubbles_sync_occurrence) mirrors it onto the occurrence, so every
+  completion path closes the period without knowing periods exist.
+\- Progress is always the SUM of routine_payments rows — never a counter.
+\- Completing a MONEY period's bubble by any route records the rest as a
+  payment (auto_settled, migration 0027) and closes it as 'paid', so its
+  history shows how it was settled; reopening the bubble deletes only those
+  auto_settled rows. Hooks: collections.on_task_completed / on_task_reopened,
+  called from routers/tasks.py. Migration 0028 backfilled the same payment
+  for periods closed before the hook existed. Any finished period can be
+  reopened from its screen (Reabrir).
+\- (routine_id, period_on) is unique and task_bubbles.routine_occurrence_id
+  is unique: creating a period or its bubble twice is impossible.
+\- Only the current period exists. services/recurrence.py (pure, tested)
+  decides which periods to create; services/collections.py creates them,
+  called on create/edit and every 15 min from the reminder loop's lease.
+\- on_miss: stay_overdue (rent stays owed), skip_ahead (chores), from_done
+  (vaccines count from completion). A new routine never back-fills arrears.
+\- Editing changes the future only; resources are archived, never deleted.
+\- Tier caps: 3 top-level resources on Spark, 30 on Pro, unlimited Genius.
+
+Tests: tests/test_recurrence.py (dates), tests/test_reminder_reliability.py
+(period notifications). A live end-to-end script against throwaway accounts
+covered the API, security and time travel on 2026-09-27.
+
+
+
+\---
+
+
+
 \## Agent Architecture
 
 

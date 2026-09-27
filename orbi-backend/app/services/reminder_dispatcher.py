@@ -99,6 +99,46 @@ _CATEGORIES = {
     "escalate": "orbi.task.chase",
 }
 
+# A money period gets its own buttons: "Recebido / Recebi parte…" for money
+# coming in, "Pago / Paguei parte…" for money going out. Must match the
+# categories registered in hooks/useNotificationActions.ts.
+_ROUTINE_CATEGORIES = {"income": "orbi.routine.income", "expense": "orbi.routine.expense"}
+
+
+def _money(amount: str | None, currency: str, portuguese: bool) -> str:
+    """"€500" / "€550,50" — whole amounts without cents, PT with a comma."""
+    from decimal import Decimal
+
+    value = Decimal(str(amount or "0"))
+    symbol = {"EUR": "€", "GBP": "£", "USD": "$"}.get(currency, currency + " ")
+    text = f"{value:,.0f}" if value == value.to_integral() else f"{value:,.2f}"
+    if portuguese:
+        text = text.replace(",", " ").replace(".", ",").replace(" ", ".")
+    return f"{symbol}{text}"
+
+
+def _routine_copy(task: dict, context: dict, portuguese: bool) -> tuple[str, str | None, str | None]:
+    """(title, body, category) for a collection period's reminder.
+
+    The mockup's shape:  Renda Quarto 2 — Rui   /   Atrasada 2 dias   /
+    €500 · Casa 1. The person goes in the title because on a lock screen the
+    bold line is what gets read, and "whose rent" is the question.
+    """
+    person = (context.get("person") or "").split(" ")[0]
+    title = task.get("title") or ""
+    if person and person.lower() not in title.lower():
+        title = f"{title} — {person}"
+    place = context.get("place") or ""
+    if context.get("kind") == "amount":
+        from decimal import Decimal
+
+        left = Decimal(str(context.get("amount") or 0)) - Decimal(str(context.get("paid") or 0))
+        money = _money(str(max(left, Decimal(0))), context.get("currency") or "EUR", portuguese)
+        body = f"{money} · {place}" if place else money
+        category = _ROUTINE_CATEGORIES.get(context.get("direction") or "income")
+        return title, body, category
+    return title, place or None, None
+
 # How a notification is laid out, and why.
 #
 # The first version led with the kind ("Coming up", "Due now") and pushed
@@ -519,6 +559,19 @@ async def _dispatch_for_owner(
     lang_key = "pt" if _is_pt(language) else "en"
     cluster_names = await _cluster_names_for(owner_id)
 
+    # Collection periods read differently ("Renda Quarto 2 — Rui"). Looked up
+    # for the whole batch at once, and never allowed to stop a send.
+    routine_context: dict[str, dict] = {}
+    period_tasks = [dict(p.get("task_bubbles") or {}) for p in winners
+                    if (p.get("task_bubbles") or {}).get("routine_occurrence_id")]
+    if period_tasks:
+        try:
+            from app.services.collections import bubble_context
+            await bubble_context(period_tasks)
+            routine_context = {str(t["id"]): t["routine"] for t in period_tasks if t.get("routine")}
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Routine context unavailable for reminders: %s", exc)
+
     sent_ids: list[str] = []
     # Plans whose push Expo refused. Deliberately NOT marked sent: they stay
     # pending so the next tick tries again, rather than a rejected reminder
@@ -537,13 +590,25 @@ async def _dispatch_for_owner(
         cluster_id = task.get("parent_cluster_id")
         cluster = cluster_names.get(str(cluster_id)) if cluster_id else None
         body = _BODY[lang_key].get(kind) or cluster or _NO_CLUSTER[lang_key]
+        title = task.get("title") or ""
+        category = _CATEGORIES.get(kind, _CATEGORIES["due"])
+        data = {"kind": kind, "planId": plan["id"], "taskId": str(plan["task_id"])}
+
+        context = routine_context.get(str(task.get("id")))
+        if context:
+            title, routine_body, routine_category = _routine_copy(task, context, lang_key == "pt")
+            body = routine_body or body
+            category = routine_category or category
+            data["occurrenceId"] = context.get("occurrence_id")
+            # "Recebi parte…" opens the payment sheet, which is per routine.
+            data["routineId"] = context.get("routine_id")
 
         tickets = await send_push(
             tokens,
-            title=task.get("title") or "",
+            title=title,
             subtitle=_countdown(_parse_dt(task.get("due_at")), now, language),
             body=body,
-            category_id=_CATEGORIES.get(kind, _CATEGORIES["due"]),
+            category_id=category,
             interruption_level=_INTERRUPTION.get(kind, "active"),
             # One tray slot per task. Reminders about the same task used to
             # stack — lead, then due, then chase — so the tray held several
@@ -553,11 +618,7 @@ async def _dispatch_for_owner(
             # ever shows the task's current state, and dismissing it clears
             # the lot because there is nothing else left.
             replace_key=f"task-{plan['task_id']}",
-            data={
-                "kind": kind,
-                "planId": plan["id"],
-                "taskId": str(plan["task_id"]),
-            },
+            data=data,
         )
 
         # Only call it sent if Expo actually accepted it for at least one
@@ -758,6 +819,10 @@ async def run_forever() -> None:
                 logger.info("Reminder tick: %s", result)
             # Under the same lease, so only one replica ever prunes.
             await _prune_if_due(datetime.now(timezone.utc))
+            # And creates collection periods as they come due. Imported here:
+            # the collections service itself imports this module.
+            from app.services.collections import materialize_if_due
+            await materialize_if_due(datetime.now(timezone.utc))
         except asyncio.CancelledError:
             logger.info("Reminder dispatcher stopping")
             await job_lease.release("reminder_dispatcher")

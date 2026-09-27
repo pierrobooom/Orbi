@@ -416,3 +416,62 @@ def test_quiet_window_reads_preferences_with_defaults():
     zone, start, end = dispatcher.quiet_window({"timezone": "Europe/Lisbon"})
     assert str(zone) == "Europe/Lisbon"
     assert (start, end) == (time(22, 0), time(8, 0))
+
+
+# ---------------------------------------------------------------------------
+# A collection period's reminder (screen 9 of the mockups)
+# ---------------------------------------------------------------------------
+
+def test_a_rent_reminder_names_the_person_and_what_is_left():
+    task = {"id": "t", "title": "Renda Quarto 2"}
+    context = {"person": "Rui Costa", "place": "Casa 1", "kind": "amount", "amount": "500",
+               "paid": "0", "currency": "EUR", "direction": "income"}
+    title, body, category = dispatcher._routine_copy(task, context, portuguese=True)
+    assert title == "Renda Quarto 2 — Rui"
+    assert body == "€500 · Casa 1"
+    assert category == "orbi.routine.income"
+
+
+def test_a_part_paid_rent_shows_only_the_rest_in_portuguese_format():
+    task = {"id": "t", "title": "Renda Quarto 3"}
+    context = {"person": "Marta", "place": "Casa 1", "kind": "amount", "amount": "1250.50",
+               "paid": "200", "currency": "EUR", "direction": "income"}
+    _, body, _ = dispatcher._routine_copy(task, context, portuguese=True)
+    assert body == "€1.050,50 · Casa 1"
+
+
+def test_money_going_out_gets_the_pay_buttons():
+    context = {"person": None, "place": "Casa 1", "kind": "amount", "amount": "45",
+               "paid": "0", "currency": "EUR", "direction": "expense"}
+    _, _, category = dispatcher._routine_copy({"id": "t", "title": "Condomínio · Casa 1"}, context, True)
+    assert category == "orbi.routine.expense"
+
+
+def test_a_tick_off_routine_keeps_the_ordinary_buttons():
+    context = {"person": "Millie", "place": "Millie", "kind": "check"}
+    title, body, category = dispatcher._routine_copy({"id": "t", "title": "Vacina · Millie"}, context, True)
+    assert title == "Vacina · Millie"  # the name is already there, not repeated
+    assert category is None
+
+
+@pytest.mark.asyncio
+async def test_a_period_reminder_is_sent_with_its_own_copy_and_buttons(world, monkeypatch):
+    task = _task(str(uuid4()), title="Renda Quarto 2", routine_occurrence_id="occ-1")
+    plan = _plan(task, "due", NOW)
+
+    async def bubble_context(tasks):
+        for t in tasks:
+            t["routine"] = {"occurrence_id": "occ-1", "person": "Rui Costa", "place": "Casa 1",
+                            "kind": "amount", "amount": "500", "paid": "0", "currency": "EUR",
+                            "direction": "income"}
+
+    import app.services.collections as collections_service
+    monkeypatch.setattr(collections_service, "bubble_context", bubble_context)
+
+    await dispatcher._dispatch_for_owner(OWNER, [plan], NOW)
+
+    push = world.pushes[0]
+    assert push["title"] == "Renda Quarto 2 — Rui"
+    assert push["body"] == "€500 · Casa 1"
+    assert push["category_id"] == "orbi.routine.income"
+    assert push["data"]["occurrenceId"] == "occ-1"

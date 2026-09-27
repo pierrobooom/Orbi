@@ -19,7 +19,8 @@ logger = logging.getLogger(__name__)
 # the response for data the dispatcher never reads.
 _DUE_SELECT = (
     "id,owner_id,task_id,kind,trigger_at,snooze_count,"
-    "task_bubbles(id,title,due_at,importance,pressure_score,status,parent_cluster_id)"
+    "task_bubbles(id,title,due_at,importance,pressure_score,status,parent_cluster_id,"
+    "routine_occurrence_id)"
 )
 
 _LIVE_STATE = "pending"

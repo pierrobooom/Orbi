@@ -322,3 +322,34 @@ def test_escalation_respects_quiet_hours():
     chase_at = datetime(2026, 9, 20, 23, 30, tzinfo=UTC)
     escalation = escalation_for(chase_at, BASE_PREFERENCES)
     assert escalation.trigger_at == datetime(2026, 9, 22, 8, 0, tzinfo=UTC)
+
+
+# ---------------------------------------------------------------------------
+# A task's own reminder choices (collection routines)
+# ---------------------------------------------------------------------------
+
+def test_a_task_can_ask_for_a_heads_up_days_before():
+    task = {**make_task(importance=5), "reminder_lead_minutes": 3 * 1440}
+    plans = plan_for_task(task, BASE_PREFERENCES, now=NOW - timedelta(days=5))
+    due = datetime(2026, 9, 20, 15, 0, tzinfo=UTC)
+    assert trigger_for(plans, "lead") == due - timedelta(days=3)
+
+
+def test_zero_switches_a_reminder_off_for_that_task():
+    task = {**make_task(importance=5), "reminder_lead_minutes": 0, "reminder_chase_minutes": 0}
+    assert kinds(plan_for_task(task, BASE_PREFERENCES, now=NOW)) == {"due"}
+
+
+def test_a_task_can_skip_the_on_the_day_reminder():
+    task = {**make_task(importance=5), "reminder_on_due": False}
+    assert "due" not in kinds(plan_for_task(task, BASE_PREFERENCES, now=NOW))
+
+
+def test_a_chase_days_after():
+    task = {**make_task(importance=2), "reminder_chase_minutes": 1440}
+    due = datetime(2026, 9, 20, 15, 0, tzinfo=UTC)
+    assert trigger_for(plan_for_task(task, BASE_PREFERENCES, now=NOW), "chase") == due + timedelta(days=1)
+
+
+def test_no_override_keeps_the_importance_default():
+    assert kinds(plan_for_task(make_task(importance=5), BASE_PREFERENCES, now=NOW)) == {"lead", "due", "chase"}

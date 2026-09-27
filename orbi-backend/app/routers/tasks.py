@@ -31,6 +31,7 @@ from app.services.auth import get_current_user, get_current_user_with_tier
 from app.services.embeddings import generate_embedding
 from app.db.client import get_client
 from app.services import sharing_notify, task_sharing
+from app.services import collections as collections_service
 from app.services.reminder_dispatcher import sync_task_plans
 from app.services.scoring import calculate_pressure_score
 from app.services.task_embedding import regenerate_task_embedding
@@ -61,6 +62,12 @@ async def list_tasks(user_id: UUID = Depends(get_current_user)):
     """
     own = await tasks_db.fetch_tasks_for_user(user_id)
     shared = await tasks_db.fetch_shared_tasks_for_user(user_id)
+    # A collection period's bubble says whose it is and how far it is paid
+    # ("Marta · 33%"). Never allowed to fail the list itself.
+    try:
+        await collections_service.bubble_context(own)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Routine context unavailable for task list: %s", exc)
     return sorted(
         own + shared,
         key=lambda r: float(r.get("pressure_score") or 0),
@@ -314,6 +321,8 @@ async def complete_task(
         )
         background_tasks.add_task(sync_task_plans, {**task, "status": "completed"},
                                   UUID(str(task["owner_id"])))
+        # A collection period: completing it records the payment it implies.
+        await collections_service.on_task_completed(task, UUID(str(task["owner_id"])))
         await sharing_notify.closed(task, shares, UUID(str(task["owner_id"])), user_id)
     elif state["participants"] > 1:
         voter = await users_db.fetch_profile(user_id)
@@ -474,6 +483,14 @@ async def update_task(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=_error("Task not found.", "TASK_NOT_FOUND"),
         )
+
+    # Completed through an edit rather than /complete: same follow-up for a
+    # collection period — its payment is recorded so its history shows it.
+    if changes.get("status") == "completed" and existing.get("status") != "completed":
+        await collections_service.on_task_completed(row, user_id)
+    # Reopened: take back the payment that completing it recorded.
+    elif existing.get("status") == "completed" and changes.get("status") == "active":
+        await collections_service.on_task_reopened(row, user_id)
 
     # Re-embed only when one of the searchable fields actually changed
     # — saves an OpenAI call on status/due_at/importance edits.
