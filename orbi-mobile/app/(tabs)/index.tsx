@@ -57,6 +57,56 @@ interface ParsedVoiceTask {
   confidence?: number;
 }
 
+// ----- The + menu's arc ----------------------------------------------------
+//
+// Every option sits on ONE circle around the +'s centre, so the fan reads as
+// a true arc. The positions used to be three hand-tuned offsets, and moving
+// one to fix an overlap bent the arc out of shape.
+//
+// WHY 90° TO 146° AND NOT A FULL QUARTER TO 180°
+// The mic's halo is only ~99pt left of the + on a 390pt phone (~92pt on a
+// 375pt one). An option level with the + would sit on it. Radius and angles
+// were chosen by checking every button, label, the + and the halo against
+// each other: at 130pt with even 28° steps nothing comes closer than 7pt,
+// and the lowest option clears the halo by 8pt even on a 375pt phone. Any
+// change here should be re-checked the same way.
+//
+// Labels sit on the INSIDE of each circle, between it and the +. Under each
+// circle — the old layout — the middle label landed on the lowest button;
+// the inside is the one side with free space on this arc.
+const ARC_RADIUS = 130;
+const ARC_BUTTON = 46;
+// Circle centre to label centre, towards the +: radius, gap, half a line.
+const ARC_LABEL_INSET = 34;
+const ARC_LABEL_WIDTH = 84;
+// plusWrap is 56pt square, so the +'s centre is 28pt in on both axes.
+const PLUS_CENTRE = 28;
+
+function arcSlot(degrees: number) {
+  const rad = (degrees * Math.PI) / 180;
+  const dx = Math.cos(rad) * ARC_RADIUS; // negative: left of the +
+  const dy = Math.sin(rad) * ARC_RADIUS; // positive: above it
+  return {
+    dx,
+    dy,
+    button: {
+      left: PLUS_CENTRE + dx - ARC_BUTTON / 2,
+      top: PLUS_CENTRE - dy - ARC_BUTTON / 2,
+    },
+    // Relative to the button, so it moves with it.
+    label: {
+      left: ARC_BUTTON / 2 - Math.cos(rad) * ARC_LABEL_INSET - ARC_LABEL_WIDTH / 2,
+      top: ARC_BUTTON / 2 + Math.sin(rad) * ARC_LABEL_INSET - 7,
+    },
+  };
+}
+
+const ARC = {
+  task: arcSlot(90),
+  cluster: arcSlot(118),
+  organise: arcSlot(146),
+};
+
 export default function UniverseScreen() {
   const t = useT();
   const router = useRouter();
@@ -352,29 +402,36 @@ export default function UniverseScreen() {
   const plusIconStyle = useAnimatedStyle(() => ({
     transform: [{ rotate: `${arcProgress.value * 45}deg` }],
   }));
-  // Arc buttons fade + scale in. The translate component carries them
-  // up/up-left from + as the progress climbs, giving the arc reveal.
+  // Arc buttons fade and scale in while travelling out from the + along
+  // their own radius, so the fan visibly opens from the button it belongs
+  // to. At progress 0 each sits on the +; at 1, on its slot.
+  const taskDx = ARC.task.dx;
+  const taskDy = ARC.task.dy;
+  const clusterDx = ARC.cluster.dx;
+  const clusterDy = ARC.cluster.dy;
+  const organiseDx = ARC.organise.dx;
+  const organiseDy = ARC.organise.dy;
   const taskArcStyle = useAnimatedStyle(() => ({
     opacity: arcProgress.value,
     transform: [
-      { translateX: (1 - arcProgress.value) * 22 },
-      { translateY: (1 - arcProgress.value) * 50 },
+      { translateX: (1 - arcProgress.value) * -taskDx },
+      { translateY: (1 - arcProgress.value) * taskDy },
       { scale: 0.6 + arcProgress.value * 0.4 },
     ],
   }));
   const clusterArcStyle = useAnimatedStyle(() => ({
     opacity: arcProgress.value,
     transform: [
-      { translateX: (1 - arcProgress.value) * 60 },
-      { translateY: (1 - arcProgress.value) * 60 },
+      { translateX: (1 - arcProgress.value) * -clusterDx },
+      { translateY: (1 - arcProgress.value) * clusterDy },
       { scale: 0.6 + arcProgress.value * 0.4 },
     ],
   }));
-  // Third point of the arc: level with the +, out to its left.
   const organiseArcStyle = useAnimatedStyle(() => ({
     opacity: arcProgress.value,
     transform: [
-      { translateX: (1 - arcProgress.value) * 72 },
+      { translateX: (1 - arcProgress.value) * -organiseDx },
+      { translateY: (1 - arcProgress.value) * organiseDy },
       { scale: 0.6 + arcProgress.value * 0.4 },
     ],
   }));
@@ -582,31 +639,31 @@ export default function UniverseScreen() {
               made the bottom of the screen read as a toolbar. */}
           <View style={styles.plusWrap} pointerEvents="box-none">
             <Animated.View
-              style={[styles.arcButtonTask, taskArcStyle]}
+              style={[styles.arcButton, ARC.task.button, taskArcStyle]}
               pointerEvents={arcOpen ? "auto" : "none"}
             >
               <Pressable onPress={goNewTask} style={styles.arcInner}>
                 <MaterialIcons name="add-task" size={22} color={colors.ink} />
               </Pressable>
-              <Text style={styles.arcLabel}>{t("Task")}</Text>
+              <Text style={[styles.arcLabel, ARC.task.label]}>{t("Task")}</Text>
             </Animated.View>
             <Animated.View
-              style={[styles.arcButtonCluster, clusterArcStyle]}
+              style={[styles.arcButton, ARC.cluster.button, clusterArcStyle]}
               pointerEvents={arcOpen ? "auto" : "none"}
             >
               <Pressable onPress={goNewCluster} style={styles.arcInner}>
                 <MaterialIcons name="bubble-chart" size={22} color={colors.ink} />
               </Pressable>
-              <Text style={styles.arcLabel}>{t("Cluster")}</Text>
+              <Text style={[styles.arcLabel, ARC.cluster.label]}>{t("Cluster")}</Text>
             </Animated.View>
             <Animated.View
-              style={[styles.arcButtonOrganise, organiseArcStyle]}
+              style={[styles.arcButton, ARC.organise.button, organiseArcStyle]}
               pointerEvents={arcOpen ? "auto" : "none"}
             >
               <Pressable onPress={goOrganise} style={styles.arcInner}>
                 <MaterialIcons name="auto-awesome" size={21} color={colors.ink} />
               </Pressable>
-              <Text style={styles.arcLabel}>{t("Organise")}</Text>
+              <Text style={[styles.arcLabel, ARC.organise.label]}>{t("Organise")}</Text>
             </Animated.View>
 
             <Pressable
@@ -703,7 +760,7 @@ const styles = themed(() => StyleSheet.create({
   // Tertiary action — smaller and quieter than the primary FAB pair
   // so it doesn't compete visually with the + and mic.
   // (Organise used to float here as its own button. It is in the + menu
-  // now — see arcButtonOrganise.)
+  // now — see ARC.)
   fabMic: {
     width: 74,
     height: 74,
@@ -733,31 +790,11 @@ const styles = themed(() => StyleSheet.create({
     elevation: 6,
   },
   fabPlus: { color: colors.canvas, fontSize: 28, fontWeight: "300", marginTop: -2 },
-  // Arc menu — buttons fan up + up-left from the + FAB. Positioned
-  // absolutely relative to fabRow so they sit above the canvas. Each
-  // wrapper holds the circular button + a small label below.
-  // The arc fans out around the + as a quarter circle: straight up,
-  // up-left, and level to the left. Offsets are from plusWrap.
-  arcButtonTask: {
+  // One slot on the arc. Where it sits comes from ARC (see arcSlot).
+  arcButton: {
     position: "absolute",
-    bottom: 74,
-    right: 0,
-    alignItems: "center",
-    width: 56,
-  },
-  arcButtonCluster: {
-    position: "absolute",
-    bottom: 52,
-    right: 62,
-    alignItems: "center",
-    width: 56,
-  },
-  arcButtonOrganise: {
-    position: "absolute",
-    bottom: -6,
-    right: 76,
-    alignItems: "center",
-    width: 64,
+    width: ARC_BUTTON,
+    height: ARC_BUTTON,
   },
   arcInner: {
     width: 46,
@@ -775,10 +812,12 @@ const styles = themed(() => StyleSheet.create({
     elevation: 5,
   },
   arcLabel: {
+    position: "absolute",
+    width: ARC_LABEL_WIDTH,
     color: colors.ink,
     fontSize: 10.5,
+    lineHeight: 14,
     fontWeight: "600",
-    marginTop: 4,
     textAlign: "center",
   },
   // Recording state pill — bottom-center, above the FAB row
