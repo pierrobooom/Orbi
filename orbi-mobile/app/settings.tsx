@@ -18,10 +18,10 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   View,
 } from "react-native";
+import { Switch } from "@/components/switch";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { registerPushDevice } from "@/hooks/usePushRegistration";
@@ -55,7 +55,7 @@ import {
   useHandednessStore,
   type Handedness,
 } from "@/stores/handednessStore";
-import { colors } from "@/theme/colors";
+import { colors, pickerTheme } from "@/theme/colors";
 import { themed } from "@/theme/themed";
 
 // Backend reachability is shown in a dedicated Status section. Lives
@@ -596,7 +596,7 @@ export default function SettingsScreen() {
                   )}
                   mode="time"
                   display={Platform.OS === "ios" ? "spinner" : "default"}
-                  themeVariant="dark"
+                  themeVariant={pickerTheme()}
                   // Same migration off the deprecated `onChange`
                   // multiplexer as new-task.tsx and voice-confirm.tsx.
                   onValueChange={(_event, date) => {

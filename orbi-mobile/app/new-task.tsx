@@ -13,57 +13,21 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
+import { TextInput } from "@/components/text-input";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ScreenHeader } from "@/components/screen-header";
 import { useT } from "@/i18n";
+import { deriveLabel } from "@/services/bubbleLabel";
 import { ApiError, createTask } from "@/services/api";
 import { useUniverseStore } from "@/stores/universeStore";
-import { colors } from "@/theme/colors";
+import { colors, pickerTheme } from "@/theme/colors";
 import { themed } from "@/theme/themed";
 import { cue } from "@/services/feedback";
 
 const SYNTHETIC_DRIFT_ID = "synthetic-drift";
-
-// Same shortLabel logic as the canvas — used to seed the label field
-// with a reasonable default the user can keep or overwrite.
-const STOP_WORDS = new Set([
-  "a", "an", "the", "to", "from", "about", "of", "for", "with",
-  "and", "or", "in", "on", "at", "by", "as", "is", "was", "are",
-  "be", "been", "this", "that", "these", "those", "my", "your",
-  "i", "im", "i'm", "ive", "i've",
-]);
-const LOW_SIGNAL_VERBS = new Set([
-  "call", "buy", "go", "send", "email", "remind", "make", "do",
-  "get", "have", "take", "pick", "drop", "visit", "see", "check",
-  "need", "want", "should", "must", "gotta", "going", "gonna",
-]);
-
-function deriveLabel(title: string, maxChars = 14): string {
-  const trimmed = (title ?? "").trim();
-  if (!trimmed) return "";
-  if (trimmed.length <= maxChars) return trimmed;
-  const words = trimmed.split(/\s+/);
-  const content = words.filter((w) => {
-    const lower = w.toLowerCase().replace(/[^a-z0-9']/g, "");
-    if (!lower) return false;
-    if (STOP_WORDS.has(lower)) return false;
-    if (LOW_SIGNAL_VERBS.has(lower)) return false;
-    return true;
-  });
-  const pickFrom = content.length > 0 ? content : words;
-  let out = "";
-  for (const w of pickFrom) {
-    const candidate = out ? `${out} ${w}` : w;
-    if (candidate.length > maxChars) break;
-    out = candidate;
-  }
-  if (!out) out = trimmed.slice(0, maxChars);
-  return out;
-}
 
 export default function NewTaskScreen() {
   const t = useT();
@@ -191,7 +155,14 @@ export default function NewTaskScreen() {
                 {dueAt ? dueAt.toLocaleString() : "No due date"}
               </Text>
             </Pressable>
-            {dueAt ? (
+            {/* While the spinner is open, Concluído sits HERE, in the field's own
+                row, instead of under the spinner — where the screen's fixed
+                footer covered it and there was no visible way to close it. */}
+            {Platform.OS === "ios" && showPicker ? (
+              <Pressable onPress={() => setShowPicker(false)} hitSlop={8} style={styles.clearDue}>
+                <Text style={styles.pickerDoneText}>{t("Done")}</Text>
+              </Pressable>
+            ) : dueAt ? (
               <Pressable
                 onPress={() => setDueAt(null)}
                 hitSlop={8}
@@ -207,7 +178,7 @@ export default function NewTaskScreen() {
               value={dueAt ?? new Date()}
               mode="datetime"
               display={Platform.OS === "ios" ? "spinner" : "default"}
-              themeVariant="dark"
+              themeVariant={pickerTheme()}
               // Split callbacks replace the deprecated `onChange`, which
               // multiplexed select/dismiss through one handler keyed on
               // event.type. Android closes the picker after a selection;
@@ -220,11 +191,6 @@ export default function NewTaskScreen() {
             />
           ) : null}
 
-          {Platform.OS === "ios" && showPicker ? (
-            <Pressable onPress={() => setShowPicker(false)} style={styles.doneRow}>
-              <Text style={styles.doneText}>{t("Done")}</Text>
-            </Pressable>
-          ) : null}
 
           {error ? <Text style={styles.error}>{error}</Text> : null}
         </ScrollView>
@@ -325,6 +291,7 @@ const styles = themed(() => StyleSheet.create({
   clearDue: { paddingHorizontal: 6 },
   clearDueText: { color: colors.inkDim, fontSize: 13 },
   doneRow: { alignSelf: "flex-end", paddingVertical: 8, paddingHorizontal: 12 },
+  pickerDoneText: { color: colors.ink, fontSize: 15, fontWeight: "800" },
   doneText: { color: colors.accent, fontSize: 14, fontWeight: "600" },
   error: { color: colors.overdue, fontSize: 13, marginTop: 12 },
   footer: { paddingHorizontal: 20, paddingVertical: 12 },

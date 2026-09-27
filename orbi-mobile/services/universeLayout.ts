@@ -18,6 +18,8 @@
 import type { Bubble, Cluster, ClusterKind } from "@/components/universe/types";
 import { colors } from "@/theme/colors";
 import type { ServerCluster, ServerTask } from "@/services/api";
+import { translate } from "@/i18n";
+import { deriveLabel } from "@/services/bubbleLabel";
 
 // ID for the synthetic catch-all cluster. Doesn't exist on the backend.
 // Exported because "is this the Adrift catch-all" must be asked by id
@@ -99,51 +101,40 @@ function spreadPosition(
   };
 }
 
+/** What a collection period's bubble adds: its second line and ring.
+ *
+ * The line answers the two things the bubble alone cannot: whose period it
+ * is (a house has several rooms paying "Renda") and where it stands — days
+ * late, how much is paid, or the day it is due.
+ */
+function periodBits(task: ServerTask, now: Date): Pick<Bubble, "progress" | "subtitle"> {
+  const r = task.routine;
+  if (!r) return {};
+  const who = (r.person ?? "").split(" ")[0];
+  let state = "";
+  const pct = r.pct ?? 0;
+  if (task.due_at && new Date(task.due_at) < now) {
+    const days = Math.floor((now.getTime() - new Date(task.due_at).getTime()) / 86_400_000);
+    state = days >= 1
+      ? (days === 1 ? translate("1 day") : translate("{n} days", { n: days }))
+      : translate("today");
+  } else if (r.kind === "amount" && pct > 0) {
+    state = `${pct}%`;
+  } else if (task.due_at) {
+    state = translate("day {n}", { n: new Date(task.due_at).getDate() });
+  }
+  return {
+    subtitle: [who, state].filter(Boolean).join(" · ") || undefined,
+    progress: r.kind === "amount" && pct > 0 && pct < 100 ? pct / 100 : undefined,
+  };
+}
+
 function isOverdue(task: ServerTask, now: Date): boolean {
   if (task.status !== "active") return false;
   if (!task.due_at) return false;
   return new Date(task.due_at) < now;
 }
 
-// Stop / weak-verb sets used by the shortLabel fallback so the
-// derivation matches the server-side derive_label_from_title.
-const _LABEL_STOP_WORDS = new Set([
-  "a", "an", "the", "to", "from", "about", "of", "for", "with",
-  "and", "or", "in", "on", "at", "by", "as", "is", "was", "are",
-  "be", "been", "this", "that", "these", "those", "my", "your",
-  "i", "im", "i'm", "ive", "i've",
-]);
-const _LABEL_LOW_SIGNAL_VERBS = new Set([
-  "call", "buy", "go", "send", "email", "remind", "make", "do",
-  "get", "have", "take", "pick", "drop", "visit", "see", "check",
-  "need", "want", "should", "must", "gotta", "going", "gonna",
-]);
-
-/** Server-style shortLabel fallback. Only invoked when a task has no
- * stored label (pre-0005 rows). New tasks get their label from the
- * server which uses the equivalent Python derive_label_from_title. */
-function deriveLabel(title: string, maxChars = 14): string {
-  const trimmed = (title ?? "").trim();
-  if (!trimmed) return "";
-  if (trimmed.length <= maxChars) return trimmed;
-  const words = trimmed.split(/\s+/);
-  const content = words.filter((w) => {
-    const lower = w.toLowerCase().replace(/[^a-z0-9']/g, "");
-    if (!lower) return false;
-    if (_LABEL_STOP_WORDS.has(lower)) return false;
-    if (_LABEL_LOW_SIGNAL_VERBS.has(lower)) return false;
-    return true;
-  });
-  const pickFrom = content.length > 0 ? content : words;
-  let out = "";
-  for (const w of pickFrom) {
-    const candidate = out ? `${out} ${w}` : w;
-    if (candidate.length > maxChars) break;
-    out = candidate;
-  }
-  if (!out) out = trimmed.slice(0, maxChars);
-  return out;
-}
 
 // Golden-angle spiral so non-dominant bubbles spread naturally without
 // piling up at any one angle. The dominant sits at (0, 0); index 1+
@@ -306,6 +297,7 @@ export function layoutUniverse(
         clusterId: SEARCH_RESULTS_ID,
         pressureScore: task.pressure_score,
         overdue: isOverdue(task, now),
+        ...periodBits(task, now),
         isDominant: false,
         offsetX: offset.x,
         offsetY: offset.y,
@@ -353,6 +345,7 @@ export function layoutUniverse(
         pressureScore: t.pressure_score,
         overdue: isOverdue(t, now),
         shared: Boolean(t.shared_with_me),
+        ...periodBits(t, now),
         // No dominant in drilled view — the cluster name is in the
         // header overlay, every task bubble shows its own label only.
         isDominant: false,

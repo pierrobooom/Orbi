@@ -33,6 +33,7 @@ import { useEffect } from "react";
 
 import {
   completeTask,
+  settlePeriod,
   markNotificationAnswered,
   snoozeNotification,
   updateTask,
@@ -46,12 +47,19 @@ import { useUniverseStore } from "@/stores/universeStore";
 const CATEGORY_LEAD = "orbi.task.lead";
 const CATEGORY_DUE = "orbi.task.due";
 const CATEGORY_CHASE = "orbi.task.chase";
+// A collection period with money: "Recebido / Recebi parte…" for money
+// coming in, "Pago / Paguei parte…" for money going out (mockup screen 9).
+// Must match _ROUTINE_CATEGORIES in services/reminder_dispatcher.py.
+const CATEGORY_ROUTINE_INCOME = "orbi.routine.income";
+const CATEGORY_ROUTINE_EXPENSE = "orbi.routine.expense";
 
 const ACTION_DONE = "done";
 const ACTION_SNOOZE = "snooze";
 const ACTION_SNOOZE_TOMORROW = "snooze_tomorrow";
 const ACTION_OPEN = "open";
 const ACTION_REPLY = "reply";
+const ACTION_SETTLE = "settle";
+const ACTION_PART = "part";
 
 const SNOOZE_MINUTES = 60;
 
@@ -82,6 +90,9 @@ function minutesUntilTomorrowMorning(): number {
 interface ReminderData {
   kind?: string;
   planId?: string;
+  // Only on a collection period's reminder.
+  occurrenceId?: string;
+  routineId?: string;
   taskId?: string;
 }
 
@@ -170,6 +181,20 @@ export async function registerNotificationCategories(): Promise<void> {
         snoozeTomorrow,
         pickTime,
         reply,
+      ]),
+      // Money periods. "Recebido" settles what is left; "Recebi parte…"
+      // opens the payment sheet, because an amount needs typing.
+      Notifications.setNotificationCategoryAsync(CATEGORY_ROUTINE_INCOME, [
+        { identifier: ACTION_SETTLE, buttonTitle: translate("Received"), options: quietly },
+        { identifier: ACTION_PART, buttonTitle: translate("Received part…"), options: { opensAppToForeground: true } },
+        snoozeTomorrow,
+        pickTime,
+      ]),
+      Notifications.setNotificationCategoryAsync(CATEGORY_ROUTINE_EXPENSE, [
+        { identifier: ACTION_SETTLE, buttonTitle: translate("Paid"), options: quietly },
+        { identifier: ACTION_PART, buttonTitle: translate("Paid part…"), options: { opensAppToForeground: true } },
+        snoozeTomorrow,
+        pickTime,
       ]),
     ]);
   } catch (e) {
@@ -263,7 +288,9 @@ export async function dismissDeliveredFor(taskId: string): Promise<void> {
  */
 function reportFailure(action: string, taskId: string): void {
   const title =
-    action === ACTION_DONE
+    action === ACTION_SETTLE
+      ? translate("Couldn't record the payment")
+      : action === ACTION_DONE
       ? translate("Couldn't mark this task done")
       : action === ACTION_REPLY
         ? translate("Couldn't save your reply")
@@ -285,7 +312,21 @@ export async function handleNotificationResponse(
   const action = response.actionIdentifier;
 
   try {
-    if (action === ACTION_DONE) {
+    if (action === ACTION_SETTLE) {
+      // Pays whatever is left of the period (or ticks it done), which also
+      // completes its bubble and clears its reminders on the server.
+      if (!data.occurrenceId) return;
+      await settlePeriod(data.occurrenceId);
+    } else if (action === ACTION_PART) {
+      await dismissDeliveredFor(taskId);
+      if (data.routineId) {
+        router.navigate("/(tabs)" as Href);
+        router.push(`/collection/pay?routine=${data.routineId}` as Href);
+      } else {
+        await openTaskInUniverse(taskId);
+      }
+      return;
+    } else if (action === ACTION_DONE) {
       // The same completion the app's own Done button uses. Writing
       // status: "completed" directly skipped the vote on a shared task and
       // closed it for everyone from one lock screen.

@@ -23,11 +23,11 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
-  TextInput,
   View,
 } from "react-native";
+import { Switch } from "@/components/switch";
+import { TextInput } from "@/components/text-input";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ActionBar } from "@/components/action-bar";
@@ -44,7 +44,7 @@ import {
   type Cadence,
   type RecurringTransaction,
 } from "@/services/api";
-import { colors } from "@/theme/colors";
+import { colors, pickerTheme } from "@/theme/colors";
 import { themed } from "@/theme/themed";
 
 const CADENCES: { value: Cadence; label: string }[] = [
@@ -327,7 +327,7 @@ export default function RecurringScreen() {
                     value={startOn}
                     mode="date"
                     display="compact"
-                    themeVariant="dark"
+                    themeVariant={pickerTheme()}
                     onChange={(_event, date) => {
                       if (date) setStartOn(date);
                     }}
@@ -594,7 +594,7 @@ export default function RecurringScreen() {
                 value={draftDate}
                 mode="date"
                 display="spinner"
-                themeVariant="dark"
+                themeVariant={pickerTheme()}
                 onChange={(_event, date) => {
                   if (date) setDraftDate(date);
                 }}

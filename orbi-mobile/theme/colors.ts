@@ -126,4 +126,14 @@ export function currentTheme(): ThemeName {
   return current;
 }
 
+/** The native date picker's colour scheme, matching the app's theme.
+ *
+ * Every picker used to hard-code "dark", from when the app was dark only.
+ * In Day mode a dark picker draws white text on the light sheet, so the
+ * spinner looked blank and broken — you could not see the date at all.
+ */
+export function pickerTheme(): "dark" | "light" {
+  return current === "night" ? "dark" : "light";
+}
+
 export type ColorKey = keyof Palette;

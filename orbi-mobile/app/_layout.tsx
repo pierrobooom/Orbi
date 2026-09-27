@@ -246,6 +246,31 @@ export default function RootLayout() {
                 name="breakdown"
                 options={{ presentation: "modal", headerShown: false }}
               />
+              {/* Collections: the collection, resource and routine screens are
+                  pushed like pages; the editors come up over them; paying is a
+                  sheet, as in the mockups. */}
+              <Stack.Screen name="collection/[id]" options={{ headerShown: false }} />
+              <Stack.Screen name="collection/resource/[id]" options={{ headerShown: false }} />
+              <Stack.Screen name="collection/routine/[id]" options={{ headerShown: false }} />
+              <Stack.Screen
+                name="collection/pay"
+                // iOS's standard sheet, like the task and editor screens —
+                // NOT a fixed-height formSheet. With a fixed detent, opening
+                // the keyboard ("Outro") pushed the sheet up while its content
+                // was also inset for the keyboard, and the content ended up
+                // outside the visible area: a blank page. The standard sheet
+                // looks the same (rounded top, dimmed page behind, swipe down
+                // to close) and handles the keyboard like every other form.
+                options={{ presentation: "modal", headerShown: false }}
+              />
+              <Stack.Screen
+                name="collection/routine-editor"
+                options={{ presentation: "modal", headerShown: false }}
+              />
+              <Stack.Screen
+                name="collection/resource-editor"
+                options={{ presentation: "modal", headerShown: false }}
+              />
 
             </Stack>
           </AuthGate>

@@ -49,6 +49,12 @@ export interface Bubble {
    * private one — deleting or ignoring somebody else's task by accident is
    * a social mistake, not just a data one. */
   shared?: boolean;
+  /** A collection period part-paid: 0..1, drawn as a green ring round the
+   * bubble. Absent when nothing is paid yet or the period is a tick-off. */
+  progress?: number;
+  /** A collection period's second line: whose it is and where it stands —
+   * "Rui · 2 dias", "Marta · 33%", "João · dia 20". */
+  subtitle?: string;
   // Starting offset (pixels) from the cluster center. Physics takes
   // over after the first frame.
   /** An absolute position the user chose, as a 0..1 fraction of the canvas.
@@ -82,6 +88,31 @@ export interface Bubble {
   // positioned inside the synthetic search-results cluster — the user
   // can tell at a glance which cluster each match came from.
   color?: string;
+}
+
+/** Breathing room kept between a bubble and the top or bottom of the canvas. */
+export const EDGE_MARGIN = 8;
+
+/** Keep a bubble's centre far enough from the top and bottom that all of it
+ * is visible. The canvas ends at the header above and the dock below, and a
+ * bubble past either edge was cut off — it looked stuck behind a box.
+ * Sideways is left alone: the universe pans horizontally. */
+export function clampY(y: number, r: number, height: number): number {
+  "worklet";
+  const lo = r + EDGE_MARGIN;
+  const hi = height - r - EDGE_MARGIN;
+  if (hi < lo) return height / 2;
+  return Math.min(hi, Math.max(lo, y));
+}
+
+/** The same limit sideways: the universe is wider than the screen and pans,
+ * so its ends sit `overshoot` pixels past each side of the screen. */
+export function clampX(x: number, r: number, width: number, overshoot: number): number {
+  "worklet";
+  const lo = -overshoot + r + EDGE_MARGIN;
+  const hi = width + overshoot - r - EDGE_MARGIN;
+  if (hi < lo) return width / 2;
+  return Math.min(hi, Math.max(lo, x));
 }
 
 /** One bubble's live simulation state, shared between the canvas that draws

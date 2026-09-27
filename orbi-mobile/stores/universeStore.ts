@@ -52,6 +52,7 @@ interface UniverseState {
   replaceTask: (task: ServerTask) => void;
   removeTask: (taskId: string) => void;
   getServerTask: (taskId: string) => ServerTask | undefined;
+  rememberPlacement: (kind: "cluster" | "task", id: string, x: number, y: number) => void;
   enterCluster: (clusterId: string) => void;
   exitCluster: () => void;
   setSearchResults: (query: string, taskIds: string[]) => void;
@@ -158,6 +159,30 @@ export const useUniverseStore = create<UniverseState>((set, get) => ({
   },
 
   getServerTask: (taskId) => get().serverTasks.find((t) => t.id === taskId),
+
+  // Where the user dropped a bubble, kept in the local copy the layout is
+  // rebuilt from. The drop was only ever saved to the server, so stepping
+  // into a cluster and back rebuilt the top level from the OLD positions and
+  // every moved cluster jumped back — until the next full refresh.
+  //
+  // Deliberately no layout pass here: the bubble is already where the user
+  // put it, and re-laying out now would reset every other bubble's drift.
+  // The next rebuild (entering or leaving a cluster) reads the new spot.
+  rememberPlacement: (kind, id, x, y) => {
+    if (kind === "cluster") {
+      set({
+        serverClusters: get().serverClusters.map((c) =>
+          c.id === id ? { ...c, canvas_x: x, canvas_y: y } : c,
+        ),
+      });
+    } else {
+      set({
+        serverTasks: get().serverTasks.map((t) =>
+          t.id === id ? { ...t, canvas_x: x, canvas_y: y } : t,
+        ),
+      });
+    }
+  },
 
   enterCluster: (clusterId) => {
     // Switching to drilled view — rebuild layout with the active id so

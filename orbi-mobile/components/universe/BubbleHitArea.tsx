@@ -43,6 +43,7 @@ import Animated, {
 } from "react-native-reanimated";
 
 import type { PhysicsState } from "./types";
+import { clampY } from "./types";
 import { cue } from "@/services/feedback";
 
 interface Props {
@@ -181,8 +182,12 @@ export default function BubbleHitArea({
       // point, so the bubble now orbits here instead of drifting back. Any
       // velocity is discarded — a bubble that was placed should stay put,
       // not coast.
+      // Dropped past the top or bottom, the bubble's new home is pulled in
+      // until all of it shows; the spring then glides it back on screen
+      // rather than leaving half of it hidden under the header or dock.
+      const homeY = clampY(b.y, b.r, canvasHeight);
       next[i] = moved.value
-        ? { ...b, dragging: 0, vx: 0, vy: 0, tx: b.x, ty: b.y, placed: 1 }
+        ? { ...b, dragging: 0, vx: 0, vy: 0, tx: b.x, ty: homeY, placed: 1 }
         : { ...b, dragging: 0 };
       physics.value = next;
 
@@ -192,7 +197,7 @@ export default function BubbleHitArea({
         // reject and the user would experience as the placement not sticking.
         if (onMoved) {
           const nx = Math.max(0, Math.min(1, b.x / canvasWidth));
-          const ny = Math.max(0, Math.min(1, b.y / canvasHeight));
+          const ny = Math.max(0, Math.min(1, homeY / canvasHeight));
           runOnJS(onMoved)(nx, ny);
         }
       } else if (onLongPress) {

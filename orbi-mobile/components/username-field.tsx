@@ -16,9 +16,9 @@ import {
   Pressable,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
+import { TextInput } from "@/components/text-input";
 
 import { useT } from "@/i18n";
 import { ApiError, formatHandle, setUsername } from "@/services/api";

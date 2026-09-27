@@ -25,6 +25,7 @@
 
 import Feather from "@expo/vector-icons/Feather";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
+import { useRouter, type Href } from "expo-router";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   type LayoutChangeEvent,
@@ -44,6 +45,11 @@ import {
   Circle,
   DashPathEffect,
   Group,
+  Path,
+  RadialGradient,
+  RoundedRect,
+  Skia,
+  vec,
 } from "@shopify/react-native-skia";
 import Animated, {
   Easing,
@@ -60,17 +66,20 @@ import Animated, {
   type SharedValue,
 } from "react-native-reanimated";
 
-import { useT } from "@/i18n";
+import { translate, useT } from "@/i18n";
 import { useReduceMotion } from "@/hooks/useReduceMotion";
 import { colors, currentTheme } from "@/theme/colors";
 import { themed } from "@/theme/themed";
 import { BREATHE_MS, BREATHE_SCALE, PULSE_MS } from "@/theme/motion";
 import { useUniverseStore } from "@/stores/universeStore";
 import { DRIFT_ID } from "@/services/universeLayout";
+import { getCollection } from "@/services/api";
+import { money, monthName } from "@/components/collection/kit";
 import BubbleHitArea from "./BubbleHitArea";
 import BubbleLabel from "./BubbleLabel";
 import StarField from "./StarField";
 import type { Cluster, Bubble, PhysicsState } from "./types";
+import { clampX, clampY, EDGE_MARGIN } from "./types";
 
 function pressureToRadius(p: number): number {
   "worklet";
@@ -236,6 +245,19 @@ function radiusFor(b: Bubble, crowding: number = 1): number {
   return base * crowding;
 }
 
+// How close (pt) a dragged bubble must come to an edge before it glows, and
+// how far along the edge the glow spreads from the bubble.
+const GLOW_RANGE = 80;
+const GLOW_RADIUS = 130;
+
+/** "#14161C" + alpha -> "rgba(20,22,28,a)", for a gradient that fades out. */
+function withAlpha(hex: string, alpha: number): string {
+  const h = hex.replace("#", "");
+  const full = h.length === 3 ? h.split("").map((c) => c + c).join("") : h.slice(0, 6);
+  const n = parseInt(full, 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`;
+}
+
 function buildInitialStates(
   bubbles: Bubble[],
   clusters: Cluster[],
@@ -252,7 +274,10 @@ function buildInitialStates(
     // screen rather than at whatever pixel it happened to be dropped on.
     const placed = b.placedX != null && b.placedY != null;
     const tx = placed ? b.placedX! * width : cx + b.offsetX;
-    const ty = placed ? b.placedY! * height : cy + b.offsetY;
+    // Pulled fully on screen: a placement saved before the edge limit
+    // existed (or a layout offset near the edge) would otherwise start half
+    // hidden under the header or the dock.
+    const ty = clampY(placed ? b.placedY! * height : cy + b.offsetY, radiusFor(b, crowding), height);
     return {
       x: tx,
       y: ty,
@@ -356,6 +381,36 @@ export default function BubbleCanvas({
   const focusedCluster = activeClusterId
     ? clusters.find((c) => c.id === activeClusterId) ?? null
     : null;
+  // Is the cluster we are inside a collection? Then its resources and their
+  // routines are one tap away ("Abrir coleção →", mockup screen 2).
+  const router = useRouter();
+  const focusedIsCollection = useUniverseStore((s) =>
+    Boolean(activeClusterId && s.serverClusters.find((c) => c.id === activeClusterId)?.is_collection),
+  );
+  // The month's money under the collection's name: "Outubro · €1.150 de
+  // €2.850". Fetched when you step inside, and again whenever the bubbles
+  // change (a payment closes one), so it never lags what the bubbles show.
+  const [collectionLine, setCollectionLine] = useState<string | null>(null);
+  useEffect(() => {
+    if (!activeClusterId || !focusedIsCollection) {
+      setCollectionLine(null);
+      return;
+    }
+    let cancelled = false;
+    getCollection(activeClusterId)
+      .then((c) => {
+        if (cancelled) return;
+        const totals = c.totals.income.count > 0 ? c.totals.income : c.totals.expense.count > 0 ? c.totals.expense : null;
+        const month = monthName(c.month, true);
+        setCollectionLine(
+          totals
+            ? `${month[0].toUpperCase()}${month.slice(1)} · ${translate("{paid} of {total}", { paid: money(totals.paid), total: money(totals.target) })}`
+            : null,
+        );
+      })
+      .catch(() => { if (!cancelled) setCollectionLine(null); });
+    return () => { cancelled = true; };
+  }, [activeClusterId, focusedIsCollection, bubbles]);
 
   // ----- Zoom transition --------------------------------------------------
   // We rely on Reanimated layout animations. The wrapping Animated.View
@@ -654,9 +709,14 @@ export default function BubbleCanvas({
             <View style={styles.backCircle}>
               <Feather name="chevron-left" size={19} color={colors.ink} />
             </View>
-            <Text style={styles.backOverlayText} numberOfLines={1}>
-              {focusedCluster.name}
-            </Text>
+            <View style={styles.backOverlayTitles}>
+              <Text style={styles.backOverlayText} numberOfLines={1}>
+                {focusedCluster.name}
+              </Text>
+              {collectionLine ? (
+                <Text style={styles.backOverlaySub} numberOfLines={1}>{collectionLine}</Text>
+              ) : null}
+            </View>
           </Pressable>
           {/* Pencil sits next to the cluster name so editing the
               cluster you're inside is discoverable (long-press from
@@ -673,6 +733,16 @@ export default function BubbleCanvas({
             </Pressable>
           ) : null}
         </View>
+      ) : null}
+      {focusedCluster && focusedIsCollection ? (
+        <Pressable
+          onPress={() => router.push(`/collection/${focusedCluster.id}` as Href)}
+          style={styles.collectionChip}
+          hitSlop={6}
+          accessibilityRole="button"
+        >
+          <Text style={styles.collectionChipText}>{t("Open collection")} →</Text>
+        </Pressable>
       ) : null}
     </View>
   );
@@ -738,6 +808,16 @@ function BubbleField({
   // directly — bubble visual, label, and tap target stay aligned at
   // the same screen position regardless of how wide the canvas is.
   const canvasLeftOffset = (starFieldWidth - width) / 2;
+  // How far the universe reaches past each side of the screen.
+  const universeOvershoot = (universeWidth - width) / 2;
+  // The edge glow. Invisible at rest; while a bubble is dragged towards an
+  // edge, that part of the edge lights up where the bubble is, and breathes.
+  // glowLevel is 0..1 (how close the held bubble is to the nearest edge),
+  // glowX/glowY the point on the edge nearest it, in canvas coordinates.
+  const glowLevel = useSharedValue(0);
+  const glowX = useSharedValue(0);
+  const glowY = useSharedValue(0);
+  const glowCentre = useDerivedValue(() => vec(glowX.value, glowY.value));
   // Universe sits centered within the star field, so bubbles draw at
   // (physics.x + canvasLeftOffset). This is the screen→canvas shift.
   const bubbleDrawOffsetX = canvasLeftOffset;
@@ -806,6 +886,10 @@ function BubbleField({
   }, [initial, bubbles, physics]);
 
   const tickMs = useSharedValue<number>(0);
+  // Breathing: the lit patch swells and fades on a ~2s cycle while it shows.
+  const glowOpacity = useDerivedValue(
+    () => glowLevel.value * (0.6 + 0.4 * Math.sin(tickMs.value / 320)),
+  );
 
   useFrameCallback((info) => {
     "worklet";
@@ -889,6 +973,57 @@ function BubbleField({
       }
     }
 
+    // Walls at the universe's edges — the frame drawn below. Collisions and
+    // the orbit can nudge a bubble past an edge, where the header or dock
+    // hides part of it (or, sideways, past the end of the universe); this
+    // keeps every free bubble inside the frame. A held bubble is left under
+    // the finger — its home is pulled back in when it is let go.
+    let held = -1;
+    for (let i = 0; i < next.length; i++) {
+      const b = next[i];
+      if (b.dragging) {
+        held = i;
+        continue;
+      }
+      // The home point is kept inside outright; the bubble itself is eased
+      // back rather than snapped, so one let go past the edge glides in
+      // over a few frames instead of jumping.
+      b.tx = clampX(b.tx, b.r, width, universeOvershoot);
+      b.ty = clampY(b.ty, b.r, canvasHeight);
+      const y = clampY(b.y, b.r, canvasHeight);
+      if (y !== b.y) {
+        b.y += (y - b.y) * Math.min(0.25 * step, 1);
+        b.vy *= 0.5;
+      }
+      const x = clampX(b.x, b.r, width, universeOvershoot);
+      if (x !== b.x) {
+        b.x += (x - b.x) * Math.min(0.25 * step, 1);
+        b.vx *= 0.5;
+      }
+    }
+    // Which edge the held bubble is nearest, and how near. The glow sits on
+    // that edge at the bubble's position and grows as the gap closes, from
+    // nothing at GLOW_RANGE away to full at the wall. Eased so it fades in
+    // and out rather than switching.
+    let glowTarget = 0;
+    if (held >= 0) {
+      const h = next[held];
+      const left = h.x - h.r + universeOvershoot;
+      const right = width + universeOvershoot - (h.x + h.r);
+      const top = h.y - h.r;
+      const bottom = canvasHeight - (h.y + h.r);
+      let gap = left;
+      let px = -universeOvershoot;
+      let py = h.y;
+      if (right < gap) { gap = right; px = width + universeOvershoot; py = h.y; }
+      if (top < gap) { gap = top; px = h.x; py = 0; }
+      if (bottom < gap) { gap = bottom; px = h.x; py = canvasHeight; }
+      glowTarget = Math.max(0, Math.min(1, 1 - gap / GLOW_RANGE));
+      glowX.value = px + canvasLeftOffset;
+      glowY.value = py;
+    }
+    glowLevel.value += (glowTarget - glowLevel.value) * 0.2 * step;
+
     physics.value = next;
   });
 
@@ -909,6 +1044,29 @@ function BubbleField({
         {currentTheme() === "night" ? (
           <StarField width={starFieldWidth} height={canvasHeight} tickMs={tickMs} />
         ) : null}
+        {/* The universe's edge, shown only where and when it matters. At
+            rest there is nothing: a permanent outline was heavy, and read as
+            clutter around the + menu. While a bubble is dragged towards an
+            edge, the stretch of edge nearest it lights up — a soft patch
+            centred on the bubble, fading out along the line — and breathes
+            until the bubble moves away or is let go. The walls in the loop
+            above are this line, half the edge margin inside it. */}
+        <RoundedRect
+          x={canvasLeftOffset - universeOvershoot + EDGE_MARGIN / 2}
+          y={EDGE_MARGIN / 2}
+          width={universeWidth - EDGE_MARGIN}
+          height={canvasHeight - EDGE_MARGIN}
+          r={24}
+          style="stroke"
+          strokeWidth={2.5}
+          opacity={glowOpacity}
+        >
+          <RadialGradient
+            c={glowCentre}
+            r={GLOW_RADIUS}
+            colors={[withAlpha(colors.accent, 0.85), withAlpha(colors.accent, 0)]}
+          />
+        </RoundedRect>
         {bubbles.map((b, i) => {
           const cluster = clusters.find((c) => c.id === b.clusterId)!;
           return (
@@ -958,7 +1116,7 @@ function BubbleField({
             fallback={initial[i]}
             physics={physics}
             label={showAsDominant ? cluster.name : label}
-            subtitle={showAsDominant ? label : undefined}
+            subtitle={showAsDominant ? label : b.subtitle}
             size={showAsDominant ? "dominant" : "normal"}
           />
         );
@@ -986,6 +1144,18 @@ function BubbleField({
 
 const styles = themed(() => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas, position: "relative" },
+  collectionChip: {
+    position: "absolute",
+    top: 62,
+    left: 20,
+    backgroundColor: colors.panel,
+    borderColor: colors.line,
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 13,
+    paddingVertical: 7,
+  },
+  collectionChipText: { color: colors.ink, fontSize: 13, fontWeight: "700" },
   backOverlay: {
     position: "absolute",
     top: 10,
@@ -1011,6 +1181,8 @@ const styles = themed(() => StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  backOverlayTitles: { flexShrink: 1 },
+  backOverlaySub: { color: colors.inkDim, fontSize: 12.5, marginTop: 1 },
   backOverlayText: {
     color: colors.ink,
     fontSize: 16,
@@ -1201,6 +1373,25 @@ const BubbleNode: React.FC<BubbleProps> = ({
   // look like a rendering difference.
   const sharedRingRadius = useDerivedValue(() => radius.value + 4);
 
+  // A part-paid period's ring: how much of this period's amount is in, as
+  // an arc from twelve o'clock. Built only for bubbles that have one — the
+  // path is remade as the bubble moves, which is cheap for the handful of
+  // part-paid periods and would be waste on every other bubble.
+  const progress = bubble.progress;
+  const hasProgress = typeof progress === "number" && progress > 0 && progress < 1;
+  const progressRadius = useDerivedValue(() => radius.value + 6);
+  const progressArc = useDerivedValue(() => {
+    const path = Skia.Path.Make();
+    if (!hasProgress) return path;
+    const r = radius.value + 6;
+    path.addArc(
+      { x: cx.value - r, y: cy.value - r, width: r * 2, height: r * 2 },
+      -90,
+      360 * (progress as number),
+    );
+    return path;
+  });
+
   // Adrift is drawn as an empty dashed ring. It is the catch-all for
   // things that belong nowhere yet — a place, not a subject — and a solid
   // grey ball gave it the same visual weight as Work or Health, as though
@@ -1240,6 +1431,28 @@ const BubbleNode: React.FC<BubbleProps> = ({
           color={colors.overdue}
           opacity={haloOpacity}
         />
+      ) : null}
+      {/* A part-paid period: a faint full track and the green arc of what
+          is paid. Outside the bubble, like the shared ring. */}
+      {hasProgress ? (
+        <Group>
+          <Circle
+            cx={cx}
+            cy={cy}
+            r={progressRadius}
+            color={colors.health}
+            opacity={0.18}
+            style="stroke"
+            strokeWidth={5}
+          />
+          <Path
+            path={progressArc}
+            color={colors.health}
+            style="stroke"
+            strokeWidth={5}
+            strokeCap="round"
+          />
+        </Group>
       ) : null}
       {/* Shared-task ring. Inside the halo, outside the bubble. */}
       {shared ? (

@@ -23,9 +23,9 @@ import {
   Pressable,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
+import { TextInput } from "@/components/text-input";
 
 import { ActionBar } from "@/components/action-bar";
 import { translate, useT } from "@/i18n";

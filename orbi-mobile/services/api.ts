@@ -948,6 +948,27 @@ export interface ServerTask {
   visibility: ServerVisibility;
   created_at: string;
   updated_at: string;
+  /** Set when this bubble is one period of a collection routine
+   * (the October rent for Quarto 3). */
+  routine_occurrence_id?: string | null;
+  /** Whose period it is and how far it is paid, drawn as the bubble's
+   * second line and progress ring. Only on period bubbles. */
+  routine?: BubbleRoutine | null;
+}
+
+export interface BubbleRoutine {
+  occurrence_id: string;
+  routine_id: string;
+  resource_id: string | null;
+  kind: "check" | "amount";
+  direction: "income" | "expense";
+  person: string | null;
+  place: string | null;
+  amount: string | null;
+  paid: string;
+  pct: number | null;
+  currency: string;
+  period_on: string;
 }
 
 export interface ServerCluster {
@@ -975,6 +996,10 @@ export interface ServerCluster {
   // Since migration 0011. Optional so a stale client reading a pre-0011
   // row still type-checks; absent reads as not muted.
   notifications_muted?: boolean;
+  /** Holds resources with recurring routines (migration 0026). */
+  is_collection?: boolean;
+  /** What one resource here is called: "imóvel", "gato". */
+  collection_noun?: string | null;
 }
 
 export async function listTasks(): Promise<ServerTask[]> {
@@ -1785,3 +1810,209 @@ export async function completeTask(taskId: string): Promise<SharingState> {
   if (!res.ok) throw await parseError(res);
   return (await res.json()) as SharingState;
 }
+
+
+// ---------------------------------------------------------------------------
+// Collections: resources, units, routines and payments (migration 0026)
+// ---------------------------------------------------------------------------
+
+export type RoutineFrequency = "daily" | "weekly" | "monthly" | "yearly";
+export type RoutineOnMiss = "stay_overdue" | "skip_ahead" | "from_done";
+export type PaymentMethod = "mbway" | "transfer" | "cash" | "card" | "other";
+
+export interface CollectionPayment {
+  id: string;
+  amount: string;
+  paid_on: string;
+  method: PaymentMethod | null;
+}
+
+export interface RoutinePeriod {
+  id: string;
+  period_on: string;
+  due_at: string;
+  amount: string | null;
+  paid: string;
+  pct: number;
+  completed_at: string | null;
+  closed_reason: "done" | "paid" | "skipped" | null;
+  task_id: string | null;
+  payments: CollectionPayment[];
+}
+
+export interface CollectionRoutine {
+  id: string;
+  resource_id: string;
+  title: string;
+  kind: "check" | "amount";
+  amount: string | null;
+  currency: string;
+  direction: "income" | "expense";
+  frequency: RoutineFrequency;
+  interval_count: number;
+  anchor_on: string;
+  due_time: string;
+  on_miss: RoutineOnMiss;
+  remind_before_days: number | null;
+  remind_on_day: boolean;
+  remind_after_days: number | null;
+  log_to_finance: boolean;
+  finance_category: string | null;
+  /** late: a period is past due and unfinished. open: the current period is
+   * running. done: the latest period is finished. upcoming: none yet. */
+  state: "late" | "open" | "done" | "upcoming";
+  late_days: number;
+  open_count: number;
+  current: RoutinePeriod | null;
+  next_on: string | null;
+  history?: RoutinePeriod[];
+}
+
+export interface CollectionResource {
+  id: string;
+  cluster_id: string;
+  parent_id: string | null;
+  name: string;
+  subtitle: string | null;
+  person_name: string | null;
+  since_on: string | null;
+  position: number;
+}
+
+export interface CollectionUnitSummary extends CollectionResource {
+  primary: CollectionRoutine | null;
+  routines?: CollectionRoutine[];
+}
+
+export interface CollectionCard extends CollectionResource {
+  units: CollectionUnitSummary[];
+  primary: CollectionRoutine | null;
+  late: number;
+  routine_count: number;
+}
+
+export interface MoneyTotals {
+  target: string;
+  paid: string;
+  pct: number;
+  count: number;
+  done: number;
+}
+
+export interface CollectionView {
+  cluster: {
+    id: string;
+    name: string;
+    color: string;
+    kind: string | null;
+    is_collection: boolean;
+    collection_noun: string | null;
+  };
+  month: string;
+  totals: { income: MoneyTotals; expense: MoneyTotals };
+  late: number;
+  resources: CollectionCard[];
+}
+
+export interface ResourceView {
+  resource: CollectionResource;
+  parent: CollectionResource | null;
+  cluster: { id: string; name: string; color: string; collection_noun: string | null };
+  routines: CollectionRoutine[];
+  units: CollectionUnitSummary[];
+}
+
+export interface RoutineDetail {
+  routine: CollectionRoutine;
+  resource: CollectionResource | null;
+}
+
+export interface ResourceInput {
+  cluster_id: string;
+  parent_id?: string | null;
+  name: string;
+  subtitle?: string | null;
+  person_name?: string | null;
+  since_on?: string | null;
+}
+
+export interface RoutineInput {
+  resource_id: string;
+  title: string;
+  kind: "check" | "amount";
+  amount?: string | null;
+  currency?: string;
+  direction?: "income" | "expense";
+  frequency: RoutineFrequency;
+  interval_count?: number;
+  anchor_on: string;
+  due_time?: string;
+  on_miss?: RoutineOnMiss;
+  remind_before_days?: number | null;
+  remind_on_day?: boolean;
+  remind_after_days?: number | null;
+  log_to_finance?: boolean;
+  finance_category?: string | null;
+}
+
+async function collectionCall<T>(path: string, init: AuthFetchOptions = {}): Promise<T> {
+  const res = await authFetch(`${V1}/collections${path}`, init);
+  if (!res.ok) throw await parseError(res);
+  if (res.status === 204) return undefined as T;
+  return (await res.json()) as T;
+}
+
+export const getCollection = (clusterId: string) =>
+  collectionCall<CollectionView>(`/${clusterId}`);
+
+export const setCollection = (clusterId: string, isCollection: boolean, noun: string | null) =>
+  collectionCall<ServerCluster>(`/${clusterId}/settings`, {
+    method: "PUT",
+    body: JSON.stringify({ is_collection: isCollection, collection_noun: noun }),
+  });
+
+export const getResource = (id: string) => collectionCall<ResourceView>(`/resources/${id}`);
+
+export const createResource = (input: ResourceInput) =>
+  collectionCall<CollectionResource>("/resources", { method: "POST", body: JSON.stringify(input) });
+
+export const updateResource = (id: string, patch: Partial<ResourceInput>) =>
+  collectionCall<CollectionResource>(`/resources/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+
+export const archiveResource = (id: string) =>
+  collectionCall<void>(`/resources/${id}`, { method: "DELETE" });
+
+export const getRoutine = (id: string) => collectionCall<RoutineDetail>(`/routines/${id}`);
+
+export const createRoutine = (input: RoutineInput) =>
+  collectionCall<RoutineDetail>("/routines", { method: "POST", body: JSON.stringify(input) });
+
+export const updateRoutine = (id: string, patch: Partial<RoutineInput>) =>
+  collectionCall<RoutineDetail>(`/routines/${id}`, { method: "PATCH", body: JSON.stringify(patch) });
+
+export const archiveRoutine = (id: string) =>
+  collectionCall<void>(`/routines/${id}`, { method: "DELETE" });
+
+export const recordPayment = (
+  occurrenceId: string,
+  amount: string,
+  method: PaymentMethod | null,
+  paidOn?: string,
+) =>
+  collectionCall<CollectionPayment>(`/occurrences/${occurrenceId}/payments`, {
+    method: "POST",
+    body: JSON.stringify({ amount, method, paid_on: paidOn ?? null }),
+  });
+
+export const settlePeriod = (occurrenceId: string, method: PaymentMethod | null = null) =>
+  collectionCall<RoutinePeriod>(`/occurrences/${occurrenceId}/settle`, {
+    method: "POST",
+    body: JSON.stringify({ method }),
+  });
+
+export const deletePayment = (paymentId: string) =>
+  collectionCall<void>(`/payments/${paymentId}`, { method: "DELETE" });
+

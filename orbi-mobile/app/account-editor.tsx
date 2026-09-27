@@ -26,11 +26,11 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
-  TextInput,
   View,
 } from "react-native";
+import { Switch } from "@/components/switch";
+import { TextInput } from "@/components/text-input";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ActionBar } from "@/components/action-bar";

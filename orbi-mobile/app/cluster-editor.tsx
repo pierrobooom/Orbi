@@ -13,7 +13,7 @@
 // refuses with an explanation when the id matches DRIFT_ID.
 
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter, type Href } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -24,17 +24,18 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
-  TextInput,
   View,
 } from "react-native";
+import { Switch } from "@/components/switch";
+import { TextInput } from "@/components/text-input";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
   ApiError,
   createCluster,
   deleteCluster,
+  setCollection,
   updateCluster,
 } from "@/services/api";
 import { ActionBar } from "@/components/action-bar";
@@ -107,6 +108,8 @@ export default function ClusterEditorScreen() {
   const [name, setName] = useState(existing?.name ?? "");
   const [color, setColor] = useState(existing?.color ?? defaultColor);
   const [muted, setMuted] = useState(existing?.notifications_muted ?? false);
+  const [isCollection, setIsCollection] = useState(existing?.is_collection ?? false);
+  const [noun, setNoun] = useState(existing?.collection_noun ?? "");
   const [busy, setBusy] = useState<"save" | "delete" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -115,6 +118,8 @@ export default function ClusterEditorScreen() {
       setName(existing.name);
       setColor(existing.color);
       setMuted(existing.notifications_muted ?? false);
+      setIsCollection(existing.is_collection ?? false);
+      setNoun(existing.collection_noun ?? "");
     } else {
       // New cluster — reset to the first unused color when the palette
       // shifts (e.g., a cluster gets deleted while the modal is open).
@@ -128,8 +133,9 @@ export default function ClusterEditorScreen() {
     setError(null);
     setBusy("save");
     try {
+      let clusterId = id;
       if (isNew) {
-        await createCluster({ name: name.trim(), color });
+        clusterId = (await createCluster({ name: name.trim(), color })).id;
       } else {
         await updateCluster(id, {
           name: name.trim(),
@@ -137,8 +143,19 @@ export default function ClusterEditorScreen() {
           notifications_muted: muted,
         });
       }
+      const wasCollection = existing?.is_collection ?? false;
+      const nounNow = noun.trim() || null;
+      if (isCollection !== wasCollection || (isCollection && nounNow !== (existing?.collection_noun ?? null))) {
+        await setCollection(clusterId, isCollection, nounNow);
+      }
       await hydrate();
-      router.back();
+      if (isCollection && !wasCollection) {
+        // Turned into a collection: open it, where the first resource is
+        // added — an empty collection is otherwise nowhere to be seen.
+        router.replace(`/collection/${clusterId}` as Href);
+      } else {
+        router.back();
+      }
     } catch (e) {
       setError(e instanceof ApiError ? e.message : String(e));
       setBusy(null);
@@ -274,6 +291,38 @@ export default function ClusterEditorScreen() {
                     trackColor={{ false: colors.line, true: colors.accent }}
                   />
                 </View>
+              ) : null}
+
+              {/* A collection holds resources — houses, pets, cars — each
+                  with routines that repeat. Any cluster can become one. */}
+              <View style={styles.muteRow}>
+                <View style={styles.muteLabelGroup}>
+                  <Text style={styles.label}>{t("Collection")}</Text>
+                  <Text style={styles.colorHint}>
+                    {t("Things with routines that repeat — properties and their rooms, pets, cars, subscriptions.")}
+                  </Text>
+                </View>
+                <Switch
+                  value={isCollection}
+                  onValueChange={setIsCollection}
+                  trackColor={{ false: colors.line, true: colors.accent }}
+                />
+              </View>
+              {isCollection ? (
+                <>
+                  <Text style={[styles.label, styles.labelSpaced]}>{t("What is each one called?")}</Text>
+                  <TextInput
+                    value={noun}
+                    onChangeText={setNoun}
+                    placeholder={t("property, cat, car…")}
+                    placeholderTextColor={colors.inkDim}
+                    maxLength={24}
+                    style={styles.input}
+                    autoCapitalize="none"
+                    returnKeyType="done"
+                    onSubmitEditing={() => Keyboard.dismiss()}
+                  />
+                </>
               ) : null}
 
               {error ? <Text style={styles.error}>{error}</Text> : null}

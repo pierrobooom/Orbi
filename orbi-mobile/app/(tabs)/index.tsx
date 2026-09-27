@@ -67,25 +67,44 @@ interface ParsedVoiceTask {
 // The mic's halo is only ~99pt left of the + on a 390pt phone (~92pt on a
 // 375pt one). An option level with the + would sit on it. Radius and angles
 // were chosen by checking every button, label, the + and the halo against
-// each other: at 130pt with even 28° steps nothing comes closer than 7pt,
-// and the lowest option clears the halo by 8pt even on a 375pt phone. Any
-// change here should be re-checked the same way.
+// each other — including each label against ITS OWN button, which the first
+// check left out: at 140pt with even 28° steps, each label keeps 3pt from
+// its circle, everything else is at least 6.5pt apart, and the lowest option
+// clears the halo by 8pt on a 375pt phone. Any change here should be
+// re-checked the same way.
 //
 // Labels sit on the INSIDE of each circle, between it and the +. Under each
 // circle — the old layout — the middle label landed on the lowest button;
 // the inside is the one side with free space on this arc.
-const ARC_RADIUS = 130;
+//
+// HOW FAR IN A LABEL GOES
+// Far enough that its whole BOX clears the circle, not just its centre. A
+// fixed inset put the centre 34pt in, which is fine straight below the top
+// option, but on the diagonal a 60pt-wide "Organizar" reaches sideways back
+// into its own circle — it overlapped by 11pt. The distance needed is the
+// circle's radius, a gap, and how far the box extends in that direction
+// (its half-width times the sideways part of the direction plus its
+// half-height times the vertical part).
+const ARC_RADIUS = 140;
 const ARC_BUTTON = 46;
-// Circle centre to label centre, towards the +: radius, gap, half a line.
-const ARC_LABEL_INSET = 34;
+const ARC_LABEL_GAP = 3;
+const ARC_LABEL_HEIGHT = 14;
+// The label's view is wide and centred; these are the widest the TEXT gets
+// (Portuguese or English, 10.5pt semibold), which is what must clear.
 const ARC_LABEL_WIDTH = 84;
+const ARC_TEXT_WIDTH = { task: 40, cluster: 42, organise: 62 } as const;
 // plusWrap is 56pt square, so the +'s centre is 28pt in on both axes.
 const PLUS_CENTRE = 28;
 
-function arcSlot(degrees: number) {
+function arcSlot(degrees: number, textWidth: number) {
   const rad = (degrees * Math.PI) / 180;
   const dx = Math.cos(rad) * ARC_RADIUS; // negative: left of the +
   const dy = Math.sin(rad) * ARC_RADIUS; // positive: above it
+  // Unit direction from the circle towards the +, in screen terms.
+  const inX = -Math.cos(rad);
+  const inY = Math.sin(rad); // screen y grows downwards
+  const reach = (textWidth / 2) * Math.abs(inX) + (ARC_LABEL_HEIGHT / 2) * Math.abs(inY);
+  const inset = ARC_BUTTON / 2 + ARC_LABEL_GAP + reach;
   return {
     dx,
     dy,
@@ -95,16 +114,16 @@ function arcSlot(degrees: number) {
     },
     // Relative to the button, so it moves with it.
     label: {
-      left: ARC_BUTTON / 2 - Math.cos(rad) * ARC_LABEL_INSET - ARC_LABEL_WIDTH / 2,
-      top: ARC_BUTTON / 2 + Math.sin(rad) * ARC_LABEL_INSET - 7,
+      left: ARC_BUTTON / 2 + inX * inset - ARC_LABEL_WIDTH / 2,
+      top: ARC_BUTTON / 2 + inY * inset - ARC_LABEL_HEIGHT / 2,
     },
   };
 }
 
 const ARC = {
-  task: arcSlot(90),
-  cluster: arcSlot(118),
-  organise: arcSlot(146),
+  task: arcSlot(90, ARC_TEXT_WIDTH.task),
+  cluster: arcSlot(118, ARC_TEXT_WIDTH.cluster),
+  organise: arcSlot(146, ARC_TEXT_WIDTH.organise),
 };
 
 export default function UniverseScreen() {
@@ -459,6 +478,9 @@ export default function UniverseScreen() {
   const onBubbleMoved = useCallback(
     (kind: "cluster" | "task", id: string, x: number, y: number) => {
       const patch = { canvas_x: x, canvas_y: y };
+      // Locally first, so the spot survives stepping into a cluster and
+      // back even before (or without) the save reaching the server.
+      useUniverseStore.getState().rememberPlacement(kind, id, x, y);
       const save = kind === "cluster" ? updateCluster(id, patch) : updateTask(id, patch);
       save.catch(() => {
         // Silent: there is nothing the user can usefully do about it, and a
@@ -594,18 +616,25 @@ export default function UniverseScreen() {
 
       </View>
 
-      {/* The dock: what needs you, then the two ways to add something.
-          In flow below the canvas rather than floating over it, so the
-          universe lays its bubbles out in the space that is actually free
-          instead of parking one underneath the card. */}
+      {/* The dock: the two ways to add something, with what needs you
+          floating just above it. */}
       <View style={styles.dock} pointerEvents="box-none">
+        {/* In FRONT of the universe, not taking space from it. It used to
+            sit in the dock's flow, which shrank the canvas by the card's
+            height — every bubble was squeezed up to make room for it, and
+            putting the card away gave the space back with a visible jump.
+            Floating, the universe keeps its full height whatever the card
+            is doing; the card can be swiped to the edge when it is in the
+            way of a bubble. */}
         {priority && !activeClusterId && !arcOpen ? (
-          <CollapsiblePriority
-            task={priority}
-            clusterName={priorityCluster?.name ?? null}
-            onOpen={() => openTask(priority.id)}
-            now={now}
-          />
+          <View style={styles.priorityFloat} pointerEvents="box-none">
+            <CollapsiblePriority
+              task={priority}
+              clusterName={priorityCluster?.name ?? null}
+              onOpen={() => openTask(priority.id)}
+              now={now}
+            />
+          </View>
         ) : null}
 
         <View style={styles.micRow} pointerEvents="box-none">
@@ -731,6 +760,15 @@ const styles = themed(() => StyleSheet.create({
   // In flow under the canvas. See the note in the JSX for why it no longer
   // floats over the bubbles.
   dock: { paddingBottom: 10 },
+  // Anchored to the dock's top edge and hanging upwards over the canvas.
+  priorityFloat: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: "100%",
+    zIndex: 5,
+    elevation: 5,
+  },
   micRow: {
     height: 92,
     alignItems: "center",

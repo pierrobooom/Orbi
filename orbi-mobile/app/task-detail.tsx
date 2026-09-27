@@ -12,7 +12,7 @@
 import Feather from "@expo/vector-icons/Feather";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter, type Href } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -24,9 +24,9 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
+import { TextInput } from "@/components/text-input";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Animated, {
   cancelAnimation,
@@ -53,7 +53,7 @@ import {
 } from "@/services/api";
 import { useUniverseStore } from "@/stores/universeStore";
 import { dismissDeliveredFor } from "@/hooks/useNotificationActions";
-import { colors } from "@/theme/colors";
+import { colors, pickerTheme } from "@/theme/colors";
 import { themed } from "@/theme/themed";
 import { cue } from "@/services/feedback";
 import { appendItem, checklistProgress, toggleItem } from "@/services/checklist";
@@ -143,6 +143,28 @@ export default function TaskDetailScreen() {
   const checklistSaves = useRef<Promise<unknown>>(Promise.resolve());
   const descriptionInput = useRef<TextInput>(null);
 
+  const refreshSharing = useCallback(async () => {
+    if (!taskId) return;
+    try {
+      const state = await getTaskSharing(taskId);
+      // Only kept when there is actually something shared. A solo task
+      // returns participants: 1, and rendering that as a vote would invent
+      // a social feature on a private to-do.
+      setSharing(state.participants > 1 || state.shares.length > 0 ? state : null);
+    } catch {
+      setSharing(null);
+    }
+  }, [taskId]);
+
+  useEffect(() => {
+    void refreshSharing();
+  }, [refreshSharing]);
+
+  // Every hook above, the early return below — never the other way round.
+  // These two used to sit after it, so when the task left the store while
+  // this screen was open (completing it; a refresh dropping a finished
+  // collection period) React rendered fewer hooks than the time before and
+  // the whole app fell over with a full-page error.
   if (!task) {
     return (
       <SafeAreaView style={styles.root} edges={["top", "bottom"]}>
@@ -162,23 +184,6 @@ export default function TaskDetailScreen() {
   const iSaidDone = Boolean(
     task?.shared_with_me ? task?.i_completed_at : task?.owner_completed_at,
   );
-
-  const refreshSharing = useCallback(async () => {
-    if (!taskId) return;
-    try {
-      const state = await getTaskSharing(taskId);
-      // Only kept when there is actually something shared. A solo task
-      // returns participants: 1, and rendering that as a vote would invent
-      // a social feature on a private to-do.
-      setSharing(state.participants > 1 || state.shares.length > 0 ? state : null);
-    } catch {
-      setSharing(null);
-    }
-  }, [taskId]);
-
-  useEffect(() => {
-    void refreshSharing();
-  }, [refreshSharing]);
 
   const enterEdit = () => {
     setError(null);
@@ -503,6 +508,28 @@ export default function TaskDetailScreen() {
                 </View>
               ) : null}
 
+              {/* A collection period ("Renda Quarto 3"): the money and the
+                  history live on its room's screen, one tap away. */}
+              {task.routine?.resource_id ? (
+                <Pressable
+                  onPress={() => router.push(`/collection/resource/${task.routine!.resource_id}` as Href)}
+                  style={styles.routineLink}
+                  accessibilityRole="button"
+                >
+                  <View style={styles.flex}>
+                    <Text style={styles.routineLinkTitle}>
+                      {[task.routine.place, task.routine.person].filter(Boolean).join(" · ")}
+                    </Text>
+                    {task.routine.kind === "amount" && task.routine.amount ? (
+                      <Text style={styles.routineLinkSub}>
+                        {t("{pct}% paid", { pct: task.routine.pct ?? 0 })}
+                      </Text>
+                    ) : null}
+                  </View>
+                  <Feather name="chevron-right" size={18} color={colors.inkDim} />
+                </Pressable>
+              ) : null}
+
               <View style={styles.metaCell}>
                 <View style={styles.descriptionHead}>
                   <Text style={styles.metaLabel}>{t("Description")}</Text>
@@ -637,7 +664,7 @@ export default function TaskDetailScreen() {
                     value={editDueAt ?? new Date()}
                     mode="datetime"
                     display="compact"
-                    themeVariant="dark"
+                    themeVariant={pickerTheme()}
                     onChange={(_event, date) => {
                       if (date) setEditDueAt(date);
                     }}
@@ -884,6 +911,19 @@ const styles = themed(() => StyleSheet.create({
     marginBottom: 14,
   },
   descriptionHead: { flexDirection: "row", alignItems: "center", gap: 8 },
+  routineLink: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.panel,
+    borderColor: colors.line,
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    marginBottom: 16,
+  },
+  routineLinkTitle: { color: colors.ink, fontSize: 14, fontWeight: "700" },
+  routineLinkSub: { color: colors.health, fontSize: 12.5, marginTop: 2 },
   checklistCount: {
     color: colors.inkDim,
     fontSize: 12,

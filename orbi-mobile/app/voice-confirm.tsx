@@ -24,12 +24,13 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
+import { TextInput } from "@/components/text-input";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useT } from "@/i18n";
+import { deriveLabel } from "@/services/bubbleLabel";
 import {
   ApiError,
   createTask,
@@ -38,7 +39,7 @@ import {
 } from "@/services/api";
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
 import { useUniverseStore } from "@/stores/universeStore";
-import { colors } from "@/theme/colors";
+import { colors, pickerTheme } from "@/theme/colors";
 import { themed } from "@/theme/themed";
 import { cue } from "@/services/feedback";
 
@@ -64,44 +65,6 @@ interface ParsedPayload {
   parent_cluster_id?: string | null;
   importance?: number;
   confidence?: number;
-}
-
-// Mirror of services/universeLayout deriveLabel — used only when the
-// LLM didn't return a label, so the user still sees something sensible
-// in the editable field on the confirm screen.
-const STOP_WORDS = new Set([
-  "a", "an", "the", "to", "from", "about", "of", "for", "with",
-  "and", "or", "in", "on", "at", "by", "as", "is", "was", "are",
-  "be", "been", "this", "that", "these", "those", "my", "your",
-  "i", "im", "i'm", "ive", "i've",
-]);
-const LOW_SIGNAL_VERBS = new Set([
-  "call", "buy", "go", "send", "email", "remind", "make", "do",
-  "get", "have", "take", "pick", "drop", "visit", "see", "check",
-  "need", "want", "should", "must", "gotta", "going", "gonna",
-]);
-
-function deriveLabel(title: string, maxChars = 14): string {
-  const trimmed = (title ?? "").trim();
-  if (!trimmed) return "";
-  if (trimmed.length <= maxChars) return trimmed;
-  const words = trimmed.split(/\s+/);
-  const content = words.filter((w) => {
-    const lower = w.toLowerCase().replace(/[^a-z0-9']/g, "");
-    if (!lower) return false;
-    if (STOP_WORDS.has(lower)) return false;
-    if (LOW_SIGNAL_VERBS.has(lower)) return false;
-    return true;
-  });
-  const pickFrom = content.length > 0 ? content : words;
-  let out = "";
-  for (const w of pickFrom) {
-    const candidate = out ? `${out} ${w}` : w;
-    if (candidate.length > maxChars) break;
-    out = candidate;
-  }
-  if (!out) out = trimmed.slice(0, maxChars);
-  return out;
 }
 
 export default function VoiceConfirmScreen() {
@@ -149,6 +112,8 @@ export default function VoiceConfirmScreen() {
   const [showPicker, setShowPicker] = useState(false);
   const [voiceBusy, setVoiceBusy] = useState(false);
   const [voiceReply, setVoiceReply] = useState<string | null>(null);
+  // Briefly true after a voice edit moves the date, to draw the eye to it.
+  const [dueFlash, setDueFlash] = useState(false);
   const voice = useVoiceRecorder();
 
   const base: ParsedTask | undefined = queue[index];
@@ -243,6 +208,14 @@ export default function VoiceConfirmScreen() {
       );
       if (patch && Object.keys(patch).length > 0) {
         applyEdit(patch as Partial<ParsedTask>);
+        if ("due_at" in patch) {
+          // Close the picker if it is open: an open spinner still holds the
+          // time it was showing, and the new one should be what you see —
+          // in the field, highlighted for a moment so the change is obvious.
+          setShowPicker(false);
+          setDueFlash(true);
+          setTimeout(() => setDueFlash(false), 1600);
+        }
       }
       setVoiceReply(reply || null);
     } catch (e) {
@@ -378,14 +351,24 @@ export default function VoiceConfirmScreen() {
               without saving first and reopening the task. */}
           <Text style={styles.label}>{t("Due")}</Text>
           <View style={styles.dueRow}>
-            <Pressable onPress={() => setShowPicker(true)} style={styles.dueButton}>
+            <Pressable
+              onPress={() => setShowPicker(true)}
+              style={[styles.dueButton, dueFlash && styles.dueButtonFlash]}
+            >
               <Text style={styles.dueText}>
                 {current.due_at
                   ? new Date(current.due_at).toLocaleString()
                   : t("No due date")}
               </Text>
             </Pressable>
-            {current.due_at ? (
+            {/* While the spinner is open, Concluído sits HERE, in the field's own
+                row, instead of under the spinner — where the screen's fixed
+                footer covered it and there was no visible way to close it. */}
+            {Platform.OS === "ios" && showPicker ? (
+              <Pressable onPress={() => setShowPicker(false)} hitSlop={8} style={styles.clearDue}>
+                <Text style={styles.pickerDoneText}>{t("Done")}</Text>
+              </Pressable>
+            ) : current.due_at ? (
               <Pressable
                 onPress={() => applyEdit({ due_at: null })}
                 hitSlop={8}
@@ -401,7 +384,7 @@ export default function VoiceConfirmScreen() {
               value={current.due_at ? new Date(current.due_at) : new Date()}
               mode="datetime"
               display={Platform.OS === "ios" ? "spinner" : "default"}
-              themeVariant="dark"
+              themeVariant={pickerTheme()}
               // See new-task.tsx — same migration off the deprecated
               // `onChange` multiplexer.
               onValueChange={(_event, date) => {
@@ -412,11 +395,6 @@ export default function VoiceConfirmScreen() {
             />
           ) : null}
 
-          {Platform.OS === "ios" && showPicker ? (
-            <Pressable onPress={() => setShowPicker(false)} style={styles.doneRow}>
-              <Text style={styles.doneText}>{t("Done")}</Text>
-            </Pressable>
-          ) : null}
 
           {current.importance != null ? (
             <>
@@ -578,9 +556,11 @@ const styles = themed(() => StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
   },
+  dueButtonFlash: { borderColor: colors.health, backgroundColor: "rgba(21,128,61,0.08)" },
   dueText: { color: colors.ink, fontSize: 14 },
   clearDue: { paddingHorizontal: 4 },
   clearDueText: { color: colors.inkDim, fontSize: 13, fontWeight: "600" },
+  pickerDoneText: { color: colors.ink, fontSize: 15, fontWeight: "800" },
   doneRow: { alignItems: "flex-end", paddingTop: 6 },
   doneText: { color: colors.accent, fontSize: 14, fontWeight: "700" },
   // Centred column, not a left-aligned row. The mic is the primary

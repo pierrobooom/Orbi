@@ -102,10 +102,13 @@ export default function BubbleLabel({
 // downward offset adds a shadow on top of the outline — the text now sits
 // slightly above the fill rather than on it, which is what makes it read
 // against a pale colour — while the radius still wraps every side.
+// Raised to 80% with a slightly wider radius (2026-09-28): at 60% the
+// names on the paler fills (lime, cyan, the lighter greens) still took a
+// moment to read.
 const OUTLINE = {
-  textShadowColor: "rgba(20, 22, 28, 0.6)",
+  textShadowColor: "rgba(20, 22, 28, 0.8)",
   textShadowOffset: { width: 0, height: 1 },
-  textShadowRadius: 3.5,
+  textShadowRadius: 4,
 } as const;
 
 const styles = themed(() => StyleSheet.create({

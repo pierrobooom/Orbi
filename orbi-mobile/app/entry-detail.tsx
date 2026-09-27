@@ -20,9 +20,9 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
+import { TextInput } from "@/components/text-input";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ActionBar } from "@/components/action-bar";
@@ -37,7 +37,7 @@ import {
 } from "@/services/api";
 import { formatCategory, isUncategorized } from "@/services/categories";
 import { useFinanceStore } from "@/stores/financeStore";
-import { colors } from "@/theme/colors";
+import { colors, pickerTheme } from "@/theme/colors";
 import { themed } from "@/theme/themed";
 
 function isoDate(d: Date): string {
@@ -315,7 +315,7 @@ export default function EntryDetailScreen() {
                     value={editDate}
                     mode="date"
                     display="compact"
-                    themeVariant="dark"
+                    themeVariant={pickerTheme()}
                     onChange={(_event, date) => {
                       if (date) setEditDate(date);
                     }}

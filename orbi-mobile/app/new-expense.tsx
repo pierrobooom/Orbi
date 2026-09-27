@@ -19,9 +19,9 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
+import { TextInput } from "@/components/text-input";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ActionBar } from "@/components/action-bar";
@@ -29,7 +29,7 @@ import { ScreenHeader } from "@/components/screen-header";
 import { useT } from "@/i18n";
 import { ApiError, createFinanceEntry } from "@/services/api";
 import { useFinanceStore } from "@/stores/financeStore";
-import { colors } from "@/theme/colors";
+import { colors, pickerTheme } from "@/theme/colors";
 import { themed } from "@/theme/themed";
 
 function isoDate(d: Date): string {
@@ -134,23 +134,33 @@ export default function NewExpenseScreen() {
           </Text>
 
           <Text style={styles.label}>{t("Date")}</Text>
-          <Pressable onPress={() => setShowPicker(true)} style={styles.dateBtn}>
-            <Text style={styles.dateText}>
-              {entryDate.toLocaleDateString(undefined, {
-                weekday: "long",
-                month: "short",
-                day: "numeric",
-                year: "numeric",
-              })}
-            </Text>
-          </Pressable>
+          <View style={styles.dateRow}>
+            <Pressable onPress={() => setShowPicker(true)} style={[styles.dateBtn, styles.dateBtnFlex]}>
+              <Text style={styles.dateText}>
+                {entryDate.toLocaleDateString(undefined, {
+                  weekday: "long",
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                })}
+              </Text>
+            </Pressable>
+            {/* While the spinner is open, Concluído sits HERE, in the field's own
+                row, instead of under the spinner — where the screen's fixed
+                footer covered it and there was no visible way to close it. */}
+            {Platform.OS === "ios" && showPicker ? (
+              <Pressable onPress={() => setShowPicker(false)} hitSlop={8} style={styles.pickerDone}>
+                <Text style={styles.pickerDoneText}>{t("Done")}</Text>
+              </Pressable>
+            ) : null}
+          </View>
 
           {showPicker ? (
             <DateTimePicker
               value={entryDate}
               mode="date"
               display={Platform.OS === "ios" ? "spinner" : "default"}
-              themeVariant="dark"
+              themeVariant={pickerTheme()}
               onChange={(event, date) => {
                 if (Platform.OS === "android") setShowPicker(false);
                 if (event.type === "set" && date) setEntryDate(date);
@@ -159,11 +169,6 @@ export default function NewExpenseScreen() {
             />
           ) : null}
 
-          {Platform.OS === "ios" && showPicker ? (
-            <Pressable onPress={() => setShowPicker(false)} style={styles.doneRow}>
-              <Text style={styles.doneText}>{t("Done")}</Text>
-            </Pressable>
-          ) : null}
 
           {error ? <Text style={styles.error}>{error}</Text> : null}
         </ScrollView>
@@ -227,6 +232,10 @@ const styles = themed(() => StyleSheet.create({
   },
   dateText: { color: colors.ink, fontSize: 14 },
   doneRow: { alignSelf: "flex-end", paddingVertical: 8, paddingHorizontal: 12 },
+  dateRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  dateBtnFlex: { flex: 1 },
+  pickerDone: { paddingHorizontal: 4 },
+  pickerDoneText: { color: colors.ink, fontSize: 15, fontWeight: "800" },
   doneText: { color: colors.accent, fontSize: 14, fontWeight: "600" },
   error: { color: colors.overdue, fontSize: 13, marginTop: 14 },
 }));
