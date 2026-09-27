@@ -75,15 +75,46 @@ _RE_PT_HMIN = re.compile(r"\b(\d{1,2})\s*h\s*(\d{2})\b", re.IGNORECASE)
 # "ligar a 3 pessoas" would have become 03:00 the same way. The accented
 # "à" is kept because "à uma" is a real way to say one o'clock and the
 # accent makes it unambiguous.
+# Minutes as they are SAID, after "e" or "menos": "às 17 e 40",
+# "às cinco e um quarto", "às seis menos um quarto". Whisper writes spoken
+# Portuguese times this way far more often than "17:40". Without these the
+# pattern matched "às 17" and stopped, the minutes read as zero, and the
+# model's correct 17:40 was "corrected" to 17:00 — reported 2026-09-27.
+# Longest first, so "vinte e cinco" wins over "vinte".
+_PT_MINUTE_WORDS = {
+    "cinquenta e cinco": 55, "quarenta e cinco": 45, "trinta e cinco": 35,
+    "vinte e cinco": 25, "três quartos": 45, "tres quartos": 45,
+    "cinquenta": 50, "quarenta": 40, "trinta": 30, "vinte": 20,
+    "um quarto": 15, "quinze": 15, "meia": 30, "dez": 10, "cinco": 5,
+}
+# The lookahead refuses a minute that is only the START of a longer one:
+# "quarenta e três" is 43, and reading just "quarenta" would give 40. With
+# the match refused, only the hour is taken and the model's minutes stand
+# (see override_due_at_clock).
+_PT_MINUTE = (
+    r"(\d{1,2}|" + "|".join(_PT_MINUTE_WORDS) + r")"
+    r"(?!\s+e\s+(?:um|uma|dois|duas|três|tres|quatro|cinco|seis|sete|oito|nove)\b)"
+)
+
 _RE_PT_AT = re.compile(
     r"\b(?:[àa]s|à|das|pelas|para\s+as)\s+(\d{1,2}|"
     + "|".join(_PT_NUMBER_WORDS)
     + r")"
-    r"(?:\s*[:h]\s*(\d{2}))?"
-    r"(\s+e\s+meia)?"
+    r"(?:\s*[:h]\s*(\d{2})"          # às 17:40, às 17h40
+    + r"|\s+e\s+" + _PT_MINUTE        # às 17 e 40, às oito e meia
+    + r"|\s+menos\s+" + _PT_MINUTE    # às seis menos um quarto
+    + r")?"
+    r"(?:\s+minutos?)?"
     r"(?:\s+(?:da|de)\s+(manhã|manha|tarde|noite|madrugada))?",
     re.IGNORECASE,
 )
+
+
+def _pt_minute(raw: str | None) -> int | None:
+    if raw is None:
+        return None
+    raw = raw.lower()
+    return int(raw) if raw.isdigit() else _PT_MINUTE_WORDS.get(raw)
 
 _RE_PT_MIDDAY = re.compile(r"\bmeio[-\s]?dia\b", re.IGNORECASE)
 _RE_PT_MIDNIGHT = re.compile(r"\bmeia[-\s]?noite\b", re.IGNORECASE)
@@ -112,18 +143,22 @@ def _extract_portuguese_clock(transcript: str) -> tuple[int, int] | None:
         )
         if hour < 0:
             return None
-        minute = int(m.group(2) or 0)
-        if m.group(3):  # "e meia" — half past
-            minute = 30
-        part = (m.group(4) or "").lower()
+        after = _pt_minute(m.group(3))   # "e 40", "e meia"
+        before = _pt_minute(m.group(4))  # "menos um quarto"
+        minute = int(m.group(2)) if m.group(2) else (after or 0)
+        part = (m.group(5) or "").lower()
         # Part-of-day disambiguates a 1-12 hour. "às oito da noite" is
         # 20:00; a bare "às 20" is already unambiguous and left alone.
+        # Applied BEFORE "menos", so "seis menos um quarto da tarde" is
+        # 18:00 less fifteen minutes: 17:45.
         if part in {"tarde", "noite"} and hour < 12:
             hour += 12
         elif part == "madrugada" and hour == 12:
             hour = 0
         elif part in {"manhã", "manha"} and hour == 12:
             hour = 0
+        if before is not None and 0 < before < 60:
+            hour, minute = (hour - 1) % 24, 60 - before
         if 0 <= hour < 24 and 0 <= minute < 60:
             return (hour, minute)
 
@@ -330,6 +365,34 @@ def override_due_at_relative(
     return result, True
 
 
+
+def _parse_instant(value: str, user_timezone: str | None) -> datetime | None:
+    """Read a due_at the way the callers of these overrides hand it over.
+
+    Both callers (the voice updater and the chat create path) pass a time
+    they have ALREADY converted to UTC, spelled with "Z". The overrides used
+    the sanitiser's parser, which deliberately ignores zone markers because
+    it reads RAW model output — so a correct 16:40Z was re-read as 16:40
+    Lisbon time, an hour off. The clock override then replaced hour and
+    minute, which hid it, but it broke the minute guard below and could put
+    a task on the wrong DAY near midnight (00:30 on the 28th is 23:30Z on
+    the 27th; read as local, the date slipped back a day).
+
+    Here an explicit offset is trusted, and only a time with no zone gets
+    the user's.
+    """
+    from app.services.task_sanitizer import _parse_due_at
+
+    raw = str(value).strip()
+    has_zone = raw.endswith("Z") or bool(re.search(r"[+-]\d{2}:?\d{2}$", raw))
+    if has_zone:
+        try:
+            return datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    return _parse_due_at(raw, user_timezone=user_timezone)
+
+
 def override_due_at_clock(
     llm_due_at: str | None,
     transcript: str,
@@ -364,9 +427,7 @@ def override_due_at_clock(
     # Reuse the sanitizer's tolerant parser to get a tz-aware datetime
     # in the user's local zone (the sanitizer treats wall-clock
     # components as local when user_timezone is provided).
-    from app.services.task_sanitizer import _parse_due_at
-
-    parsed = _parse_due_at(llm_due_at, user_timezone=user_timezone)
+    parsed = _parse_instant(llm_due_at, user_timezone)
     if parsed is None:
         return llm_due_at
 
@@ -376,6 +437,14 @@ def override_due_at_clock(
         try:
             from zoneinfo import ZoneInfo
             local = parsed.astimezone(ZoneInfo(user_timezone))
+            # Only an HOUR was recognised in the transcript (minutes 0), and
+            # the model has that same hour with real minutes: keep the
+            # model's minutes. This step exists to catch the model getting
+            # the HOUR wrong (a timezone slip), not to throw away minutes it
+            # could not read — which is how "às 17 e 40" became 17:00. Any
+            # spoken minute form not taught above still comes out right.
+            if minute == 0 and local.hour == hour and local.minute != 0:
+                minute = local.minute
             corrected_local = local.replace(
                 hour=hour, minute=minute, second=0, microsecond=0
             )
@@ -528,9 +597,7 @@ def override_due_at_weekday(
         return llm_due_at
     weekday_index, explicit_next = found
 
-    from app.services.task_sanitizer import _parse_due_at
-
-    parsed = _parse_due_at(llm_due_at, user_timezone=user_timezone)
+    parsed = _parse_instant(llm_due_at, user_timezone)
     if parsed is None:
         return llm_due_at
 

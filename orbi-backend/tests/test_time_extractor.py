@@ -15,6 +15,7 @@ import pytest
 from app.services.time_extractor import (
     extract_local_clock,
     extract_relative_offset,
+    override_due_at_clock,
     override_due_at_relative,
 )
 
@@ -168,3 +169,67 @@ def test_relative_override_works_with_no_model_answer_at_all():
     result, handled = override_due_at_relative(None, "daqui a 2 horas", language=PT, now=now)
     assert handled is True
     assert result == "2026-09-18T23:12:00Z"
+
+
+
+# ---------------------------------------------------------------------------
+# Minutes said in words — "às 17 e 40"
+# ---------------------------------------------------------------------------
+# The regression (2026-09-27): "Eu tenho de ir visitar 1 imóvel às 17 e 40"
+# was matched as "às 17", the minutes read as zero, and the model's correct
+# 17:40 was overwritten to 17:00.
+
+@pytest.mark.parametrize(
+    "transcript,expected",
+    [
+        ("Eu tenho de ir visitar 1 imóvel às 17 e 40.", (17, 40)),
+        ("O imóvel tem que ser visto às 17 e 40.", (17, 40)),
+        ("às 9 e 5", (9, 5)),
+        ("às cinco e quinze da tarde", (17, 15)),
+        ("às cinco e um quarto da tarde", (17, 15)),
+        ("às oito e vinte e cinco", (8, 25)),
+        ("às 17 e quarenta e cinco", (17, 45)),
+        ("às 17 e 40 minutos", (17, 40)),
+        ("às seis menos um quarto da tarde", (17, 45)),
+        ("às 18 menos 10", (17, 50)),
+        ("à uma menos cinco", (0, 55)),
+        ("às 17 e depois ligar ao Rui", (17, 0)),  # "e" that is not minutes
+    ],
+)
+def test_spoken_minutes_are_read(transcript, expected):
+    assert extract_local_clock(transcript, language=PT) == expected
+
+
+def test_the_reported_case_keeps_seventeen_forty():
+    """End to end through the override, exactly as logged: the model said
+    16:40Z (17:40 in Lisbon) and the result must stay 17:40."""
+    out = override_due_at_clock(
+        "2026-09-27T16:40:00Z", "O imóvel tem que ser visto às 17 e 40.", "Europe/Lisbon", PT,
+    )
+    assert out == "2026-09-27T16:40:00Z"
+
+
+def test_an_hour_alone_does_not_erase_the_models_minutes():
+    """A minute form the extractor does not know ("e quarenta e três") must
+    not be zeroed: same hour, so the model's minutes stand."""
+    out = override_due_at_clock(
+        "2026-09-27T16:43:00Z", "às 17 e quarenta e três", "Europe/Lisbon", PT,
+    )
+    assert out == "2026-09-27T16:43:00Z"
+
+
+def test_a_wrong_hour_is_still_corrected():
+    """What the override is for: the model slipped an hour (timezone), the
+    transcript says 17 — the hour is fixed and its minutes kept."""
+    out = override_due_at_clock(
+        "2026-09-27T17:40:00Z", "às 17 e 40", "Europe/Lisbon", PT,  # model said 18:40 local
+    )
+    assert out == "2026-09-27T16:40:00Z"
+
+
+
+def test_a_utc_time_near_midnight_keeps_its_day():
+    """00:10 on the 28th in Lisbon is 23:10Z on the 27th. Read as local
+    time, the old parser put the corrected 00:30 on the 27th — a day early."""
+    out = override_due_at_clock("2026-09-27T23:10:00Z", "às 0:30", "Europe/Lisbon", PT)
+    assert out == "2026-09-27T23:30:00Z"  # 00:30 on the 28th, Lisbon
