@@ -174,5 +174,5 @@ const styles = themed(() => StyleSheet.create({
     fontVariant: ["tabular-nums"],
   },
   filterTextActive: { color: colors.canvas },
-  body: { paddingBottom: 48 },
+  body: { paddingBottom: 48, flexGrow: 1 },
 }));

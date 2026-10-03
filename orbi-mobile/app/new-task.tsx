@@ -240,7 +240,7 @@ function ClusterChip({ label, selected, color, onPress }: ChipProps) {
 const styles = themed(() => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   flex: { flex: 1 },
-  scrollContent: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 40 },
+  scrollContent: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 40, flexGrow: 1 },
   titleInput: {
     color: colors.ink,
     fontSize: 22,

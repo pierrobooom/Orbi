@@ -239,7 +239,7 @@ const styles = themed(() => StyleSheet.create({
   },
   headerTitle: { color: colors.ink, fontSize: 15, fontWeight: "600" },
   headerCancel: { color: colors.inkDim, fontSize: 14, minWidth: 64 },
-  body: { padding: 24 },
+  body: { padding: 24, flexGrow: 1 },
   label: {
     color: colors.inkDim,
     fontSize: 11,

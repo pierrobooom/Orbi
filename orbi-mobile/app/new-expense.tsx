@@ -189,7 +189,7 @@ export default function NewExpenseScreen() {
 const styles = themed(() => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   flex: { flex: 1 },
-  scrollContent: { paddingHorizontal: 24, paddingTop: 20, paddingBottom: 40 },
+  scrollContent: { paddingHorizontal: 24, paddingTop: 20, paddingBottom: 40, flexGrow: 1 },
   label: {
     color: colors.inkDim,
     fontSize: 11,

@@ -229,7 +229,8 @@ export default function BankPickerScreen() {
         <Pressable style={styles.sheetBackdrop} onPress={() => setCountryOpen(false)}>
           <Pressable style={styles.sheet} onPress={() => undefined}>
             <Text style={styles.sheetTitle}>{t("Country")}</Text>
-            <ScrollView>
+            <ScrollView
+        contentContainerStyle={{ flexGrow: 1 }}>
               {COUNTRIES.map((item) => {
                 const active = country === item.code;
                 return (
@@ -328,7 +329,7 @@ const styles = themed(() => StyleSheet.create({
   optionSelected: { backgroundColor: colors.canvas },
   optionLabel: { color: colors.ink, fontSize: 15, fontWeight: "600" },
   loader: { marginTop: 40 },
-  list: { paddingBottom: 40 },
+  list: { paddingBottom: 40, flexGrow: 1 },
   separator: { height: 1, backgroundColor: colors.line, marginLeft: 68 },
   row: {
     flexDirection: "row",

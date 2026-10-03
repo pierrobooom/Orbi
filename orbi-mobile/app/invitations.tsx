@@ -203,7 +203,7 @@ export default function InvitationsScreen() {
 
 const styles = themed(() => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
-  body: { padding: 16, paddingBottom: 48, gap: 12 },
+  body: { padding: 16, paddingBottom: 48, gap: 12, flexGrow: 1 },
   loader: { marginTop: 40 },
   card: {
     backgroundColor: colors.panel,

@@ -138,7 +138,7 @@ export default function MoveTaskScreen() {
 
 const styles = themed(() => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
-  body: { padding: 24 },
+  body: { padding: 24, flexGrow: 1 },
   taskTitle: { color: colors.ink, fontSize: 19, fontWeight: "700" },
   label: {
     color: colors.inkDim,

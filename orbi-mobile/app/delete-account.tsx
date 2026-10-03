@@ -141,7 +141,7 @@ export default function DeleteAccountScreen() {
 
 const styles = themed(() => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
-  body: { padding: 24 },
+  body: { padding: 24, flexGrow: 1 },
   warnCard: {
     flexDirection: "row",
     alignItems: "center",

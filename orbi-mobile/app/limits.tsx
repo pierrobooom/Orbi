@@ -348,7 +348,7 @@ export default function LimitsScreen() {
 const styles = themed(() => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   flex: { flex: 1 },
-  body: { padding: 16, paddingBottom: 48, gap: 12 },
+  body: { padding: 16, paddingBottom: 48, gap: 12, flexGrow: 1 },
   loader: { marginTop: 40 },
   form: {
     backgroundColor: colors.panel,

@@ -308,7 +308,7 @@ const styles = themed(() => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   flex: { flex: 1 },
   loader: { marginTop: 40 },
-  body: { padding: 20, paddingBottom: 60 },
+  body: { padding: 20, paddingBottom: 60, flexGrow: 1 },
   label: { color: colors.ink, fontSize: 13, fontWeight: "600", marginBottom: 8 },
   labelSpaced: { marginTop: 22 },
   input: {

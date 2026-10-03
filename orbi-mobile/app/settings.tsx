@@ -849,7 +849,7 @@ function Row({ label, value }: { label: string; value: string }) {
 
 const styles = themed(() => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
-  body: { padding: 20, paddingBottom: 60 },
+  body: { padding: 20, paddingBottom: 60, flexGrow: 1 },
   section: { marginBottom: 22 },
   languageRow: {
     flexDirection: "row",

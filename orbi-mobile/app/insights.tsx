@@ -197,7 +197,7 @@ export default function InsightsScreen() {
 
 const styles = themed(() => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
-  body: { padding: 16, paddingBottom: 48, gap: 10 },
+  body: { padding: 16, paddingBottom: 48, gap: 10, flexGrow: 1 },
   loader: { marginTop: 40 },
   card: {
     flexDirection: "row",

@@ -306,7 +306,7 @@ export default function CategoriesScreen() {
 const styles = themed(() => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   flex: { flex: 1 },
-  body: { padding: 16, paddingBottom: 48, gap: 8 },
+  body: { padding: 16, paddingBottom: 48, gap: 8, flexGrow: 1 },
   loader: { marginTop: 40 },
   form: { flexDirection: "row", gap: 10, marginBottom: 8 },
   input: {

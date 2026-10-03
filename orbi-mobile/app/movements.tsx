@@ -451,7 +451,7 @@ const styles = themed(() => StyleSheet.create({
   retryText: { color: colors.ink, fontSize: 13, fontWeight: "600" },
   emptyTitle: { color: colors.ink, fontSize: 17, fontWeight: "600", marginBottom: 6 },
   emptyBody: { color: colors.inkDim, fontSize: 13, textAlign: "center", lineHeight: 19 },
-  listContent: { paddingBottom: 100 },
+  listContent: { paddingBottom: 100, flexGrow: 1 },
   sectionHeader: {
     color: colors.inkDim,
     fontSize: 11,

@@ -222,7 +222,7 @@ export default function ConnectBankScreen() {
 
 const styles = themed(() => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
-  body: { padding: 20, paddingBottom: 48 },
+  body: { padding: 20, paddingBottom: 48, flexGrow: 1 },
   lede: {
     color: colors.ink,
     fontSize: 17,

@@ -850,7 +850,7 @@ const styles = themed(() => StyleSheet.create({
   micButton: { justifyContent: "center", alignItems: "center", minHeight: 28 },
   micButtonActive: { transform: [{ scale: 1.15 }] },
   micButtonBusy: { opacity: 0.6 },
-  body: { paddingHorizontal: 24, paddingTop: 18, paddingBottom: 24 },
+  body: { paddingHorizontal: 24, paddingTop: 18, paddingBottom: 24, flexGrow: 1 },
   title: { color: colors.ink, fontSize: 22, fontWeight: "700", marginBottom: 8 },
   description: { color: colors.inkDim, fontSize: 14, marginBottom: 14, lineHeight: 20 },
   metaPlaceholder: { color: colors.inkDim, fontStyle: "italic", fontWeight: "400" },

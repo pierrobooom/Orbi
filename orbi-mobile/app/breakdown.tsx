@@ -197,7 +197,7 @@ const styles = themed(() => StyleSheet.create({
   toggleTabActive: { borderColor: colors.accent, backgroundColor: colors.accent },
   toggleText: { color: colors.inkDim, fontSize: 13, fontWeight: "600" },
   toggleTextActive: { color: colors.canvas },
-  body: { padding: 16, paddingBottom: 48, gap: 8 },
+  body: { padding: 16, paddingBottom: 48, gap: 8, flexGrow: 1 },
   loader: { marginTop: 40 },
   row: {
     borderRadius: 10,

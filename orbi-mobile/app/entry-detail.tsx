@@ -394,7 +394,8 @@ export default function EntryDetailScreen() {
               <Text style={styles.sheetTitle}>
                 {t("File {merchant} under", { merchant: entry.merchant })}
               </Text>
-              <ScrollView keyboardShouldPersistTaps="handled">
+              <ScrollView
+        contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
                 {categories
                   .filter((c) => !c.hidden)
                   .map((category) => {
@@ -443,7 +444,7 @@ export default function EntryDetailScreen() {
 const styles = themed(() => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   flex: { flex: 1 },
-  body: { paddingHorizontal: 24, paddingTop: 18, paddingBottom: 24 },
+  body: { paddingHorizontal: 24, paddingTop: 18, paddingBottom: 24, flexGrow: 1 },
   bigAmount: { color: colors.ink, fontSize: 36, fontWeight: "700", marginBottom: 4 },
   merchant: { color: colors.ink, fontSize: 18, fontWeight: "500", marginBottom: 16 },
   title: { color: colors.ink, fontSize: 22, fontWeight: "700", marginBottom: 8 },

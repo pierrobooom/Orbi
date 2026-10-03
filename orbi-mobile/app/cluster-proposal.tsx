@@ -280,7 +280,7 @@ function ActionRow({
 
 const styles = themed(() => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
-  body: { padding: 16, paddingBottom: 40 },
+  body: { padding: 16, paddingBottom: 40, flexGrow: 1 },
   intro: { color: colors.inkDim, fontSize: 12, marginBottom: 14, lineHeight: 17 },
   center: { alignItems: "center", justifyContent: "center", paddingVertical: 60 },
   hint: { color: colors.inkDim, fontSize: 12, marginTop: 12, textAlign: "center" },

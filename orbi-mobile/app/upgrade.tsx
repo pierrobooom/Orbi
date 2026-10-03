@@ -202,7 +202,7 @@ export default function UpgradeScreen() {
 
 const styles = themed(() => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
-  scroll: { padding: 20, paddingBottom: 60 },
+  scroll: { padding: 20, paddingBottom: 60, flexGrow: 1 },
   intro: { color: colors.inkDim, fontSize: 14, marginBottom: 18 },
   card: {
     backgroundColor: colors.panel,

@@ -364,7 +364,7 @@ export default function ClusterEditorScreen() {
 const styles = themed(() => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   flex: { flex: 1 },
-  body: { padding: 20, paddingBottom: 40 },
+  body: { padding: 20, paddingBottom: 40, flexGrow: 1 },
   label: { color: colors.inkDim, fontSize: 11, fontWeight: "700", letterSpacing: 1, textTransform: "uppercase" },
   labelSpaced: { marginTop: 24 },
   muteRow: {

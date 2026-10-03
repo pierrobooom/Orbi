@@ -509,7 +509,7 @@ const styles = themed(() => StyleSheet.create({
   },
   progressDotActive: { backgroundColor: colors.accent, width: 18 },
   progressDotDone: { backgroundColor: colors.inkDim },
-  body: { padding: 24, paddingBottom: 60 },
+  body: { padding: 24, paddingBottom: 60, flexGrow: 1 },
   label: {
     color: colors.inkDim,
     fontSize: 11,
