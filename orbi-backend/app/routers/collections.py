@@ -3,6 +3,7 @@
 Route handlers only — every rule lives in services/collections.py.
 """
 
+from datetime import date
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -148,6 +149,20 @@ async def delete_payment(payment_id: UUID, user_id: UUID = Depends(get_current_u
 async def get_collection(cluster_id: UUID, user_id: UUID = Depends(get_current_user)):
     try:
         return await service.collection_view(cluster_id, user_id)
+    except service.CollectionError as exc:
+        raise _refuse(exc)
+
+
+@router.get("/{cluster_id}/months/{month}")
+async def get_collection_month(cluster_id: UUID, month: str, user_id: UUID = Depends(get_current_user)):
+    """One month of a collection — "2026-09" — for browsing history."""
+    try:
+        first = date.fromisoformat(f"{month}-01")
+    except ValueError:
+        raise HTTPException(status_code=400, detail={"message": "Month must be YYYY-MM.",
+                                                     "error_code": "BAD_MONTH"})
+    try:
+        return await service.month_view(cluster_id, user_id, first)
     except service.CollectionError as exc:
         raise _refuse(exc)
 

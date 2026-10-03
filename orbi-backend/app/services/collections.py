@@ -759,7 +759,19 @@ async def _log_to_finance(payment: dict, routine: dict, resource: dict, task: di
 # Read models
 # ---------------------------------------------------------------------------
 
-def _occurrence_view(occ: dict, payments: list[dict], task_id: str | None) -> dict:
+def ref_month(period_on: date, covers: str | None) -> date:
+    """The month a period is FOR, as the first of that month.
+
+    'previous_month' is rent paid in arrears: due 5 October, for September.
+    """
+    first = period_on.replace(day=1)
+    if covers == "previous_month":
+        return (first - timedelta(days=1)).replace(day=1)
+    return first
+
+
+def _occurrence_view(occ: dict, payments: list[dict], task_id: str | None,
+                     covers: str | None = None) -> dict:
     amount = _dec(occ.get("amount")) if occ.get("amount") is not None else None
     paid = sum((_dec(p["amount"]) for p in payments), Decimal("0"))
     closed = bool(occ.get("completed_at"))
@@ -776,6 +788,8 @@ def _occurrence_view(occ: dict, payments: list[dict], task_id: str | None) -> di
         "completed_at": occ.get("completed_at"),
         "closed_reason": occ.get("closed_reason"),
         "task_id": task_id,
+        # The month this period is FOR (labels: "Renda de setembro").
+        "ref_month": ref_month(_parse_date(occ["period_on"]), covers).isoformat(),
         "payments": [
             {"id": str(p["id"]), "amount": _money(p["amount"]), "paid_on": str(p["paid_on"]),
              "method": p.get("method")}
@@ -792,8 +806,9 @@ def _routine_view(routine: dict, occurrences: list[dict], payments_by_occ: dict[
     open_rows = [o for o in mine if not o.get("completed_at")]
     closed_rows = [o for o in mine if o.get("completed_at")]
     current_row = open_rows[0] if open_rows else (closed_rows[-1] if closed_rows else None)
+    covers = routine.get("covers")
     current = (_occurrence_view(current_row, payments_by_occ.get(str(current_row["id"]), []),
-                                tasks_by_occ.get(str(current_row["id"])))
+                                tasks_by_occ.get(str(current_row["id"])), covers)
                if current_row else None)
 
     late_days = 0
@@ -816,7 +831,8 @@ def _routine_view(routine: dict, occurrences: list[dict], payments_by_occ: dict[
         **{k: routine.get(k) for k in (
             "id", "resource_id", "title", "kind", "currency", "direction", "frequency",
             "interval_count", "anchor_on", "due_time", "on_miss", "remind_before_days",
-            "remind_on_day", "remind_after_days", "log_to_finance", "finance_category")},
+            "remind_on_day", "remind_after_days", "log_to_finance", "finance_category",
+            "covers")},
         "amount": _money(routine["amount"]) if routine.get("amount") is not None else None,
         "state": state,
         "late_days": late_days,
@@ -826,7 +842,8 @@ def _routine_view(routine: dict, occurrences: list[dict], payments_by_occ: dict[
     }
     if history:
         view["history"] = [
-            _occurrence_view(o, payments_by_occ.get(str(o["id"]), []), tasks_by_occ.get(str(o["id"])))
+            _occurrence_view(o, payments_by_occ.get(str(o["id"]), []), tasks_by_occ.get(str(o["id"])),
+                             covers)
             for o in mine[-history:]
         ]
     return view
@@ -853,6 +870,151 @@ def _primary(views: list[dict]) -> dict | None:
     return next((v for v in views if v["kind"] == "amount"), views[0] if views else None)
 
 
+def _month_item(occ: dict, routine: dict, payments: list[dict], resources: dict[str, dict],
+                today: date) -> dict:
+    """One period as a row of a month's list: who, what, how much, when, how late."""
+    period = _parse_date(occ["period_on"])
+    closed = bool(occ.get("completed_at"))
+    # Paid after the due date? The day the last payment came in says so.
+    paid_late_days = 0
+    if closed and payments:
+        paid_late_days = max((_parse_date(payments[-1]["paid_on"]) - period).days, 0)
+    resource = resources.get(str(routine["resource_id"]), {})
+    parent = resources.get(str(resource.get("parent_id") or ""), {})
+    return {
+        **_occurrence_view(occ, payments, None, routine.get("covers")),
+        "routine_id": str(routine["id"]),
+        "resource_id": str(resource["id"]) if resource.get("id") else None,
+        "title": routine["title"],
+        "kind": routine["kind"],
+        "direction": routine.get("direction") or "income",
+        "currency": routine.get("currency") or "EUR",
+        "name": resource.get("name"),
+        "person": resource.get("person_name"),
+        "place": parent.get("name"),
+        "late_days": max((today - period).days, 0) if not closed else 0,
+        "paid_late_days": paid_late_days,
+    }
+
+
+def owed_before(month_start: date, occurrences: list[dict], payments_by_occ: dict[str, list[dict]],
+                routines: list[dict], resources: dict[str, dict], today: date) -> list[dict]:
+    """Periods FOR earlier months that are still open — oldest first.
+
+    This month's card counts only this month, so September's unpaid rent
+    would vanish from view on 1 October. Listing it separately keeps it in
+    sight without mixing it into October's numbers — whether it is a debt
+    (Rui, late) or simply not due yet (Marta pays September on 5 October).
+    """
+    routine_by_id = {str(r["id"]): r for r in routines}
+    items = []
+    for occ in occurrences:
+        routine = routine_by_id.get(str(occ["routine_id"]))
+        if routine is None or occ.get("completed_at"):
+            continue
+        if ref_month(_parse_date(occ["period_on"]), routine.get("covers")) >= month_start:
+            continue
+        payments = sorted(payments_by_occ.get(str(occ["id"]), []), key=lambda p: str(p["paid_on"]))
+        items.append(_month_item(occ, routine, payments, resources, today))
+    items.sort(key=lambda i: (i["period_on"], i["name"] or ""))
+    return items
+
+
+def _projected(month_start: date, next_month: date, occurrences: list[dict], routines: list[dict],
+               resources: dict[str, dict], today: date) -> list[dict]:
+    """Rows for the periods of a month that do not exist yet: due, unpaid, untouched."""
+    existing = {(str(o["routine_id"]), str(o["period_on"])[:10]) for o in occurrences}
+    rows = []
+    for routine in routines:
+        # from_done dates depend on when the last one is done: unknowable ahead.
+        if routine.get("archived_at") or routine.get("on_miss") == "from_done":
+            continue
+        schedule = _schedule(routine)
+        # The due dates whose period is for this month: this month's own, or
+        # next month's when the routine is paid in arrears.
+        if routine.get("covers") == "previous_month":
+            start, end = next_month, (next_month + timedelta(days=32)).replace(day=1)
+        else:
+            start, end = month_start, next_month
+        n = recurrence.first_index_on_or_after(schedule.anchor_on, schedule.frequency,
+                                               schedule.interval_count, max(start, today))
+        while True:
+            due = recurrence.period_on(schedule.anchor_on, schedule.frequency, schedule.interval_count, n)
+            if due >= end:
+                break
+            n += 1
+            if (str(routine["id"]), due.isoformat()) in existing:
+                continue
+            occ = {"id": f"next-{routine['id']}-{due.isoformat()}", "routine_id": routine["id"],
+                   "period_on": due.isoformat(), "due_at": due.isoformat(), "amount": routine.get("amount"),
+                   "completed_at": None, "closed_reason": None}
+            rows.append({**_month_item(occ, routine, [], resources, today), "scheduled": True})
+    return rows
+
+
+def month_summary(month_start: date, occurrences: list[dict], payments_by_occ: dict[str, list[dict]],
+                  routines: list[dict], resources: dict[str, dict], today: date,
+                  project: bool = False) -> dict:
+    """Everything FOR one month: totals per direction, and each period.
+
+    A month means the month a period is for — September's rent is
+    September's even when the tenant pays it on 5 October ("mês anterior").
+    So September's total is what September is worth, whatever day it is
+    paid on; the row still shows the real due and payment dates.
+
+    project: also list the periods not created yet whose turn falls in this
+    month ("Vence a 1 nov"), so a month's total is complete from its first
+    day rather than growing as periods appear 10 days before each one.
+    Never into the past — a new routine does not back-fill arrears.
+
+    Pure: no I/O, so the same numbers come out wherever it is called from —
+    the collection's header for this month, or any month when browsing.
+    """
+    next_month = (month_start + timedelta(days=32)).replace(day=1)
+    routine_by_id = {str(r["id"]): r for r in routines}
+    totals = {d: {"target": Decimal(0), "paid": Decimal(0), "count": 0, "done": 0, "late": 0}
+              for d in ("income", "expense")}
+    items = []
+    for occ in occurrences:
+        period = _parse_date(occ["period_on"])
+        routine = routine_by_id.get(str(occ["routine_id"]))
+        if routine is None or ref_month(period, routine.get("covers")) != month_start:
+            continue
+        payments = sorted(payments_by_occ.get(str(occ["id"]), []), key=lambda p: str(p["paid_on"]))
+        item = _month_item(occ, routine, payments, resources, today)
+        items.append(item)
+        closed = bool(occ.get("completed_at"))
+        late_days = item["late_days"]
+
+        if routine["kind"] == "amount":
+            bucket = totals[routine.get("direction") or "income"]
+            amount = _dec(occ.get("amount"))
+            bucket["target"] += amount
+            bucket["paid"] += min(sum((_dec(p["amount"]) for p in payments), Decimal(0)), amount)
+            bucket["count"] += 1
+            bucket["done"] += 1 if closed else 0
+            bucket["late"] += 1 if late_days > 0 else 0
+
+    if project:
+        for item in _projected(month_start, next_month, occurrences, routines, resources, today):
+            items.append(item)
+            if item["kind"] == "amount":
+                bucket = totals[item["direction"]]
+                bucket["target"] += _dec(item["amount"])
+                bucket["count"] += 1
+
+    # Late first (they need doing), then by due date, then by name.
+    items.sort(key=lambda i: (0 if i["late_days"] > 0 else 1, i["period_on"], i["name"] or ""))
+    return {
+        "month": month_start.isoformat(),
+        "totals": {d: {"target": _money(t["target"]), "paid": _money(t["paid"]),
+                       "pct": _pct(t["paid"], t["target"]), "count": t["count"],
+                       "done": t["done"], "late": t["late"]}
+                   for d, t in totals.items()},
+        "items": items,
+    }
+
+
 async def collection_view(cluster_id: UUID, owner_id: UUID) -> dict:
     """Screen 3: the month's totals and a card per resource."""
     cluster = await _owned_collection(cluster_id, owner_id)
@@ -870,21 +1032,15 @@ async def collection_view(cluster_id: UUID, owner_id: UUID) -> dict:
     for r in routines:
         by_resource.setdefault(str(r["resource_id"]), []).append(views[str(r["id"])])
 
-    # The month's money, per direction: this month's periods of amount routines.
-    totals = {"income": {"target": Decimal(0), "paid": Decimal(0), "count": 0, "done": 0},
-              "expense": {"target": Decimal(0), "paid": Decimal(0), "count": 0, "done": 0}}
+    resources_by_id = {str(r["id"]): r for r in rows}
+    this_month = month_summary(month_start, occurrences, payments_by_occ, routines,
+                               resources_by_id, today, project=True)
+    # Months that have anything in them, newest first — what the month
+    # arrows can move between. This month is always there, even when empty.
     routine_by_id = {str(r["id"]): r for r in routines}
-    for occ in occurrences:
-        period = _parse_date(occ["period_on"])
-        routine = routine_by_id.get(str(occ["routine_id"]))
-        if not routine or routine["kind"] != "amount" or period.replace(day=1) != month_start:
-            continue
-        bucket = totals[routine.get("direction") or "income"]
-        bucket["target"] += _dec(occ.get("amount"))
-        bucket["paid"] += min(sum((_dec(p["amount"]) for p in payments_by_occ.get(str(occ["id"]), [])),
-                                  Decimal(0)), _dec(occ.get("amount")))
-        bucket["count"] += 1
-        bucket["done"] += 1 if occ.get("completed_at") else 0
+    months = sorted({ref_month(_parse_date(o["period_on"]), routine_by_id[str(o["routine_id"])].get("covers"))
+                     for o in occurrences if str(o["routine_id"]) in routine_by_id} | {month_start},
+                    reverse=True)
 
     late = sum(1 for v in views.values() if v["state"] == "late")
     top = [r for r in rows if not r.get("parent_id")]
@@ -913,12 +1069,29 @@ async def collection_view(cluster_id: UUID, owner_id: UUID) -> dict:
     return {
         "cluster": {k: cluster.get(k) for k in ("id", "name", "color", "kind", "is_collection", "collection_noun")},
         "month": month_start.isoformat(),
-        "totals": {d: {"target": _money(t["target"]), "paid": _money(t["paid"]),
-                       "pct": _pct(t["paid"], t["target"]), "count": t["count"], "done": t["done"]}
-                   for d, t in totals.items()},
+        "totals": this_month["totals"],
+        "items": this_month["items"],
+        "owed": owed_before(month_start, occurrences, payments_by_occ, routines, resources_by_id, today),
+        "months": [m.isoformat() for m in months],
         "late": late,
         "resources": cards,
     }
+
+
+async def month_view(cluster_id: UUID, owner_id: UUID, month: date) -> dict:
+    """One month of a collection: its totals and every period for it."""
+    await _owned_collection(cluster_id, owner_id)
+    prefs = await preferences_for(owner_id)
+    today = recurrence.local_today(datetime.now(timezone.utc), prefs.get("timezone"))
+    month_start = month.replace(day=1)
+    rows = await db.fetch_resources_for_cluster(cluster_id, owner_id)
+    # Archived resources still have history worth showing for past months.
+    archived = await db.fetch_archived_resources_for_cluster(cluster_id, owner_id)
+    resources_by_id = {str(r["id"]): r for r in rows + archived}
+    routines = await db.fetch_all_routines_for_resources(list(resources_by_id), owner_id)
+    occurrences, payments_by_occ, _ = await _context(routines, owner_id, since=month_start)
+    return month_summary(month_start, occurrences, payments_by_occ, routines, resources_by_id, today,
+                         project=True)
 
 
 async def resource_view(resource_id: UUID, owner_id: UUID) -> dict:

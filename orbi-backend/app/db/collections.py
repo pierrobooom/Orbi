@@ -82,6 +82,35 @@ async def fetch_resources_for_cluster(cluster_id: UUID, owner_id: UUID) -> list[
     )
 
 
+async def fetch_archived_resources_for_cluster(cluster_id: UUID, owner_id: UUID) -> list[dict]:
+    """Archived resources and units: their past months are still history."""
+    return (
+        get_client().table("collection_resources")
+        .select("*")
+        .eq("cluster_id", str(cluster_id))
+        .eq("owner_id", str(owner_id))
+        .not_.is_("archived_at", "null")
+        .execute()
+        .data
+        or []
+    )
+
+
+async def fetch_all_routines_for_resources(resource_ids: list[str], owner_id: UUID) -> list[dict]:
+    """Routines INCLUDING archived ones — for history, never for scheduling."""
+    if not resource_ids:
+        return []
+    return (
+        get_client().table("collection_routines")
+        .select("*")
+        .in_("resource_id", resource_ids)
+        .eq("owner_id", str(owner_id))
+        .execute()
+        .data
+        or []
+    )
+
+
 async def fetch_units(resource_id: UUID, owner_id: UUID) -> list[dict]:
     return (
         get_client().table("collection_resources")

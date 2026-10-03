@@ -11,6 +11,9 @@ Frequency = Literal["daily", "weekly", "monthly", "yearly"]
 OnMiss = Literal["stay_overdue", "skip_ahead", "from_done"]
 Direction = Literal["income", "expense"]
 Method = Literal["mbway", "transfer", "cash", "card", "other"]
+# Which month a payment is FOR: the month it falls due, or the one before
+# (rent paid in arrears). Labels only — see migration 0029.
+Covers = Literal["due_month", "previous_month"]
 
 
 class CollectionSettings(BaseModel):
@@ -55,6 +58,7 @@ class RoutineCreate(BaseModel):
     remind_after_days: Optional[int] = Field(default=None, ge=1, le=7)
     log_to_finance: bool = False
     finance_category: Optional[str] = Field(default=None, max_length=40)
+    covers: Covers = "due_month"
 
     @model_validator(mode="after")
     def _amount_matches_kind(self) -> "RoutineCreate":
@@ -81,6 +85,7 @@ class RoutineUpdate(BaseModel):
     remind_after_days: Optional[int] = Field(default=None, ge=1, le=7)
     log_to_finance: Optional[bool] = None
     finance_category: Optional[str] = Field(default=None, max_length=40)
+    covers: Optional[Covers] = None
 
 
 class PaymentCreate(BaseModel):

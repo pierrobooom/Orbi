@@ -699,6 +699,13 @@ Rules that keep it bug-free — do not work around them:
   (vaccines count from completion). A new routine never back-fills arrears.
 \- Editing changes the future only; resources are archived, never deleted.
 \- Tier caps: 3 top-level resources on Spark, 30 on Pro, unlimited Genius.
+\- A month is the month a period is FOR, not the month it falls due.
+  collection_routines.covers (migration 0029) is due_month or
+  previous_month ("mês anterior": rent paid on 5 Oct is September's).
+  services/collections.month_summary groups by ref_month, projects the
+  not-yet-created periods of current and future months so a month's total
+  is whole from day one, and owed_before lists what is still open for
+  earlier months. Tests: tests/test_collection_months.py.
 
 Tests: tests/test_recurrence.py (dates), tests/test_reminder_reliability.py
 (period notifications). A live end-to-end script against throwaway accounts
