@@ -42,6 +42,12 @@ const METHOD_LABEL: Record<PaymentMethod, string> = {
   other: "Other",
 };
 
+/** The month a period is for: its own, or the one before when the
+ * routine is paid in arrears (Marta's 5 October rent is September's). */
+export function forMonth(p: Pick<RoutinePeriod, "period_on" | "ref_month">): string {
+  return p.ref_month ?? p.period_on;
+}
+
 export function methodLabel(m: PaymentMethod | null): string {
   return m ? translate(METHOD_LABEL[m]) : "";
 }
@@ -135,7 +141,7 @@ export function RoutineHero({ routine, onChanged }: Props) {
         <ProgressRing pct={pct}>
           <MoneyText size={30}>{isAmount || isOpen ? `${pct}%` : "✓"}</MoneyText>
           {period ? (
-            <Text style={styles.ringSub}>{t("of {month}", { month: monthName(period.period_on, true) })}</Text>
+            <Text style={styles.ringSub}>{t("of {month}", { month: monthName(forMonth(period), true) })}</Text>
           ) : null}
         </ProgressRing>
         {isAmount && period ? (
@@ -187,7 +193,7 @@ export function RoutineHero({ routine, onChanged }: Props) {
 
       {isAmount && period && period.payments.length > 0 ? (
         <>
-          <Eyebrow>{t("Payments in {month}", { month: monthName(period.period_on, true) })}</Eyebrow>
+          <Eyebrow>{t("Payments for {month}", { month: monthName(forMonth(period), true) })}</Eyebrow>
           <View style={kit.card}>
             {period.payments.map((p, i) => (
               <Pressable
@@ -233,6 +239,8 @@ function StatusLine({ routine, period }: { routine: CollectionRoutine; period: R
   }
   const n = daysUntil(period.period_on);
   const left = n <= 0 ? t("today") : n === 1 ? t("tomorrow") : t("{n} days left", { n });
+  // Arrears: the ring already says "of September"; "due 5 Oct" under it
+  // then needs no further explanation.
   return (
     <Text style={styles.status}>
       {t("Due {date}", { date: shortDate(period.period_on) })} · {left}
@@ -249,7 +257,7 @@ function History({ routine }: { routine: CollectionRoutine }) {
       <Eyebrow>{t("Previous periods")}</Eyebrow>
       <View style={styles.history}>
         {(routine.history ?? []).map((p) => {
-          const label = monthName(p.period_on);
+          const label = monthName(forMonth(p));
           if (p.completed_at && p.closed_reason !== "skipped") {
             return <Chip key={p.id} tone="ok" label={`${label} ✓`} />;
           }

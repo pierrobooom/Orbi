@@ -287,7 +287,8 @@ function UnitCard({ unit, onPress }: { unit: CollectionUnitSummary; onPress: () 
           )
         ) : null}
       </View>
-      {p ? <ProgressBar pct={late ? 0 : pct} style={styles.unitBar} /> : null}
+      {/* Real progress, outlined red when late — see app/collection/[id].tsx. */}
+      {p ? <ProgressBar pct={pct} late={late} style={styles.unitBar} /> : null}
     </Pressable>
   );
 }

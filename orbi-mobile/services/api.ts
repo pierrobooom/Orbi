@@ -1837,7 +1837,40 @@ export interface RoutinePeriod {
   completed_at: string | null;
   closed_reason: "done" | "paid" | "skipped" | null;
   task_id: string | null;
+  /** The month this period is FOR (first day, "2026-09-01"). The due
+   * month unless the routine is paid in arrears ("mês anterior"). */
+  ref_month: string;
   payments: CollectionPayment[];
+}
+
+export type RoutineCovers = "due_month" | "previous_month";
+
+/** One period in a month's list on the collection screen. */
+export interface MonthItem extends RoutinePeriod {
+  routine_id: string;
+  resource_id: string | null;
+  title: string;
+  kind: "check" | "amount";
+  direction: "income" | "expense";
+  currency: string;
+  /** The room or resource ("Quarto 2"). */
+  name: string | null;
+  /** Its person ("Rui Costa"), when it has one. */
+  person: string | null;
+  /** The resource a unit belongs to ("Casa 1"). */
+  place: string | null;
+  late_days: number;
+  /** Paid in full, but this many days after it was due. */
+  paid_late_days: number;
+  /** Not created yet — its date is still ahead. Counted so a month's
+   * total is whole from day one. */
+  scheduled?: boolean;
+}
+
+export interface MonthView {
+  month: string;
+  totals: { income: MoneyTotals; expense: MoneyTotals };
+  items: MonthItem[];
 }
 
 export interface CollectionRoutine {
@@ -1858,6 +1891,7 @@ export interface CollectionRoutine {
   remind_after_days: number | null;
   log_to_finance: boolean;
   finance_category: string | null;
+  covers: RoutineCovers;
   /** late: a period is past due and unfinished. open: the current period is
    * running. done: the latest period is finished. upcoming: none yet. */
   state: "late" | "open" | "done" | "upcoming";
@@ -1897,6 +1931,7 @@ export interface MoneyTotals {
   pct: number;
   count: number;
   done: number;
+  late: number;
 }
 
 export interface CollectionView {
@@ -1910,6 +1945,13 @@ export interface CollectionView {
   };
   month: string;
   totals: { income: MoneyTotals; expense: MoneyTotals };
+  /** Every period due this month, late ones first. */
+  items: MonthItem[];
+  /** Periods FOR earlier months still open — late debt, or arrears rent
+   * not due yet. Must not vanish when the month turns. Oldest first. */
+  owed: MonthItem[];
+  /** Months that have periods, newest first — what the month arrows browse. */
+  months: string[];
   late: number;
   resources: CollectionCard[];
 }
@@ -1953,6 +1995,7 @@ export interface RoutineInput {
   remind_after_days?: number | null;
   log_to_finance?: boolean;
   finance_category?: string | null;
+  covers?: RoutineCovers;
 }
 
 async function collectionCall<T>(path: string, init: AuthFetchOptions = {}): Promise<T> {
@@ -1964,6 +2007,10 @@ async function collectionCall<T>(path: string, init: AuthFetchOptions = {}): Pro
 
 export const getCollection = (clusterId: string) =>
   collectionCall<CollectionView>(`/${clusterId}`);
+
+/** One month of a collection, "2026-09". */
+export const getCollectionMonth = (clusterId: string, month: string) =>
+  collectionCall<MonthView>(`/${clusterId}/months/${month.slice(0, 7)}`);
 
 export const setCollection = (clusterId: string, isCollection: boolean, noun: string | null) =>
   collectionCall<ServerCluster>(`/${clusterId}/settings`, {

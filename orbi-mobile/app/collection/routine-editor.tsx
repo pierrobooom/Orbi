@@ -23,7 +23,7 @@ import { TextInput } from "@/components/text-input";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { DateField } from "@/components/collection/date-field";
-import { kit, parseAmount, todayIso, TopBar } from "@/components/collection/kit";
+import { day, kit, monthName, parseAmount, shortDate, todayIso, TopBar } from "@/components/collection/kit";
 import { useT } from "@/i18n";
 import {
   ApiError,
@@ -33,6 +33,7 @@ import {
   getRoutine,
   updateResource,
   updateRoutine,
+  type RoutineCovers,
   type RoutineFrequency,
   type RoutineInput,
   type RoutineOnMiss,
@@ -54,6 +55,13 @@ const ON_MISS_WORD: Record<RoutineOnMiss, string> = {
   skip_ahead: "Moves ahead",
   from_done: "Counts from done",
 };
+
+/** The first of the month before a date: "2026-10-05" → "2026-09-01". */
+function monthBefore(iso: string): string {
+  const d = day(iso);
+  const prev = new Date(d.getFullYear(), d.getMonth() - 1, 1, 12);
+  return `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, "0")}-01`;
+}
 
 function defaultOnMiss(f: RoutineFrequency): RoutineOnMiss {
   return f === "daily" || f === "weekly" ? "skip_ahead" : "stay_overdue";
@@ -89,6 +97,7 @@ export default function RoutineEditor() {
   const [onDay, setOnDay] = useState(true);
   const [after, setAfter] = useState<number | null>(1);
   const [logToMoney, setLogToMoney] = useState(false);
+  const [covers, setCovers] = useState<RoutineCovers>("due_month");
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -114,6 +123,7 @@ export default function RoutineEditor() {
           setOnDay(r.remind_on_day);
           setAfter(r.remind_after_days);
           setLogToMoney(r.log_to_finance);
+          setCovers(r.covers ?? "due_month");
         }
         if (rid) {
           const view = await getResource(rid);
@@ -159,6 +169,9 @@ export default function RoutineEditor() {
       remind_on_day: onDay,
       remind_after_days: after,
       log_to_finance: kind === "amount" ? logToMoney : false,
+      // Only a monthly amount can be "for last month"; anything else is
+      // saved as its own month so a stale choice cannot linger unseen.
+      covers: kind === "amount" && frequency === "monthly" ? covers : "due_month",
     };
     try {
       // The person belongs to the unit (the room's tenant), not to one
@@ -297,6 +310,22 @@ export default function RoutineEditor() {
               <DateField value={anchor} onChange={(v) => { setAnchor(v); setAnchorTouched(true); }} />
             </View>
           </View>
+
+          {kind === "amount" && frequency === "monthly" ? (
+            <>
+              <Text style={styles.label}>{t("It pays for")}</Text>
+              {seg<RoutineCovers>(["due_month", "previous_month"], covers,
+                { due_month: "This month", previous_month: "The month before" }, setCovers)}
+              {/* Spelled out with the real date: "due 5 Oct — counts as
+                  September's" is clearer than any description of arrears. */}
+              <Text style={styles.hint}>
+                {t("Due {date} — counts as {month}.", {
+                  date: shortDate(anchor),
+                  month: monthName(covers === "previous_month" ? monthBefore(anchor) : anchor, true),
+                })}
+              </Text>
+            </>
+          ) : null}
 
           <Text style={styles.label}>{t("If the day passes")}</Text>
           {seg(ON_MISS, onMiss, ON_MISS_WORD, (v) => { setOnMiss(v); setOnMissTouched(true); })}

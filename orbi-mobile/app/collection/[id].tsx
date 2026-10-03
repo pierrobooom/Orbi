@@ -1,18 +1,28 @@
-// Screen 3 of the Collections mockups: a collection — this month's money on
-// top, then one card per resource, each showing its units side by side.
+// Screen 3 of the Collections mockups: a collection — the month's money on
+// top (any month, with the arrows, and who paid when), then one card per
+// resource, each showing its units side by side.
 //
 // The card's bars are the point of the screen: which room has paid, which
 // is late, which is part-way, read in one glance without opening anything.
 
 import { useFocusEffect, useLocalSearchParams, useRouter, type Href } from "expo-router";
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { Chip, Eyebrow, kit, money, monthName, MoneyText, ProgressBar, stateChip, TopBar } from "@/components/collection/kit";
+import { Chip, Eyebrow, kit, ProgressBar, stateChip, TopBar } from "@/components/collection/kit";
+import { MonthCard } from "@/components/collection/month-card";
 import { firstName, shortUnitName, unitCount } from "@/components/collection/naming";
 import { useT } from "@/i18n";
-import { ApiError, getCollection, type CollectionCard, type CollectionView } from "@/services/api";
+import {
+  ApiError,
+  getCollection,
+  getCollectionMonth,
+  type CollectionCard,
+  type CollectionView,
+  type MonthItem,
+  type MonthView,
+} from "@/services/api";
 import { colors } from "@/theme/colors";
 import { themed } from "@/theme/themed";
 
@@ -23,15 +33,35 @@ export default function CollectionScreen() {
   const [data, setData] = useState<CollectionView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  // The month on screen; null is "this month", which comes with the
+  // collection itself. Other months are fetched when the arrows reach them.
+  const [month, setMonth] = useState<string | null>(null);
+  const [months, setMonths] = useState<Record<string, MonthView>>({});
+  // Read by load() without being a dependency: a dependency would make the
+  // focus effect refetch the whole collection on every arrow tap.
+  const monthRef = useRef<string | null>(null);
+
+  const fetchMonth = useCallback(async (m: string) => {
+    try {
+      const view = await getCollectionMonth(String(id), m);
+      setMonths((all) => ({ ...all, [m]: view }));
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : t("Could not load this collection."));
+    }
+  }, [id, t]);
 
   const load = useCallback(async () => {
     try {
       setData(await getCollection(String(id)));
       setError(null);
+      // A payment recorded elsewhere may belong to the month being browsed:
+      // drop the fetched months and refetch the one on screen.
+      setMonths({});
+      if (monthRef.current) void fetchMonth(monthRef.current);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : t("Could not load this collection."));
     }
-  }, [id, t]);
+  }, [id, t, fetchMonth]);
 
   // Reload whenever the screen comes back into view: a payment recorded on
   // the room screen must already be in the totals when you step back here.
@@ -49,10 +79,21 @@ export default function CollectionScreen() {
   }
 
   const noun = data.cluster.collection_noun || t("item");
-  const income = data.totals.income;
-  const expense = data.totals.expense;
-  const money_ = income.count > 0 ? income : expense.count > 0 ? expense : null;
-  const receiving = income.count > 0;
+  const shown = month ?? data.month;
+  const isCurrent = shown === data.month;
+  const view = isCurrent ? { totals: data.totals, items: data.items } : months[shown];
+  // Newest first: older is further along the list.
+  const all = data.months?.length ? data.months : [data.month];
+  const at = all.indexOf(shown);
+  const go = (m: string | undefined) => {
+    if (!m) return;
+    monthRef.current = m === data.month ? null : m;
+    setMonth(monthRef.current);
+    if (m !== data.month && !months[m]) void fetchMonth(m);
+  };
+  const openItem = (item: MonthItem) =>
+    router.push((item.resource_id ? `/collection/resource/${item.resource_id}` : `/collection/routine/${item.routine_id}`) as Href);
+  const hasMoney = all.length > 1 || data.items?.length > 0 || data.totals.income.count + data.totals.expense.count > 0;
 
   return (
     <SafeAreaView style={kit.screen} edges={["top"]}>
@@ -75,28 +116,20 @@ export default function CollectionScreen() {
       >
         <Text style={kit.title}>{data.cluster.name}</Text>
 
-        {money_ ? (
-          <View style={[kit.card, styles.month]}>
-            <Eyebrow style={styles.monthLabel}>{monthName(data.month, true)}</Eyebrow>
-            <View style={styles.monthRow}>
-              <MoneyText size={34}>{money(money_.paid)}</MoneyText>
-              <Text style={styles.monthOf}>
-                {receiving
-                  ? t("of {total} received", { total: money(money_.target) })
-                  : t("of {total} paid", { total: money(money_.target) })}
-              </Text>
-            </View>
-            <ProgressBar pct={money_.pct} />
-            <View style={[kit.row, styles.monthFoot]}>
-              <Text style={styles.foot}>{t("{done} of {count} paid", { done: money_.done, count: money_.count })}</Text>
-              <View style={kit.flex} />
-              {data.late > 0 ? (
-                <Text style={styles.lateFoot}>
-                  {data.late === 1 ? t("1 late") : t("{n} late", { n: data.late })}
-                </Text>
-              ) : null}
-            </View>
-          </View>
+        {hasMoney ? (
+          <MonthCard
+            month={shown}
+            isCurrent={isCurrent}
+            totals={view?.totals ?? null}
+            items={view?.items ?? null}
+            owed={data.owed ?? []}
+            canOlder={at >= 0 && at < all.length - 1}
+            canNewer={at > 0}
+            onOlder={() => go(all[at + 1])}
+            onNewer={() => go(all[at - 1])}
+            onToday={() => go(data.month)}
+            onOpen={openItem}
+          />
         ) : null}
 
         {data.resources.length > 0 ? <Eyebrow>{data.cluster.name}</Eyebrow> : null}
@@ -153,7 +186,10 @@ function ResourceCard({ card, onPress }: { card: CollectionCard; onPress: () => 
             const who = firstName(u.person_name);
             return (
               <View key={u.id} style={kit.flex}>
-                <ProgressBar pct={late ? 0 : pct} late={late} style={styles.unitBar} />
+                {/* Progress shows even when late: a red outline with 43% inside says
+                    both things at once. Drawing a late period as empty hid how much
+                    had been paid, so a part-paid, overdue rent looked untouched. */}
+                <ProgressBar pct={pct} late={late} style={styles.unitBar} />
                 <Text style={[styles.unitLabel, late && styles.unitLate]} numberOfLines={1}>
                   {shortUnitName(u.name)}{who ? ` · ${who}` : ""}
                 </Text>
@@ -172,13 +208,6 @@ function ResourceCard({ card, onPress }: { card: CollectionCard; onPress: () => 
 }
 
 const styles = themed(() => StyleSheet.create({
-  month: { marginTop: 14 },
-  monthLabel: { marginTop: 0, marginBottom: 4 },
-  monthRow: { flexDirection: "row", alignItems: "baseline", flexWrap: "wrap" },
-  monthOf: { color: colors.inkDim, fontSize: 13, marginLeft: 8 },
-  monthFoot: { marginTop: 9 },
-  foot: { color: colors.inkDim, fontSize: 12 },
-  lateFoot: { color: colors.overdue, fontSize: 12, fontWeight: "700" },
   card: { marginBottom: 10 },
   pressed: { opacity: 0.7 },
   units: { flexDirection: "row", gap: 6, marginTop: 12 },

@@ -87,7 +87,7 @@ export default function PayScreen() {
 
   const currency = data.routine.currency;
   const who = data.resource?.person_name;
-  const sub = [data.resource?.name, who, monthName(period.period_on, true)].filter(Boolean).join(" · ");
+  const sub = [data.resource?.name, who, monthName(period.ref_month ?? period.period_on, true)].filter(Boolean).join(" · ");
 
   const toggleMoney = (on: boolean) => {
     setLogToMoney(on);
@@ -180,7 +180,7 @@ export default function PayScreen() {
               </Text>
               <View style={kit.flex} />
               {after >= 100 ? (
-                <Text style={styles.previewSide}>{t("{month} closed", { month: monthName(period.period_on, true) })}</Text>
+                <Text style={styles.previewSide}>{t("{month} closed", { month: monthName(period.ref_month ?? period.period_on, true) })}</Text>
               ) : null}
             </View>
             <ProgressBar pct={after} />
@@ -197,7 +197,7 @@ export default function PayScreen() {
 }
 
 const styles = themed(() => StyleSheet.create({
-  body: { paddingHorizontal: 20, paddingTop: 14, paddingBottom: 30 },
+  body: { paddingHorizontal: 20, paddingTop: 14, paddingBottom: 30, flexGrow: 1 },
   // The sheet's handle, drawn here now that the system one is not used.
   grabber: {
     alignSelf: "center",

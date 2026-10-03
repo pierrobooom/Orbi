@@ -13,7 +13,7 @@ import { Pressable, StyleSheet, Text, View, type ViewStyle } from "react-native"
 import Animated, { useAnimatedStyle, useSharedValue } from "react-native-reanimated";
 
 import { translate, useLocaleStore } from "@/i18n";
-import type { CollectionRoutine, RoutineFrequency } from "@/services/api";
+import type { CollectionRoutine, RoutineCovers, RoutineFrequency } from "@/services/api";
 import { colors } from "@/theme/colors";
 import { DISPLAY } from "@/theme/fonts";
 import { EXPRESSIVE, timing } from "@/theme/motion";
@@ -84,6 +84,13 @@ export function monthName(iso: string, long = false): string {
   return (isPt() ? (long ? MONTHS_PT_LONG : MONTHS_PT) : (long ? MONTHS_EN_LONG : MONTHS_EN))[d.getMonth()];
 }
 
+/** "outubro" this year, "outubro 2025" any other year. */
+export function monthTitle(iso: string): string {
+  const d = day(iso);
+  const name = monthName(iso, true);
+  return d.getFullYear() === new Date().getFullYear() ? name : `${name} ${d.getFullYear()}`;
+}
+
 /** Whole days from today to a date: 0 today, negative in the past. */
 export function daysUntil(iso: string): number {
   const today = day(todayIso()).getTime();
@@ -91,7 +98,15 @@ export function daysUntil(iso: string): number {
 }
 
 /** "mensal · dia 15", "anual · maio", "semanal · sexta", "a cada 3 meses". */
-export function repeatText(r: Pick<CollectionRoutine, "frequency" | "interval_count" | "anchor_on" | "on_miss">): string {
+export function repeatText(
+  r: Pick<CollectionRoutine, "frequency" | "interval_count" | "anchor_on" | "on_miss"> & { covers?: RoutineCovers },
+): string {
+  const text = repeatWords(r);
+  // "mensal · dia 5 · mês anterior": paid in arrears, said where the rhythm is.
+  return r.covers === "previous_month" ? `${text} · ${translate("month before")}` : text;
+}
+
+function repeatWords(r: Pick<CollectionRoutine, "frequency" | "interval_count" | "anchor_on" | "on_miss">): string {
   const d = day(r.anchor_on);
   const n = r.interval_count || 1;
   if (r.on_miss === "from_done") return afterDoneText(r.frequency, n);
@@ -285,7 +300,10 @@ export function MoneyText({ children, size = 30 }: { children: React.ReactNode; 
 
 export const kit = themed(() => StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.canvas },
-  body: { paddingHorizontal: 20, paddingBottom: 40 },
+  // flexGrow: the scrollable area fills the screen even when the content
+  // is short. Without it the area ended where the content did, and on a
+  // short page the lower half of the screen did not respond to a drag.
+  body: { paddingHorizontal: 20, paddingBottom: 40, flexGrow: 1 },
   title: { color: colors.ink, fontSize: 26, fontWeight: "800", letterSpacing: -0.3, marginTop: 6 },
   sub: { color: colors.inkDim, fontSize: 13, marginTop: 2 },
   card: {
